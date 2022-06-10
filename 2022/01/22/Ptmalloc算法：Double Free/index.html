@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="Ptmalloc算法：Double FreeDouble Free是 Fastbin Attack 中的一种 本质上就是对一个chunk进行两次free，从而实现 多个指针指向同一个堆块 的操作   Free验证机制通常来说，同一个chunk是不能被free两次的 例如： 12345678910int main(void)&amp;#123;    void *chunk1,*chunk2,*chunk3">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Ptmalloc算法：Double Free">
+<meta property="og:url" content="http://example.com/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="Ptmalloc算法：Double FreeDouble Free是 Fastbin Attack 中的一种 本质上就是对一个chunk进行两次free，从而实现 多个指针指向同一个堆块 的操作   Free验证机制通常来说，同一个chunk是不能被free两次的 例如： 12345678910int main(void)&amp;#123;    void *chunk1,*chunk2,*chunk3">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642661329481-1646135147025.png">
+<meta property="og:image" content="http://example.com/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642847247826-1646135147026.png">
+<meta property="og:image" content="http://example.com/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642847626446-1646135147036.png">
+<meta property="og:image" content="http://example.com/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642847348320-1646135147036.png">
+<meta property="og:image" content="http://example.com/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642848070328-1646135147036.png">
+<meta property="og:image" content="http://example.com/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642848529478-1646135147036.png">
+<meta property="og:image" content="http://example.com/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642848605831-1646135147036.png">
+<meta property="article:published_time" content="2022-01-22T14:53:59.000Z">
+<meta property="article:modified_time" content="2022-03-01T11:45:51.689Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="ptmalloc">
+<meta property="article:tag" content="Double Free">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642661329481-1646135147025.png">
+
+<link rel="canonical" href="http://example.com/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>Ptmalloc算法：Double Free | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Ptmalloc算法：Double Free
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-01-22 22:53:59" itemprop="dateCreated datePublished" datetime="2022-01-22T22:53:59+08:00">2022-01-22</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-03-01 19:45:51" itemprop="dateModified" datetime="2022-03-01T19:45:51+08:00">2022-03-01</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/SourceCodeAnalysis/" itemprop="url" rel="index"><span itemprop="name">SourceCodeAnalysis</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>2.2k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>2 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="Ptmalloc算法：Double-Free"><a href="#Ptmalloc算法：Double-Free" class="headerlink" title="Ptmalloc算法：Double Free"></a>Ptmalloc算法：Double Free</h2><p>Double Free是 <code>Fastbin Attack</code> 中的一种</p>
+<p>本质上就是对一个chunk进行两次free，从而实现 <strong>多个指针指向同一个堆块</strong> 的操作 </p>
+<hr>
+<h2 id="Free验证机制"><a href="#Free验证机制" class="headerlink" title="Free验证机制"></a>Free验证机制</h2><p>通常来说，同一个chunk是不能被free两次的</p>
+<p>例如：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">void</span> *chunk1,*chunk2,*chunk3;</span><br><span class="line">    chunk1=<span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line">    chunk2=<span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">free</span>(chunk1);</span><br><span class="line">    <span class="built_in">free</span>(chunk1);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">free(): double free detected <span class="keyword">in</span> tcache <span class="number">2</span></span><br><span class="line">[<span class="number">1</span>]    <span class="number">3376</span> abort (core dumped)  ./test</span><br></pre></td></tr></table></figure>
+<p>这是因为有以下代码：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* Another simple check: make sure the top of the bin is not the</span></span><br><span class="line"><span class="comment">       record we are going to add (i.e., double free).  */</span></span><br><span class="line">    <span class="keyword">if</span> (__builtin_expect (old == p, <span class="number">0</span>))</span><br><span class="line">      &#123;</span><br><span class="line">        errstr = <span class="string">&quot;double free or corruption (fasttop)&quot;</span>;</span><br><span class="line">        <span class="keyword">goto</span> errout;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>检查 fastbin 头部指向的 chunk 和被 “free” 的 chunk 是否相等，其后就没有检查了</p>
+<h2 id="伪造案例"><a href="#伪造案例" class="headerlink" title="伪造案例"></a>伪造案例</h2><p>如果这样构造payload，就会形成异常的fastbin：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> _<span class="title">chunk</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">    <span class="keyword">long</span> <span class="keyword">long</span> pre_size;</span><br><span class="line">    <span class="keyword">long</span> <span class="keyword">long</span> size;</span><br><span class="line">    <span class="keyword">long</span> <span class="keyword">long</span> fd;</span><br><span class="line">    <span class="keyword">long</span> <span class="keyword">long</span> bk;</span><br><span class="line">&#125; CHUNK,*PCHUNK;</span><br><span class="line"></span><br><span class="line">CHUNK bss_chunk;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">void</span> *chunk1,*chunk2,*chunk3;</span><br><span class="line">    <span class="keyword">void</span> *chunk_a,*chunk_b,*chunk_c,*chunk_s;</span><br><span class="line"></span><br><span class="line">    bss_chunk.size=<span class="number">0x21</span>;</span><br><span class="line">    chunk1=<span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line">    chunk2=<span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">free</span>(chunk1);</span><br><span class="line">    <span class="built_in">free</span>(chunk2);</span><br><span class="line">    <span class="built_in">free</span>(chunk1);</span><br><span class="line"></span><br><span class="line">    chunk_a=<span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line">    *(<span class="keyword">long</span> <span class="keyword">long</span> *)chunk_a=&amp;bss_chunk;</span><br><span class="line">    chunk_b=<span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line">    chunk_c=<span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line">    <span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,chunk_a);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,chunk_b);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,chunk_c);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>当所有的free执行完成后：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; bins</span><br><span class="line">fastbins</span><br><span class="line"><span class="number">0x20</span>: <span class="number">0x55555555b000</span> —▸ <span class="number">0x55555555b020</span> ◂— <span class="number">0x55555555b000</span></span><br><span class="line"><span class="number">0x30</span>: <span class="number">0x0</span></span><br><span class="line"><span class="number">0x40</span>: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<p>fastbin出现异常，接下来继续单步，看看程序会怎么分配chunk：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">chunk_a = <span class="number">0x55555555b010</span></span><br><span class="line">chunk_b = <span class="number">0x55555555b030</span></span><br><span class="line">chunk_c = <span class="number">0x55555555b010</span></span><br></pre></td></tr></table></figure>
+<p>“chunk_a”和“chunk_c”被分配到了同一个地方，这就是Double Free的核心</p>
+<img src="/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642661329481-1646135147025.png" class width="1642661329481"> 
+<p>Double Free 和 UAF 很像，都是程序没有置空指针而产生的漏洞</p>
+<p>利用的关键都是看程序的“free模块”，看下哪些指针没有被置空</p>
+<h2 id="Double-Free利用姿势"><a href="#Double-Free利用姿势" class="headerlink" title="Double Free利用姿势"></a>Double Free利用姿势</h2><p>利用条件：</p>
+<ul>
+<li>“free模块”没有置空指针</li>
+</ul>
+<p>利用效果：</p>
+<ul>
+<li>WAA</li>
+</ul>
+<p>利用姿势：</p>
+<p>一，申请两个chunk，并依次释放chunk1，chunk2：（chunk2 -&gt; chunk1）</p>
+<img src="/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642847247826-1646135147026.png" class width="1642847247826"> 
+<p>二，再次释放chunk1：（chunk1 -&gt; chunk2 -&gt; chunk1）</p>
+<img src="/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642847626446-1646135147036.png" class width="1642847626446"> 
+<p>三，申请chunk：（New chunk1）</p>
+<img src="/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642847348320-1646135147036.png" class width="1642847348320"> 
+<p>四，修改New chunk1，把FD指针的位置改为“ Malloc_hook - 0x10 ”：</p>
+<img src="/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642848070328-1646135147036.png" class width="1642848070328"> 
+<p>五，申请chunk：（New chunk2）</p>
+<img src="/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642848529478-1646135147036.png" class width="1642848529478"> 
+<p>六，申请chunk：（New chunk3 和 New chunk1重合）</p>
+<img src="/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642848605831-1646135147036.png" class width="1642848605831"> 
+<p>七，再次申请chunk，并进行修改（程序把“Malloc_hook”误以为是chunk）</p>
+<p>原理总述：</p>
+<p>利用Double Free的特性（可以申请到相同的chunk），先在某个chunk的FD指针中写入 “目标地址 - 0x10” ，程序会误以为它是某个chunk，于是会把这片区域当成chunk给申请出来，最后就可以直接修改了</p>
+<p>​        // 虽然New chunk1是“allocate chunk”，但是通过Double Free把它存储在了fastbin中，所以它也会被当做是“free chunk”</p>
+<p><strong>PS：</strong></p>
+<p>因为在 fastbin 中，malloc 会检查 fast chunk 的 size 位是否合适才分配 chunk</p>
+<p>这导致了 Double free 的利用需要一些特殊手段（利用现成地址分割“size”）</p>
+<p>而在 cachebin 中没有对应的检查（至少2.27没有），所以 Double free 满天飞</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/ptmalloc/" rel="tag"><i class="fa fa-tag"></i> ptmalloc</a>
+              <a href="/tags/Double-Free/" rel="tag"><i class="fa fa-tag"></i> Double Free</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/" rel="prev" title="exit_hook+dlopen劫持">
+      <i class="fa fa-chevron-left"></i> exit_hook+dlopen劫持
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/01/22/House%20Of%20Spirit-%E5%8E%9F%E7%90%86/" rel="next" title="House Of Spirit-原理">
+      House Of Spirit-原理 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble-Free"><span class="nav-number">1.</span> <span class="nav-text">Ptmalloc算法：Double Free</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Free%E9%AA%8C%E8%AF%81%E6%9C%BA%E5%88%B6"><span class="nav-number">2.</span> <span class="nav-text">Free验证机制</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BC%AA%E9%80%A0%E6%A1%88%E4%BE%8B"><span class="nav-number">3.</span> <span class="nav-text">伪造案例</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Double-Free%E5%88%A9%E7%94%A8%E5%A7%BF%E5%8A%BF"><span class="nav-number">4.</span> <span class="nav-text">Double Free利用姿势</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">113</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">79</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.5m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">22:58</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

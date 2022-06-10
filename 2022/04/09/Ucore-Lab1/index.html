@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="x86启动顺序对于绝大多数计算机系统而言，操作系统和应用软件是存放在磁盘（硬盘&#x2F;软盘）、光盘、EPROM、ROM、Flash等可在掉电后继续保存数据的存储介质上， 当计算机加电后，一般不直接执行操作系统，而是一开始会 到一个特定的地址开始执行指令 ，这个特定的地址 存放了系统初始化软件 ，通过执行系统初始化软件（可固化在ROM或Flash中，也称firmware，固件）完成基本I&#x2F;O初始化和引导加">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Ucore-Lab1">
+<meta property="og:url" content="http://example.com/2022/04/09/Ucore-Lab1/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="x86启动顺序对于绝大多数计算机系统而言，操作系统和应用软件是存放在磁盘（硬盘&#x2F;软盘）、光盘、EPROM、ROM、Flash等可在掉电后继续保存数据的存储介质上， 当计算机加电后，一般不直接执行操作系统，而是一开始会 到一个特定的地址开始执行指令 ，这个特定的地址 存放了系统初始化软件 ，通过执行系统初始化软件（可固化在ROM或Flash中，也称firmware，固件）完成基本I&#x2F;O初始化和引导加">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2022/04/09/Ucore-Lab1/1647232593796.png">
+<meta property="og:image" content="http://example.com/2022/04/09/Ucore-Lab1/1647232846489.png">
+<meta property="og:image" content="http://example.com/2022/04/09/Ucore-Lab1/1647233278724.png">
+<meta property="og:image" content="http://example.com/2022/04/09/Ucore-Lab1/1649144948571.png">
+<meta property="og:image" content="http://example.com/2022/04/09/Ucore-Lab1/1649146076621.png">
+<meta property="og:image" content="http://example.com/2022/04/09/Ucore-Lab1/1649146195666.png">
+<meta property="og:image" content="http://example.com/2022/04/09/Ucore-Lab1/1649146143417.png">
+<meta property="og:image" content="http://example.com/2022/04/09/Ucore-Lab1/1649146429816.png">
+<meta property="og:image" content="http://example.com/2022/04/09/Ucore-Lab1/1649147399799.png">
+<meta property="article:published_time" content="2022-04-09T09:23:13.000Z">
+<meta property="article:modified_time" content="2022-04-09T09:24:46.425Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="miscellaneous">
+<meta property="article:tag" content="Kernel">
+<meta property="article:tag" content="Ucore">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2022/04/09/Ucore-Lab1/1647232593796.png">
+
+<link rel="canonical" href="http://example.com/2022/04/09/Ucore-Lab1/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>Ucore-Lab1 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/04/09/Ucore-Lab1/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Ucore-Lab1
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-04-09 17:23:13 / Modified: 17:24:46" itemprop="dateCreated datePublished" datetime="2022-04-09T17:23:13+08:00">2022-04-09</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>27k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>24 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="x86启动顺序"><a href="#x86启动顺序" class="headerlink" title="x86启动顺序"></a>x86启动顺序</h2><p>对于绝大多数计算机系统而言，操作系统和应用软件是存放在磁盘（硬盘/软盘）、光盘、EPROM、ROM、Flash等可在掉电后继续保存数据的存储介质上， 当计算机加电后，一般不直接执行操作系统，而是一开始会 <strong>到一个特定的地址开始执行指令</strong> ，这个特定的地址 <strong>存放了系统初始化软件</strong> ，通过执行系统初始化软件（可固化在ROM或Flash中，也称firmware，固件）完成基本I/O初始化和引导加载操作系统的功能 </p>
+<p>以基于Intel 80386的计算机为例，计算机加电后，整个物理地址空间如下图所示： </p>
+<img src="/2022/04/09/Ucore-Lab1/1647232593796.png" class width="1647232593796">  
+<p><strong>第一条指令</strong></p>
+<p>算机加电后，代码段寄存器 CS=0xF000h，指令指针寄存器 EIP=FFF0h，所以执行的第一条指令地址为 BASE+EIP=FFFF0000h+0000FFF0h=FFFFFFF0h ，这是BIOS的EPROM所在地（只读） </p>
+<p>通常第一条指令是一条长跳指令，这样CS和EIP都会更新到BIOS代码中执行</p>
+<p>启动qemu并让其停到执行第一条指令前，这需要增加一个参数”-S” ：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">qemu –S</span><br></pre></td></tr></table></figure>
+<p>然后通过按”Ctrl+Alt+2”进入qemu的monitor界面，为了了解80386此时的寄存器内容，在monitor界面下输入命令：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">info registers</span><br></pre></td></tr></table></figure>
+<p>显示以下数据：</p>
+<img src="/2022/04/09/Ucore-Lab1/1647232846489.png" class width="1647232846489"> 
+<p>发现 CS selector = 0xf000，CS base =  0xffff0000，EIP = 0x0000fff0</p>
+<p>当前指令地址为：0xf000 * 16 + 0x0000fff0 = 0xffff0</p>
+<p><strong>从BIOS到BootLoader</strong></p>
+<p>BIOS加载存储设备上，第一个扇区（通常512字节）到内存（0x7c00），然后跳转到 0x7c00 的第一条地址开始执行</p>
+<p>这512字节就是 MBR，其中包含了BootLoader（最后两字节固定）</p>
+<ul>
+<li>由于实模式下最高寻址1MB，故 <code>0xFFFF0</code> 处是一条跳转指令 <code>jmp far f000:e05b</code> ，跳转至BIOS真正的代码</li>
+<li>之后便开始检测并初始化外设，与 <code>0x000-0x3ff</code> 建立数据结构，中断向量表IVT并填写中断例程</li>
+<li>BIOS最后校验启动盘中位于0盘0道1扇区(MBR)的内容，如果此扇区末尾两个字节分别是魔数 <code>0x55</code> 和 <code>0xaa</code> ，则BIOS认为此扇区中存在可执行的程序，并加载该512字节数据到 <code>0x7c00</code> ，随后跳转至此继续执行</li>
+</ul>
+<p><strong>从BootLoader到OS</strong></p>
+<p>MBR是主引导记录（Master Boot Record），也被称为主引导扇区，是计算机开机以后访问硬盘时所必须要读取的第一个扇区，其内部前446字节存储了 bootloader 代码，其后是4个16字节的“磁盘分区表”</p>
+<p>BootLoader完成的工作：</p>
+<ul>
+<li>使系统从“实模式”变为“保护模式”，开启段机制（拥有4GB的访问空间）</li>
+<li>从硬盘上读取 kernel in ELF 格式的 ucore kernel 并放到内存中固定位置</li>
+<li>跳转到 ucore OS 的入口点，把控制权转移到 ucore OS 中</li>
+</ul>
+<p>以下是一个简单的 MBR 结构：（该程序只会将 <code>1 MBR</code> 字符串打印到屏幕上并挂起）</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br></pre></td><td class="code"><pre><span class="line">;主引导程序</span><br><span class="line">;------------------------------------------------------------</span><br><span class="line">SECTION MBR vstart=0x7c00 ; 起始地址编译为0x7c00</span><br><span class="line">  mov ax,cs   ; 此时的cs为0，用0来初始化所有的段寄存器</span><br><span class="line">  mov ds,ax</span><br><span class="line">  mov es,ax</span><br><span class="line">  mov ss,ax</span><br><span class="line">  mov fs,ax</span><br><span class="line">  mov sp,0x7c00 ; 0x7c00 以下空间暂时安全，故可用做栈。</span><br><span class="line"></span><br><span class="line">; 清屏 利用0x06号功能，上卷全部行，则可清屏。</span><br><span class="line">; -----------------------------------------------------------</span><br><span class="line">;INT 0x10   功能号:0x06   功能描述:上卷窗口</span><br><span class="line">;------------------------------------------------------</span><br><span class="line">;输入：</span><br><span class="line">;AH 功能号= 0x06</span><br><span class="line">;AL = 上卷的行数(如果为0,表示全部)</span><br><span class="line">;BH = 上卷行属性</span><br><span class="line">;(CL,CH) = 窗口左上角的(X,Y)位置</span><br><span class="line">;(DL,DH) = 窗口右下角的(X,Y)位置</span><br><span class="line">;无返回值：</span><br><span class="line">  mov     ax, 0x600</span><br><span class="line">  mov     bx, 0x700</span><br><span class="line">  mov     cx, 0          ; 左上角: (0, 0)</span><br><span class="line">  mov     dx, 0x184f     ; 右下角: (80,25),</span><br><span class="line">        ; VGA文本模式中,一行只能容纳80个字符,共25行。</span><br><span class="line">        ; 下标从0开始,所以0x18=24,0x4f=79</span><br><span class="line">  int     0x10            ; int 0x10</span><br><span class="line"></span><br><span class="line">;;;;;;;;;    下面这三行代码是获取光标位置    ;;;;;;;;;</span><br><span class="line">;.get_cursor获取当前光标位置,在光标位置处打印字符.</span><br><span class="line">  mov ah, 3   ; 输入: 3 号子功能是获取光标位置,需要存入ah寄存器</span><br><span class="line">  mov bh, 0   ; bh寄存器存储的是待获取光标的页号</span><br><span class="line"></span><br><span class="line">  int 0x10    ; 输出: ch=光标开始行,cl=光标结束行</span><br><span class="line">      ; dh=光标所在行号,dl=光标所在列号</span><br><span class="line"></span><br><span class="line">;;;;;;;;;    获取光标位置结束    ;;;;;;;;;;;;;;;;</span><br><span class="line"></span><br><span class="line">;;;;;;;;;     打印字符串    ;;;;;;;;;;;</span><br><span class="line">  ;还是用10h中断,不过这次是调用13号子功能打印字符串</span><br><span class="line">  mov ax, message</span><br><span class="line">  mov bp, ax    ; es:bp 为串首地址, es此时同cs一致，</span><br><span class="line">      ; 开头时已经为sreg初始化</span><br><span class="line"></span><br><span class="line">  ; 光标位置要用到dx寄存器中内容,cx中的光标位置可忽略</span><br><span class="line">  mov cx, 5   ; cx 为串长度,不包括结束符0的字符个数</span><br><span class="line">  mov ax, 0x1301  ; 子功能号13是显示字符及属性,要存入ah寄存器,</span><br><span class="line">      ; al设置写字符方式 ah=01: 显示字符串,光标跟随移动</span><br><span class="line">  mov bx, 0x2 ; bh存储要显示的页号,此处是第0页,</span><br><span class="line">      ; bl中是字符属性, 属性黑底绿字(bl = 02h)</span><br><span class="line">  int 0x10    ; 执行BIOS 0x10 号中断</span><br><span class="line">;;;;;;;;;      打字字符串结束 ;;;;;;;;;;;;;;;</span><br><span class="line"></span><br><span class="line">  jmp $   ; 始终跳转到这条代码，为死循环，使程序悬停在此</span><br><span class="line"></span><br><span class="line">  message db &quot;1 MBR&quot;</span><br><span class="line">  ; 用\0 将剩余空间填满</span><br><span class="line">  times 510-($-$$) db 0 ; $指代当前指令的地址，$$指代当前section的首地址</span><br><span class="line">  ; 最后两位一定是0x55, 0xaa</span><br><span class="line">  db 0x55,0xaa</span><br></pre></td></tr></table></figure>
+<p><strong>加载 ELF 格式的 ucore OS kernel</strong></p>
+<p>附件：Intel80386启动过程 </p>
+<img src="/2022/04/09/Ucore-Lab1/1647233278724.png" class width="1647233278724"> 
+<h2 id="x86中断简述"><a href="#x86中断简述" class="headerlink" title="x86中断简述"></a>x86中断简述</h2><p>在操作系统中，有三种特殊的中断事件：</p>
+<ul>
+<li>异步中断(asynchronous interrupt)：这是由CPU外部设备引起的外部事件中断，例如I/O中断、时钟中断、控制台中断等</li>
+<li>同步中断(synchronous interrupt)：这是CPU执行指令期间检测到不正常的或非法的条件(如除零错、地址访问越界)所引起的内部事件</li>
+<li>陷入中断(trap interrupt)：这是在程序中使用请求系统服务的系统调用而引发的事件</li>
+</ul>
+<p><strong>中断源</strong></p>
+<ul>
+<li>外部中断：外部设施产生的中断，具有异步性（不清楚它什么时候产生）</li>
+<li>软件中断：软件，系统参数的中断，具有同步性（例如：INT 系统调用）</li>
+<li>异常：程序错误，软件产生的异常，机器检查出的异常</li>
+</ul>
+<p>这些都需要 OS 进行正确的处理</p>
+<p><strong>中断服务例程</strong></p>
+<ul>
+<li>每个中断异常与一个“中断服务例程ISR”关联（其关联关系存储在“中断描述符表IDT”中）</li>
+<li>在“中断号”和“中断处理程序的地址”之间，通过“中断描述符表”建立了一种映射关系</li>
+</ul>
+<p><strong>中断描述符表</strong></p>
+<ul>
+<li>中断描述符表（Interrupt Descriptor Table, IDT）把每个中断或异常编号和一个指向中断服务例程的描述符联系起来，同GDT（全局描述符表）一样，IDT是一个8字节的描述符数组，但IDT的第一项可以包含一个描述符</li>
+<li>IDT可以位于内存的任意位置，CPU通过IDT寄存器（IDTR）的内容来寻址IDT的起始地址</li>
+</ul>
+<p><strong>中断门描述符</strong></p>
+<p>中断/异常应该使用 <code>Interrupt Gate</code> 或 <code>Trap Gate</code> ，其中的唯一区别就是：</p>
+<ul>
+<li>当调用 <code>Interrupt Gate</code> 时，Interrupt会被CPU自动禁止</li>
+<li>而调用 <code>Trap Gate</code> 时，CPU则不会去禁止或打开中断，而是保留原样</li>
+</ul>
+<p>IDT中包含了3种类型的中断门描述符（Descriptor）</p>
+<ul>
+<li>Task-gate descriptor（任务门描述符）</li>
+<li>Interrupt-gate descriptor（中断门描述符：中断方式用到）</li>
+<li>Trap-gate descriptor（陷阱门描述符：系统调用用到）</li>
+</ul>
+<p>下图显示了80386的中断门描述符、陷阱门描述符的格式： </p>
+<img src="/2022/04/09/Ucore-Lab1/1649144948571.png" class width="1649144948571">  
+<h2 id="x86中断处理"><a href="#x86中断处理" class="headerlink" title="x86中断处理"></a>x86中断处理</h2><p><strong>起始阶段</strong></p>
+<ul>
+<li>CPU执行完每条指令后，判断中断控制器中是否产生中断，如果存在中断，则取出对应的中断变量</li>
+<li>CPU根据中断变量，到IDT中找到对应的中断描述符</li>
+<li>通过获取到的中断描述符中的段选择子，从GDT中取出对应的段描述符，此时便获取到了中断服务例程的段基址与属性信息，跳转至该地址</li>
+<li>CPU会根据CPL和中断服务例程的段描述符的DPL信息确认是否发生了 <strong>特权级的转换</strong><ul>
+<li>若发生了特权级的转换，这时CPU会从当前程序的TSS信息（该信息在内存中的起始地址存在TR寄存器中）里取得该程序的内核栈地址，即包括内核态的ss和esp的值</li>
+<li>并立即将系统当前使用的栈切换成新的内核栈（这个栈就是即将运行的中断服务程序要使用的栈）</li>
+<li>紧接着就将当前程序使用的用户态的ss和esp压到新的内核栈中保存起来</li>
+</ul>
+</li>
+<li>CPU需要 <strong>开始保存当前被打断的程序的现场</strong> （即一些寄存器的值），以便于将来恢复被打断的程序继续执行。这需要利用内核栈来保存相关现场信息，即依次压入当前被打断程序使用的eflags，cs，eip，errorCode（如果是有错误码的异常）信息</li>
+<li>CPU利用中断服务例程的段描述符将其第一条指令的地址加载到cs和eip寄存器中， <strong>开始执行中断服务例程</strong> （这意味着先前的程序被暂停执行，中断服务程序正式开始工作）</li>
+</ul>
+<p><strong>终止阶段</strong></p>
+<p>每个中断服务例程在有中断处理工作完成后需要通过 <code>iret</code> （或 <code>iretd</code> ）指令恢复被打断的程序的执行（恢复各个寄存器的数据等等），CPU执行IRET指令的具体过程如下： </p>
+<ul>
+<li>程序执行这条 <code>iret</code> 指令时，首先会从内核栈里弹出先前保存的被打断的程序的现场信息，即eflags，cs，eip重新开始执行</li>
+<li>如果存在特权级转换（从内核态转换到用户态），则还需要从内核栈中弹出用户态栈的ss和esp，即栈也被切换回原先使用的用户栈</li>
+<li>如果此次处理的是带有错误码（errorCode）的异常，CPU在恢复先前程序的现场时，并不会弹出errorCode，需要要求相关的中断服务例程在调用iret返回之前添加出栈代码主动弹出errorCode</li>
+</ul>
+<h2 id="x86特权级别简述"><a href="#x86特权级别简述" class="headerlink" title="x86特权级别简述"></a>x86特权级别简述</h2><p>特权级别（Privilege Level）是存在于 Descriptor（描述符）及 Segment Selector（段选择子，存储在段寄存器以及门描述符中） 中一个数值，当这些 Descriptor 或 Segment Selector 要进行某些操作，或者被别的对象访问时，该数值用于控制它们能够进行的操作或者限制它们的可访问性</p>
+<p>特权级共分为四档，分别为0-3：</p>
+<ul>
+<li>Kernel为第0特权级（ring 0）</li>
+<li>用户程序为第3特权级（ring 3）</li>
+<li>操作系统保护分别为第1和第2特权级</li>
+</ul>
+<p><strong>描述符特权级（DPL，Descriptor Privilege Level）</strong></p>
+<ul>
+<li>实施特权级保护的第一步，是为所有可管理的对象赋予一个特权级，以决定谁能访问它们，每个 Descriptor 都具有描述符特权级（DPL，Descriptor Privilege Level）字段，Descriptor 总是指向它所“描述”的目标对象，代表着该对象，因此该字段（DPL）实际上是目标对象的特权级</li>
+<li>存储于段描述符中：</li>
+</ul>
+<img src="/2022/04/09/Ucore-Lab1/1649146076621.png" class width="1649146076621"> 
+<p><strong>当前特权级（CPL，Current Privilege Level）</strong></p>
+<ul>
+<li>当处理器正在一个代码段中取指令和执行指令时，那个代码段的特权级叫做当前特权级（CPL，Current Privilege Level），正在执行的这个代码段，其选择子位于段寄存器CS中，其最低两位就是当前特权级的数值</li>
+<li>存储于CS寄存器的段选择子中（CS中的DPL就是CPL）：</li>
+</ul>
+<img src="/2022/04/09/Ucore-Lab1/1649146195666.png" class width="1649146195666"> 
+<p><strong>请求特权级（RPL，Request Privilege Level）</strong></p>
+<ul>
+<li>我们知道，要将控制从一个代码段转移到另一个代码段，通常是使用 <code>jmp</code> 和 <code>call</code> 指令，并在指令中提供目标代码段的选择子，以及段内偏移量(入口点)，而为了访问内存中的数据，也必须先将段选择子加载到段寄存器DS、ES、FS或者GS中，不管是实施控制转移，还是访问数据段，这都可以看成是一个请求，请求者提供一个段选择子，请求访问指定的段，从这个意义上来说，RPL也就是指请求者的特权级别（RPL，Request Privilege Level）</li>
+<li>存储于段选择子中：（段选择子存储于各个段寄存器以及门描述符中：调用门、任务门、中断门、陷阱门）</li>
+</ul>
+<img src="/2022/04/09/Ucore-Lab1/1649146143417.png" class width="1649146143417"> 
+<p><strong>输出特权级（IOPL，I/O Privilege Level）</strong></p>
+<ul>
+<li>除了那些特权级敏感的指令外，处理器还允许对各个特权级别所能执行的I/O操作进行控制，通常，这指的是端口访问的许可权，因为对设备的访问都是通过端口进行的</li>
+<li>在处理器的标志寄存器EFLAGS中，位13、位12是IOPL位，也就是输入/输出特权级（IOPL，I/O Privilege Level），它代表着当前任务的I/O特权级别，某些指令，例如 IN，OUT，CLI 需要 I/O 特权，这些操作根据 IOPL 和 CPL 确定合法性</li>
+<li>存储于EFLAGS中： </li>
+</ul>
+<img src="/2022/04/09/Ucore-Lab1/1649146429816.png" class width="1649146429816">  
+<h2 id="x86特权级别运用"><a href="#x86特权级别运用" class="headerlink" title="x86特权级别运用"></a>x86特权级别运用</h2><p><strong>特权级检查</strong></p>
+<p>在下述的特权级比较中，需要注意特权级越低，其ring值越大：</p>
+<ul>
+<li>访问门时（中断、陷入、异常），要求 <strong>DPL[段] &lt;= CPL &lt;= DPL[门]</strong> （ring值比较）<ul>
+<li>访问门的代码权限比门的特权级要高，因为这样才能访问门（CPL &lt;= DPL[门]）</li>
+<li>但访问门的代码权限比被访问的段的权限要低，因为通过门的目的是访问特权级更高的段，这样就可以达到低权限应用程序使用高权限内核服务的目的（CPL &lt;= DPL[门]）</li>
+<li>简述：代码权限低于段权限时，可以通过访问门的方式来访问段</li>
+</ul>
+</li>
+<li>访问段时，要求 <strong>DPL[段] &gt;= max {CPL, RPL}</strong> （ring值比较）<ul>
+<li>只能使用最低的权限来访问段数据</li>
+<li>简述：请求权限与当前权限只要有一个低于段权限，就会导致访问失败</li>
+</ul>
+</li>
+</ul>
+<p><strong>特权级切换</strong></p>
+<p><strong>TSS</strong></p>
+<p>TSS（Task State Segment）是操作系统在进行进程切换时保存进程现场信息的段，其结构如下：</p>
+<img src="/2022/04/09/Ucore-Lab1/1649147399799.png" class width="1649147399799"> 
+<ul>
+<li>TSS中分别保留了 ring0、ring1、ring2 的栈，当用户程序从 ring3 跳至 ring0 时（例如执行中断），此时的栈就会从用户栈切换到内核栈，切换栈的操作从开始中断的那一瞬间就已完成（例如：从<code>int 0x78</code>到中断处理例程之间）</li>
+<li>TSS段的段描述符保存在GDT中，其 ring0 的栈会在初始化GDT时被一起设置，<code>TR</code> 寄存器会保存当前TSS的段描述符，以提高索引速度</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="class"><span class="keyword">struct</span> <span class="title">segdesc</span> <span class="title">gdt</span>[] =</span> &#123;</span><br><span class="line">    SEG_NULL,</span><br><span class="line">    [SEG_KTEXT] = SEG(STA_X | STA_R, <span class="number">0x0</span>, <span class="number">0xFFFFFFFF</span>, DPL_KERNEL),</span><br><span class="line">    [SEG_KDATA] = SEG(STA_W, <span class="number">0x0</span>, <span class="number">0xFFFFFFFF</span>, DPL_KERNEL),</span><br><span class="line">    [SEG_UTEXT] = SEG(STA_X | STA_R, <span class="number">0x0</span>, <span class="number">0xFFFFFFFF</span>, DPL_USER),</span><br><span class="line">    [SEG_UDATA] = SEG(STA_W, <span class="number">0x0</span>, <span class="number">0xFFFFFFFF</span>, DPL_USER),</span><br><span class="line">    [SEG_TSS]   = SEG_NULL,</span><br><span class="line">&#125;;</span><br><span class="line"><span class="keyword">static</span> <span class="class"><span class="keyword">struct</span> <span class="title">pseudodesc</span> <span class="title">gdt_pd</span> =</span> &#123;</span><br><span class="line">      <span class="keyword">sizeof</span>(gdt) - <span class="number">1</span>, (<span class="keyword">uintptr_t</span>)gdt</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">  <span class="comment">/* gdt_init - initialize the default GDT and TSS */</span></span><br><span class="line">  <span class="function"><span class="keyword">static</span> <span class="keyword">void</span></span></span><br><span class="line"><span class="function">  <span class="title">gdt_init</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 设置TSS的ring0栈地址，包括esp寄存器和SS段寄存器</span></span><br><span class="line">      load_esp0((<span class="keyword">uintptr_t</span>)bootstacktop);</span><br><span class="line">      ts.ts_ss0 = KERNEL_DS;</span><br><span class="line"></span><br><span class="line">      <span class="comment">// 将TSS写入GDT中</span></span><br><span class="line">      gdt[SEG_TSS] = SEGTSS(STS_T32A, (<span class="keyword">uintptr_t</span>)&amp;ts, <span class="keyword">sizeof</span>(ts), DPL_KERNEL);</span><br><span class="line"></span><br><span class="line">      <span class="comment">// 加载GDT至GDTR寄存器</span></span><br><span class="line">      lgdt(&amp;gdt_pd);</span><br><span class="line"></span><br><span class="line">      <span class="comment">// 加载TSS至TR寄存器</span></span><br><span class="line">      ltr(GD_TSS);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>trapFrame</strong></p>
+<p>trapframe 结构是进入中断门所必须的结构，中断处理例程的入口代码用于保存上下文并构建一个 trapframe</p>
+<p>trapframe 的结构如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">trapframe</span> &#123;</span></span><br><span class="line">    <span class="comment">// tf_regs保存了基本寄存器的值，包括eax,ebx,esi,edi寄存器等等</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">pushregs</span> <span class="title">tf_regs</span>;</span></span><br><span class="line">    <span class="keyword">uint16_t</span> tf_gs;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_padding0;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_fs;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_padding1;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_es;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_padding2;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_ds;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_padding3;</span><br><span class="line">    <span class="keyword">uint32_t</span> tf_trapno;</span><br><span class="line">    <span class="comment">// 以下这些信息会被CPU硬件自动压入切换后的栈。包括下面切换特权级所使用的esp、ss等数据</span></span><br><span class="line">    <span class="keyword">uint32_t</span> tf_err;</span><br><span class="line">    <span class="keyword">uintptr_t</span> tf_eip;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_cs;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_padding4;</span><br><span class="line">    <span class="keyword">uint32_t</span> tf_eflags;</span><br><span class="line">    <span class="comment">// 以下这些信息会在切换特权级时被使用</span></span><br><span class="line">    <span class="keyword">uintptr_t</span> tf_esp;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_ss;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_padding5;</span><br><span class="line">&#125; __attribute__((packed));</span><br></pre></td></tr></table></figure>
+<p><strong>切换特权级的过程</strong></p>
+<ul>
+<li>特权级提升<ul>
+<li>在陷入的一瞬间，CPU会因为特权级的改变，索引TSS，切换 <code>ss</code> 和 <code>esp</code> 为内核栈，并按顺序自动压入<code>user_ss</code>、<code>user_esp</code>、<code>user_eflags</code>、<code>user_cs</code>、<code>old_eip</code>以及<code>err</code></li>
+<li>之后CPU会在中断处理例程入口处，先将剩余的段寄存器以及所有的通用寄存器压栈，构成一个 <code>trapframe</code> ，然后将该 <code>trapframe</code> 传入给真正的中断处理例程并执行</li>
+<li>该处理例程会判断传入的中断数(<code>trapno</code>)并执行特定的代码，在提升特权级的代码中，程序会处理传入的 <code>trapframe</code> 信息中的 <code>CS、DS、eflags</code> 寄存器，修改上面的 DPL、CPL与IOPL 以达到提升特权的目的</li>
+<li>将修改后的 <code>trapframe</code> 压入用户栈（这一步没有修改 <code>user_esp</code> 寄存器），并设置中断处理例程结束后将要弹出 <code>esp</code> 寄存器的值为用户栈的新地址（与刚刚不同，这一步修改了将要恢复的 <code>user_esp</code> 寄存器）</li>
+<li>在内核中，“将修改后的trapframe压入用户栈”这一步，需要舍弃 <code>trapframe</code> 中末尾两个旧的<code>ss</code>和<code>esp</code>寄存器数据</li>
+</ul>
+</li>
+<li>特权级降低<ul>
+<li>与 ring3 调用中断不同，当 ring0 调用中断时，进入中断前和进入中断后的这个过程，栈不发生改变</li>
+<li>修改后的 <code>trapFrame</code> 不需要像上面那样保存至将要使用的栈，因为当前环境下 <code>iret</code> 前后特权级会发生改变，执行该命令会弹出 <code>ss</code> 和 <code>esp</code> ，所以可以通过 <code>iret</code> 来设置返回时的栈地</li>
+</ul>
+</li>
+</ul>
+<h2 id="x86栈简述"><a href="#x86栈简述" class="headerlink" title="x86栈简述"></a>x86栈简述</h2><p>只有设置好的合适大小和地址的栈内存空间（简称栈空间），才能有效地进行函数调用，这里为了减少汇编代码量，我们就通过C代码来完成显示，由于需要调用C语言的函数，所以需要自己建立好栈空间，设置栈的代码如下： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">movl    $start, %esp</span><br></pre></td></tr></table></figure>
+<p>由于start位置（0x7c00）前的地址空间没有用到，所以可以用来作为bootloader的栈，由于栈是向下长的，所以不会破坏start位置后面的代码，我们可以通过用gdb调试bootloader来进一步观察栈的变化： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">qemu -hda bin/ucore.img -S -s</span><br><span class="line">gdb obj/bootblock.o</span><br></pre></td></tr></table></figure>
+<p>然后再GDB中输入以下指令来连接qemu：（可以使用 layout src 指令显示源码）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">(gdb) target remote :<span class="number">1234</span> </span><br><span class="line">(gdb) <span class="keyword">break</span> bootasm.S:<span class="number">68</span></span><br><span class="line">(gdb) <span class="keyword">continue</span></span><br></pre></td></tr></table></figure>
+<p>接下来就可以通过 “ info registers esp ” 指令来打印 esp寄存器 的值了：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">B+&gt;<span class="number">69</span>              movl $<span class="number">0x0</span>, %ebp </span><br><span class="line">------------------------------------</span><br><span class="line">(gdb) info <span class="keyword">register</span> esp</span><br><span class="line">esp            <span class="number">0x6f00</span>             </span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">   <span class="number">70</span>              movl $start, %esp            </span><br><span class="line">  &gt;<span class="number">71</span>              call bootmain</span><br><span class="line">------------------------------------</span><br><span class="line">(gdb) info <span class="keyword">register</span> esp</span><br><span class="line">esp            <span class="number">0x7c00</span>              <span class="number">0x7c00</span> &lt;start&gt;</span><br></pre></td></tr></table></figure>
+<p>可以发现，程序把“$start”中的数据赋值给了esp，这就是栈的起始地址（栈顶）</p>
+<p>看看程序是怎么处理 call 指令的：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">(gdb) <span class="function">si</span></span><br><span class="line"><span class="function"><span class="title">bootmain</span> <span class="params">()</span> at boot/bootmain.c:87</span></span><br><span class="line"><span class="function"><span class="params">(gdb)</span> info registers esp</span></span><br><span class="line"><span class="function">esp            0x7bfc              0<span class="title">x7bfc</span></span></span><br><span class="line"><span class="function"><span class="params">(gdb)</span> x/4x 0x7bfc <span class="comment">// esp中装了一个地址</span></span></span><br><span class="line"><span class="function">0x7bfc: 0x00007c4f      0xc031fcfa      0xc08ed88e</span></span><br><span class="line"><span class="function">        0<span class="title">x64e4d08e</span></span></span><br><span class="line"><span class="function"><span class="params">(gdb)</span> x/4i 0x7c4a <span class="comment">// 地址&quot;0x7c4f&quot;就是call指令的下一个指令,是函数&quot;bootmain&quot;的返回地址</span></span></span><br><span class="line"><span class="function">   0x7c4a &lt;protcseg+24&gt;:</span></span><br><span class="line"><span class="function">    call   0x7d0f &lt;bootmain&gt;</span></span><br><span class="line"><span class="function">   0x7c4f &lt;spin&gt;:       jmp    0x7c4f &lt;spin&gt;</span></span><br><span class="line"><span class="function">   0x7c51 &lt;spin+2&gt;:     lea    0<span class="title">x0</span><span class="params">(%esi)</span>,%esi</span></span><br><span class="line"><span class="function">   0x7c54 &lt;gdt&gt;:        add    %al,<span class="params">(%eax)</span></span></span><br></pre></td></tr></table></figure>
+<h2 id="x86显示字符串"><a href="#x86显示字符串" class="headerlink" title="x86显示字符串"></a>x86显示字符串</h2><p>bootloader 只在CPU和内存中打转无法让读者很容易知道 bootloader 的工作是否正常，为此在成功完成了保护模式的转换并且设置好栈后，就可以调用 bootmain 函数显示字符串了，在 lab1 中使用了显示器和并口两种外设来显示字符串，主要的代码集中在 bootmain.c 中</p>
+<p>这里采用的是很简单的基于Programmed I/O （PIO）方式，PIO方式是一种通过CPU执行I/O端口指令来进行数据读写的数据交换模式，被广泛应用于硬盘、光驱等设备的基础传输模式中（效率低下，但编程简单）</p>
+<ul>
+<li>计算机与IO接口的通信是通过计算机指令来实现的，通过软件指令选择IO接口上的功能、工作模式的做法，称为“IO接口控制编程”，通常是用端口读写指令in/out实现</li>
+<li>端口是IO接口开发给CPU的接口，一般的IO接口都有一组端口，每个端口都有自己的用途</li>
+</ul>
+<p>指令in/out使用方式如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">in al, dx  # al/ax 用于存放从端口读入的数据，dx指端口号</span><br><span class="line">in ax, dx</span><br><span class="line"></span><br><span class="line">out dx, al</span><br><span class="line">out dx, ax</span><br><span class="line">out 立即数, al</span><br><span class="line">out 立即数, ax</span><br></pre></td></tr></table></figure>
+<p>在 bootmain.c 中的 lpt_putc 函数（定义在 console.c 中）完成了<strong>并口输出字符</strong>的工作：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> LPTPORT         0x378</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">lpt_putc</span><span class="params">(<span class="keyword">int</span> c)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (c != <span class="string">&#x27;\b&#x27;</span>) &#123;</span><br><span class="line">        lpt_putc_sub(c);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span> &#123;</span><br><span class="line">        lpt_putc_sub(<span class="string">&#x27;\b&#x27;</span>);</span><br><span class="line">        lpt_putc_sub(<span class="string">&#x27; &#x27;</span>);</span><br><span class="line">        lpt_putc_sub(<span class="string">&#x27;\b&#x27;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">lpt_putc_sub</span><span class="params">(<span class="keyword">int</span> c)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> i;</span><br><span class="line">    <span class="keyword">for</span> (i = <span class="number">0</span>; !(inb(LPTPORT + <span class="number">1</span>) &amp; <span class="number">0x80</span>) &amp;&amp; i &lt; <span class="number">12800</span>; i ++) &#123;</span><br><span class="line">        delay(); <span class="comment">/* 读I/O端口地址0x379,等待并口准备好 */</span></span><br><span class="line">    &#125;</span><br><span class="line">    outb(LPTPORT + <span class="number">0</span>, c); <span class="comment">/* 向I/O端口地址0x378发出要输出的字符 */</span></span><br><span class="line">    outb(LPTPORT + <span class="number">2</span>, <span class="number">0x08</span> | <span class="number">0x04</span> | <span class="number">0x01</span>); <span class="comment">/* 向I/O端口地址0x37A发出控制命令 */</span></span><br><span class="line">    outb(LPTPORT + <span class="number">2</span>, <span class="number">0x08</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">/* 在I/O端口port写入一个字节的data */</span></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">void</span> <span class="title">outb</span><span class="params">(<span class="keyword">uint16_t</span> port, <span class="keyword">uint8_t</span> data)</span> </span>&#123;</span><br><span class="line">    <span class="function"><span class="keyword">asm</span> <span class="title">volatile</span> <span class="params">(<span class="string">&quot;outb %0, %1&quot;</span> :: <span class="string">&quot;a&quot;</span> (data), <span class="string">&quot;d&quot;</span> (port))</span></span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">/* 从I/O端口port读取一个字节 */</span></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">uint8_t</span> <span class="title">inb</span><span class="params">(<span class="keyword">uint16_t</span> port)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">uint8_t</span> data;</span><br><span class="line">    <span class="function"><span class="keyword">asm</span> <span class="title">volatile</span> <span class="params">(<span class="string">&quot;inb %1, %0&quot;</span> : <span class="string">&quot;=a&quot;</span> (data) : <span class="string">&quot;d&quot;</span> (port))</span></span>;</span><br><span class="line">    <span class="keyword">return</span> data;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">/* 一种笨的滞后时间控制:通过无意义指令的执行来达到延时的目的 */</span></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">delay</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    inb(<span class="number">0x84</span>); </span><br><span class="line">    inb(<span class="number">0x84</span>);</span><br><span class="line">    inb(<span class="number">0x84</span>);</span><br><span class="line">    inb(<span class="number">0x84</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>读I/O端口地址 0x379，等待并口准备好</li>
+<li>向I/O端口地址 0x378 发出要输出的字符</li>
+<li>向I/O端口地址 0x37A 发出控制命令，让并口处理要输出的字符</li>
+</ul>
+<p>在 bootmain.c 中的 serial_putc 函数（定义在 console.c 中）完成了<strong>串口输出字符</strong>的工作：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> COM1            0x3F8</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> COM_TX          0       <span class="comment">// Out: Transmit buffer (DLAB=0)</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> COM_LSR         5       <span class="comment">// In:  Line Status Register</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> COM_LSR_TXRDY   0x20    <span class="comment">// Transmit buffer avail</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">serial_putc</span><span class="params">(<span class="keyword">int</span> c)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (c != <span class="string">&#x27;\b&#x27;</span>) &#123;</span><br><span class="line">        serial_putc_sub(c); </span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span> &#123;</span><br><span class="line">        serial_putc_sub(<span class="string">&#x27;\b&#x27;</span>);</span><br><span class="line">        serial_putc_sub(<span class="string">&#x27; &#x27;</span>);</span><br><span class="line">        serial_putc_sub(<span class="string">&#x27;\b&#x27;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">serial_putc_sub</span><span class="params">(<span class="keyword">int</span> c)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> i;</span><br><span class="line">    <span class="keyword">for</span> (i = <span class="number">0</span>; !(inb(COM1 + COM_LSR) &amp; COM_LSR_TXRDY) &amp;&amp; i &lt; <span class="number">12800</span>; i ++) &#123;</span><br><span class="line">        delay(); <span class="comment">/* 读I/O端口地址0x3f8+5获得LSR寄存器的值，等待串口输出准备好 */</span></span><br><span class="line">    &#125;</span><br><span class="line">    outb(COM1 + COM_TX, c); <span class="comment">/* 向I/O端口地址0x3f8发出要输出的字符 */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>读I/O端口地址 0x3f8+5 获得LSR寄存器的值，等待串口输出准备好</li>
+<li>向I/O端口地址 0x3f8 发出要输出的字符</li>
+</ul>
+<p>在 bootmain.c 中的 cga_putc 函数（定义在 console.c 中）完成了 CGA 字符方式在某位置输出字符的工作：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> CRT_ROWS        25</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> CRT_COLS        80</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> CRT_SIZE        (CRT_ROWS * CRT_COLS)</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">typedef</span> <span class="keyword">unsigned</span> <span class="keyword">short</span> <span class="keyword">uint16_t</span>;</span><br><span class="line"><span class="keyword">static</span> <span class="keyword">uint16_t</span> *crt_buf;</span><br><span class="line"><span class="keyword">static</span> <span class="keyword">uint16_t</span> crt_pos;</span><br><span class="line"><span class="keyword">static</span> <span class="keyword">uint16_t</span> addr_6845;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">cga_putc</span><span class="params">(<span class="keyword">int</span> c)</span> </span>&#123;</span><br><span class="line">    <span class="comment">// set black on white</span></span><br><span class="line">    <span class="keyword">if</span> (!(c &amp; ~<span class="number">0xFF</span>)) &#123;</span><br><span class="line">        c |= <span class="number">0x0700</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">switch</span> (c &amp; <span class="number">0xff</span>) &#123;</span><br><span class="line">    <span class="keyword">case</span> <span class="string">&#x27;\b&#x27;</span>:</span><br><span class="line">        <span class="keyword">if</span> (crt_pos &gt; <span class="number">0</span>) &#123;</span><br><span class="line">            crt_pos --;</span><br><span class="line">            crt_buf[crt_pos] = (c &amp; ~<span class="number">0xff</span>) | <span class="string">&#x27; &#x27;</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line">    <span class="keyword">case</span> <span class="string">&#x27;\n&#x27;</span>:</span><br><span class="line">        crt_pos += CRT_COLS;</span><br><span class="line">    <span class="keyword">case</span> <span class="string">&#x27;\r&#x27;</span>:</span><br><span class="line">        crt_pos -= (crt_pos % CRT_COLS);</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line">    <span class="keyword">default</span>:</span><br><span class="line">        crt_buf[crt_pos ++] = c;     <span class="comment">// write the character</span></span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// What is the purpose of this?</span></span><br><span class="line">    <span class="keyword">if</span> (crt_pos &gt;= CRT_SIZE) &#123;</span><br><span class="line">        <span class="keyword">int</span> i;</span><br><span class="line">        memmove(crt_buf, crt_buf + CRT_COLS, (CRT_SIZE - CRT_COLS) * <span class="keyword">sizeof</span>(<span class="keyword">uint16_t</span>));</span><br><span class="line">        <span class="keyword">for</span> (i = CRT_SIZE - CRT_COLS; i &lt; CRT_SIZE; i ++) &#123;</span><br><span class="line">            crt_buf[i] = <span class="number">0x0700</span> | <span class="string">&#x27; &#x27;</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        crt_pos -= CRT_COLS;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// move that little blinky thing</span></span><br><span class="line">    outb(addr_6845, <span class="number">14</span>);</span><br><span class="line">    outb(addr_6845 + <span class="number">1</span>, crt_pos &gt;&gt; <span class="number">8</span>);</span><br><span class="line">    outb(addr_6845, <span class="number">15</span>);</span><br><span class="line">    outb(addr_6845 + <span class="number">1</span>, crt_pos);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>写I/O端口地址0x3d4，读I/O端口地址0x3d5，获得当前光标位置</li>
+<li>在光标的下一位置的显存地址空间上写字符，格式是黑色背景/白色字符</li>
+<li>设置当前光标位置为下一位置</li>
+</ul>
+<h2 id="练习1-镜像文件的生成"><a href="#练习1-镜像文件的生成" class="headerlink" title="练习1 - 镜像文件的生成"></a>练习1 - 镜像文件的生成</h2><p>关于这部分，我觉得现在还不急着去分析 Makefile 的具体内容，就挂一下答案了：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">bin</span>/ucore.img</span><br><span class="line">| 生成ucore.img的相关代码为</span><br><span class="line">| $(UCOREIMG): $(kernel) $(bootblock)</span><br><span class="line">|	$(V)dd <span class="keyword">if</span>=/dev/zero of=$@ count=<span class="number">10000</span></span><br><span class="line">|	$(V)dd <span class="keyword">if</span>=$(bootblock) of=$@ conv=notrunc</span><br><span class="line">|	$(V)dd <span class="keyword">if</span>=$(kernel) of=$@ seek=<span class="number">1</span> conv=notrunc</span><br><span class="line">|</span><br><span class="line">| 为了生成ucore.img，首先需要生成bootblock、kernel</span><br><span class="line">|</span><br><span class="line">|&gt;	<span class="built_in">bin</span>/bootblock</span><br><span class="line">|	| 生成bootblock的相关代码为</span><br><span class="line">|	| $(bootblock): $(call toobj,$(bootfiles)) | $(call totarget,sign)</span><br><span class="line">|	|	@echo + ld $@</span><br><span class="line">|	|	$(V)$(LD) $(LDFLAGS) -N -e start -Ttext <span class="number">0x7C00</span> $^ \</span><br><span class="line">|	|		-o $(call toobj,bootblock)</span><br><span class="line">|	|	@$(OBJDUMP) -S $(call objfile,bootblock) &gt; \</span><br><span class="line">|	|		$(call asmfile,bootblock)</span><br><span class="line">|	|	@$(OBJCOPY) -S -O binary $(call objfile,bootblock) \</span><br><span class="line">|	|		$(call outfile,bootblock)</span><br><span class="line">|	|	@$(call totarget,sign) $(call outfile,bootblock) $(bootblock)</span><br><span class="line">|	|</span><br><span class="line">|	| 为了生成bootblock，首先需要生成bootasm.o、bootmain.o、sign</span><br><span class="line">|	|</span><br><span class="line">|	|&gt;	obj/boot/bootasm.o, obj/boot/bootmain.o</span><br><span class="line">|	|	| 生成bootasm.o,bootmain.o的相关makefile代码为</span><br><span class="line">|	|	| bootfiles = $(call listf_cc,boot) </span><br><span class="line">|	|	| $(foreach f,$(bootfiles),$(call cc_compile,$(f),$(CC),\</span><br><span class="line">|	|	|	$(CFLAGS) -Os -nostdinc))</span><br><span class="line">|	|	| 实际代码由宏批量生成</span><br><span class="line">|	|	| </span><br><span class="line">|	|	| 生成bootasm.o需要bootasm.S</span><br><span class="line">|	|	| 实际命令为</span><br><span class="line">|	|	| gcc -Iboot/ -fno-builtin -Wall -ggdb -m32 -gstabs \</span><br><span class="line">|	|	| 	-nostdinc  -fno-stack-protector -Ilibs/ -Os -nostdinc \</span><br><span class="line">|	|	| 	-c boot/bootasm.S -o obj/boot/bootasm.o</span><br><span class="line">|	|	| 其中关键的参数为</span><br><span class="line">|	|	| 	-ggdb  生成可供gdb使用的调试信息。这样才能用qemu+gdb来调试bootloader <span class="keyword">or</span> ucore。</span><br><span class="line">|	|	|	-m32  生成适用于<span class="number">32</span>位环境的代码。我们用的模拟硬件是32bit的<span class="number">80386</span>，所以ucore也要是<span class="number">32</span>位的软件。</span><br><span class="line">|	|	| 	-gstabs  生成stabs格式的调试信息。这样要ucore的monitor可以显示出便于开发者阅读的函数调用栈信息</span><br><span class="line">|	|	| 	-nostdinc  不使用标准库。标准库是给应用程序用的，我们是编译ucore内核，OS内核是提供服务的，所以所有的服务要自给自足。</span><br><span class="line">|	|	|	-fno-stack-protector  不生成用于检测缓冲区溢出的代码。这是<span class="keyword">for</span> 应用程序的，我们是编译内核，ucore内核好像还用不到此功能。</span><br><span class="line">|	|	| 	-Os  为减小代码大小而进行优化。根据硬件spec，主引导扇区只有<span class="number">512</span>字节，我们写的简单bootloader的最终大小不能大于<span class="number">510</span>字节。</span><br><span class="line">|	|	| 	-I&lt;<span class="built_in">dir</span>&gt;  添加搜索头文件的路径</span><br><span class="line">|	|	| </span><br><span class="line">|	|	| 生成bootmain.o需要bootmain.c</span><br><span class="line">|	|	| 实际命令为</span><br><span class="line">|	|	| gcc -Iboot/ -fno-builtin -Wall -ggdb -m32 -gstabs -nostdinc \</span><br><span class="line">|	|	| 	-fno-stack-protector -Ilibs/ -Os -nostdinc \</span><br><span class="line">|	|	| 	-c boot/bootmain.c -o obj/boot/bootmain.o</span><br><span class="line">|	|	| 新出现的关键参数有</span><br><span class="line">|	|	| 	-fno-builtin  除非用__builtin_前缀，</span><br><span class="line">|	|	|	              否则不进行builtin函数的优化</span><br><span class="line">|	|</span><br><span class="line">|	|&gt;	<span class="built_in">bin</span>/sign</span><br><span class="line">|	|	| 生成sign工具的makefile代码为</span><br><span class="line">|	|	| $(call add_files_host,tools/sign.c,sign,sign)</span><br><span class="line">|	|	| $(call create_target_host,sign,sign)</span><br><span class="line">|	|	| </span><br><span class="line">|	|	| 实际命令为</span><br><span class="line">|	|	| gcc -Itools/ -g -Wall -O2 -c tools/sign.c \</span><br><span class="line">|	|	| 	-o obj/sign/tools/sign.o</span><br><span class="line">|	|	| gcc -g -Wall -O2 obj/sign/tools/sign.o -o <span class="built_in">bin</span>/sign</span><br><span class="line">|	|</span><br><span class="line">|	| 首先生成bootblock.o</span><br><span class="line">|	| ld -m    elf_i386 -nostdlib -N -e start -Ttext <span class="number">0x7C00</span> \</span><br><span class="line">|	|	obj/boot/bootasm.o obj/boot/bootmain.o -o obj/bootblock.o</span><br><span class="line">|	| 其中关键的参数为</span><br><span class="line">|	|	-m &lt;emulation&gt;  模拟为i386上的连接器</span><br><span class="line">|	|	-nostdlib  不使用标准库</span><br><span class="line">|	|	-N  设置代码段和数据段均可读写</span><br><span class="line">|	|	-e &lt;entry&gt;  指定入口</span><br><span class="line">|	|	-Ttext  制定代码段开始位置</span><br><span class="line">|	|</span><br><span class="line">|	| 拷贝二进制代码bootblock.o到bootblock.out</span><br><span class="line">|	| objcopy -S -O binary obj/bootblock.o obj/bootblock.out</span><br><span class="line">|	| 其中关键的参数为</span><br><span class="line">|	|	-S  移除所有符号和重定位信息</span><br><span class="line">|	|	-O &lt;bfdname&gt;  指定输出格式</span><br><span class="line">|	|</span><br><span class="line">|	| 使用sign工具处理bootblock.out，生成bootblock</span><br><span class="line">|	| <span class="built_in">bin</span>/sign obj/bootblock.out <span class="built_in">bin</span>/bootblock</span><br><span class="line">|</span><br><span class="line">|&gt;	<span class="built_in">bin</span>/kernel</span><br><span class="line">|	| 生成kernel的相关代码为</span><br><span class="line">|	| $(kernel): tools/kernel.ld</span><br><span class="line">|	| $(kernel): $(KOBJS)</span><br><span class="line">|	| 	@echo + ld $@</span><br><span class="line">|	| 	$(V)$(LD) $(LDFLAGS) -T tools/kernel.ld -o $@ $(KOBJS)</span><br><span class="line">|	| 	@$(OBJDUMP) -S $@ &gt; $(call asmfile,kernel)</span><br><span class="line">|	| 	@$(OBJDUMP) -t $@ | $(SED) <span class="string">&#x27;1,/SYMBOL TABLE/d; s/ .* / /; \</span></span><br><span class="line"><span class="string">|	| 		/^$$/d&#x27;</span> &gt; $(call symfile,kernel)</span><br><span class="line">|	| </span><br><span class="line">|	| 为了生成kernel，首先需要 kernel.ld init.o readline.o stdio.o kdebug.o</span><br><span class="line">|	|	kmonitor.o panic.o clock.o console.o intr.o picirq.o trap.o</span><br><span class="line">|	|	trapentry.o vectors.o pmm.o  printfmt.o string.o</span><br><span class="line">|	| kernel.ld已存在</span><br><span class="line">|	|</span><br><span class="line">|	|&gt;	obj/kern/*/*.o </span><br><span class="line">|	|	| 生成这些.o文件的相关makefile代码为</span><br><span class="line">|	|	| $(call add_files_cc,$(call listf_cc,$(KSRCDIR)),kernel,\</span><br><span class="line">|	|	|	$(KCFLAGS))</span><br><span class="line">|	|	| 这些.o生成方式和参数均类似，仅举init.o为例，其余不赘述</span><br><span class="line">|	|&gt;	obj/kern/init/init.o</span><br><span class="line">|	|	| 编译需要init.c</span><br><span class="line">|	|	| 实际命令为</span><br><span class="line">|	|	|	gcc -Ikern/init/ -fno-builtin -Wall -ggdb -m32 \</span><br><span class="line">|	|	|		-gstabs -nostdinc  -fno-stack-protector \</span><br><span class="line">|	|	|		-Ilibs/ -Ikern/debug/ -Ikern/driver/ \</span><br><span class="line">|	|	|		-Ikern/trap/ -Ikern/mm/ -c kern/init/init.c \</span><br><span class="line">|	|	|		-o obj/kern/init/init.o</span><br><span class="line">|	| </span><br><span class="line">|	| 生成kernel时，makefile的几条指令中有@前缀的都不必需</span><br><span class="line">|	| 必需的命令只有</span><br><span class="line">|	| ld -m    elf_i386 -nostdlib -T tools/kernel.ld -o <span class="built_in">bin</span>/kernel \</span><br><span class="line">|	| 	obj/kern/init/init.o obj/kern/libs/readline.o \</span><br><span class="line">|	| 	obj/kern/libs/stdio.o obj/kern/debug/kdebug.o \</span><br><span class="line">|	| 	obj/kern/debug/kmonitor.o obj/kern/debug/panic.o \</span><br><span class="line">|	| 	obj/kern/driver/clock.o obj/kern/driver/console.o \</span><br><span class="line">|	| 	obj/kern/driver/intr.o obj/kern/driver/picirq.o \</span><br><span class="line">|	| 	obj/kern/trap/trap.o obj/kern/trap/trapentry.o \</span><br><span class="line">|	| 	obj/kern/trap/vectors.o obj/kern/mm/pmm.o \</span><br><span class="line">|	| 	obj/libs/printfmt.o obj/libs/string.o</span><br><span class="line">|	| 其中新出现的关键参数为</span><br><span class="line">|	|	-T &lt;scriptfile&gt;  让连接器使用指定的脚本</span><br><span class="line">|</span><br><span class="line">| 生成一个有<span class="number">10000</span>个块的文件，每个块默认<span class="number">512</span>字节，用<span class="number">0</span>填充</span><br><span class="line">| dd <span class="keyword">if</span>=/dev/zero of=<span class="built_in">bin</span>/ucore.img count=<span class="number">10000</span></span><br><span class="line">|</span><br><span class="line">| 把bootblock中的内容写到第一个块</span><br><span class="line">| dd <span class="keyword">if</span>=<span class="built_in">bin</span>/bootblock of=<span class="built_in">bin</span>/ucore.img conv=notrunc</span><br><span class="line">|</span><br><span class="line">| 从第二个块开始写kernel中的内容</span><br><span class="line">| dd <span class="keyword">if</span>=<span class="built_in">bin</span>/kernel of=<span class="built_in">bin</span>/ucore.img seek=<span class="number">1</span> conv=notrunc</span><br></pre></td></tr></table></figure>
+<p>简单分析一下其中的内容：</p>
+<ul>
+<li>dd：用指定大小的块拷贝一个文件，并在拷贝的同时进行指定的转换</li>
+<li>if=文件名：输入文件名，缺省为标准输入，即指定源文件 &lt; if=input file &gt;</li>
+<li>of=文件名：输出文件名，缺省为标准输出，即指定目的文件 &lt; of=output file &gt;</li>
+<li>count=blocks：仅拷贝blocks个块，块大小等于ibs指定的字节数</li>
+<li>conv=conversion：用指定的参数转换文件</li>
+<li>conv=notrunc：不截短输出文件</li>
+</ul>
+<p>简述过程：</p>
+<ul>
+<li>由上描述可以看出，首先先创建一个大小为10000字节的块，然后再将bootblock，kernel拷贝过去，然而生成 ucore.img 需要先生成kernel和bootblock</li>
+<li>Makefile通过一系列命令生成了bootblock和kernel这两个elf文件，之后通过dd命令将bootblock放到第一个sector，将kernel放到第二个sector开始的区域（可以明显看出bootblock就是引导区，kernel则是操作系统内核）</li>
+<li>而在这之前还通过sign对bootblock进行了修饰，在512个字节的最后两个字节写入了0x55AA，作为引导区的标记</li>
+</ul>
+<h2 id="练习2-单步跟踪BIOS的执行"><a href="#练习2-单步跟踪BIOS的执行" class="headerlink" title="练习2 - 单步跟踪BIOS的执行"></a>练习2 - 单步跟踪BIOS的执行</h2><p>没什么好写的，make debug 后就可以“任意发挥”了</p>
+<p>记得在 tools/gdbinit 结尾加上</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">b *<span class="number">0x7c00</span></span><br><span class="line">c</span><br><span class="line">x /<span class="number">10</span>i $pc</span><br></pre></td></tr></table></figure>
+<p>这是为了方便 <strong>练习3</strong> 而做出的操作，因为程序会默认在“kern_init”处打断点，直接跳过了bootloader </p>
+<h2 id="练习3-分析bootloader进入保护模式的过程"><a href="#练习3-分析bootloader进入保护模式的过程" class="headerlink" title="练习3 - 分析bootloader进入保护模式的过程"></a>练习3 - 分析bootloader进入保护模式的过程</h2><p><strong>打开A20门</strong></p>
+<p>在PC及其兼容机的第20根地址线比较特殊，计算机系统中一般安排一个“门”控制该地址线是否有效，为了访问1M以上的存储单元，应该打开A20门，这种设置与实模式下只使用低端1M字节存储空间有关，与处理器是否工作在实方式还是保护方式无关（即是关掉A20，也可以进入保护模式）</p>
+<p>注：在 8086 中有 20 根地址总线，通过 CS:IP 对的方式寻址，最大访问地址为 1MB </p>
+<p>先执行一下指令，方便观察程序：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">(gdb) layout <span class="keyword">asm</span></span><br></pre></td></tr></table></figure>
+<p>首先清理环境：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">│B+&gt;<span class="number">0x7c00</span>      cli	<span class="comment">// 禁止中断发生</span></span><br><span class="line">│   <span class="number">0x7c01</span>      cld <span class="comment">// 将标志寄存器flag的方向标志位df清零                           </span></span><br><span class="line">│   <span class="number">0x7c02</span>      <span class="keyword">xor</span>    %eax,%eax <span class="comment">// 异或eax把其填充为&#x27;0&#x27;    </span></span><br><span class="line">│   <span class="number">0x7c04</span>      mov    %eax,%ds <span class="comment">// 置空ds               </span></span><br><span class="line">│   <span class="number">0x7c06</span>      mov    %eax,%es <span class="comment">// 置空es              </span></span><br><span class="line">│   <span class="number">0x7c08</span>      mov    %eax,%ss <span class="comment">// 置空ss          </span></span><br><span class="line">│   <span class="number">0x7c0a</span>      in     $<span class="number">0x64</span>,%al <span class="comment">// 从0x64端口读取一字节数据到AL</span></span><br></pre></td></tr></table></figure>
+<p>开启A20：通过将键盘控制器上的A20线置于高电位，使全部32条地址线可用（可以访问4G的内存空间）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">seta20<span class="number">.1</span>:				<span class="comment">// 等待8042键盘控制器不忙</span></span><br><span class="line">│   <span class="number">0x7c0a</span>      in     $<span class="number">0x64</span>,%al</span><br><span class="line">│   <span class="number">0x7c0c</span>      test   $<span class="number">0x2</span>,%al </span><br><span class="line">│   <span class="number">0x7c0e</span>      jne    <span class="number">0x7c0a</span> </span><br><span class="line">│   <span class="number">0x7c10</span>      mov    $<span class="number">0xd1</span>,%al</span><br><span class="line">│   <span class="number">0x7c12</span>      out    %al,$<span class="number">0x64</span>   </span><br><span class="line">seta20<span class="number">.1</span>:				<span class="comment">// 等待8042键盘控制器不忙   </span></span><br><span class="line">│   <span class="number">0x7c14</span>      in     $<span class="number">0x64</span>,%al                 </span><br><span class="line">│   <span class="number">0x7c16</span>      test   $<span class="number">0x2</span>,%al            </span><br><span class="line">│   <span class="number">0x7c18</span>      jne    <span class="number">0x7c14</span>          </span><br><span class="line">│   <span class="number">0x7c1a</span>      mov    $<span class="number">0xdf</span>,%al <span class="comment">// 打开A20         </span></span><br><span class="line">│   <span class="number">0x7c1c</span>      out    %al,$<span class="number">0x60</span>      </span><br></pre></td></tr></table></figure>
+<p><strong>初始化GDT表</strong></p>
+<p>一个简单的GDT表和其描述符已经静态储存在引导区中，载入即可</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">│   <span class="number">0x7c1e</span>      lgdtl  (%esi) </span><br></pre></td></tr></table></figure>
+<p><strong>进入保护模式</strong></p>
+<p>通过将cr0寄存器PE位置1便开启了保护模式</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">│  &gt;<span class="number">0x7c23</span>      mov    %cr0,%eax <span class="comment">// cr0 to eax             </span></span><br><span class="line">│   <span class="number">0x7c26</span>      <span class="keyword">or</span>     $<span class="number">0x1</span>,%ax <span class="comment">// 或操作(PE位变为&#x27;1&#x27;)                 </span></span><br><span class="line">│   <span class="number">0x7c2a</span>      mov    %eax,%cr0 <span class="comment">// eax to cr0   </span></span><br></pre></td></tr></table></figure>
+<p>设置段寄存器，并建立堆栈：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">│  &gt;<span class="number">0x7c32</span>      mov    $<span class="number">0x10</span>,%ax <span class="comment">// 段寄存器全部初始化为&#x27;0x10&#x27;        </span></span><br><span class="line">│   <span class="number">0x7c36</span>      mov    %eax,%ds                                               </span><br><span class="line">│   <span class="number">0x7c38</span>      mov    %eax,%es                                              </span><br><span class="line">│   <span class="number">0x7c3a</span>      mov    %eax,%fs                                            </span><br><span class="line">│   <span class="number">0x7c3c</span>      mov    %eax,%gs                                              </span><br><span class="line">│   <span class="number">0x7c3e</span>      mov    %eax,%ss                                             </span><br><span class="line">│   <span class="number">0x7c40</span>      mov    $<span class="number">0x0</span>,%ebp                                             </span><br><span class="line">│   <span class="number">0x7c45</span>      mov    $<span class="number">0x7c00</span>,%esp <span class="comment">// 设置0x7c00为栈顶  </span></span><br></pre></td></tr></table></figure>
+<p>转到保护模式完成，进入boot主方法：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">│   <span class="number">0x7c4a</span>      call   <span class="number">0x7d0f</span> </span><br><span class="line">------------------------------------</span><br><span class="line">│  &gt;<span class="number">0x7d13</span>      push   %ebp                                                   │</span><br><span class="line">│   <span class="number">0x7d14</span>      <span class="keyword">xor</span>    %ecx,%ecx                                              │</span><br><span class="line">│   <span class="number">0x7d16</span>      mov    %esp,%ebp                                              │</span><br><span class="line">│   <span class="number">0x7d18</span>      mov    $<span class="number">0x1000</span>,%edx                                           │</span><br><span class="line">│   <span class="number">0x7d1d</span>      push   %esi                                                   │</span><br><span class="line">│   <span class="number">0x7d1e</span>      mov    $<span class="number">0x10000</span>,%eax                                          │</span><br><span class="line">│   <span class="number">0x7d23</span>      push   %ebx                                                   │</span><br><span class="line">│   <span class="number">0x7d24</span>      call   <span class="number">0x7c72</span>                                                 │</span><br><span class="line">│   <span class="number">0x7d29</span>      cmpl   $<span class="number">0x464c457f</span>,<span class="number">0x10000</span>                                    │</span><br><span class="line">│   <span class="number">0x7d33</span>      jne    <span class="number">0x7d74</span>    </span><br></pre></td></tr></table></figure>
+<h2 id="练习4-分析bootloader加载ELF格式的OS的过程"><a href="#练习4-分析bootloader加载ELF格式的OS的过程" class="headerlink" title="练习4 - 分析bootloader加载ELF格式的OS的过程"></a>练习4 - 分析bootloader加载ELF格式的OS的过程</h2><p><code>readsect</code>：从设备的第secno扇区读取数据到dst位置</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">readsect</span><span class="params">(<span class="keyword">void</span> *dst, <span class="keyword">uint32_t</span> secno)</span> </span>&#123;</span><br><span class="line">    <span class="comment">// wait for disk to be ready</span></span><br><span class="line">    waitdisk();</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 把信息写入段号口</span></span><br><span class="line">    outb(<span class="number">0x1F2</span>, <span class="number">1</span>); <span class="comment">// count = 1(设置读取扇区的数目为1)</span></span><br><span class="line">    outb(<span class="number">0x1F3</span>, secno &amp; <span class="number">0xFF</span>);</span><br><span class="line">    outb(<span class="number">0x1F4</span>, (secno &gt;&gt; <span class="number">8</span>) &amp; <span class="number">0xFF</span>);</span><br><span class="line">    outb(<span class="number">0x1F5</span>, (secno &gt;&gt; <span class="number">16</span>) &amp; <span class="number">0xFF</span>);</span><br><span class="line">    outb(<span class="number">0x1F6</span>, ((secno &gt;&gt; <span class="number">24</span>) &amp; <span class="number">0xF</span>) | <span class="number">0xE0</span>);</span><br><span class="line">    outb(<span class="number">0x1F7</span>, <span class="number">0x20</span>); <span class="comment">// cmd 0x20 - read sectors(读取扇区)</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// wait for disk to be ready</span></span><br><span class="line">    waitdisk();</span><br><span class="line"></span><br><span class="line">    <span class="comment">// read a sector</span></span><br><span class="line">    insl(<span class="number">0x1F0</span>, dst, SECTSIZE / <span class="number">4</span>); <span class="comment">// 读取到dst位置(幻数4因为这里以DW为单位)</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>readseg</code>：简单包装了 readsect，可以从设备读取任意长度的内容（指定了要读取的字节数）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">readseg</span><span class="params">(<span class="keyword">uintptr_t</span> va, <span class="keyword">uint32_t</span> count, <span class="keyword">uint32_t</span> offset)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">uintptr_t</span> end_va = va + count;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 四舍五入到扇区边界</span></span><br><span class="line">    va -= offset % SECTSIZE;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 将字节转换为扇区，内核从&#x27;扇区1&#x27;开始</span></span><br><span class="line">    <span class="keyword">uint32_t</span> secno = (offset / SECTSIZE) + <span class="number">1</span>;</span><br><span class="line">	    <span class="comment">// +1:因为&#x27;0扇区&#x27;被引导占用,所以ELF文件从&#x27;1扇区&#x27;开始</span></span><br><span class="line">    </span><br><span class="line">    <span class="keyword">for</span> (; va &lt; end_va; va += SECTSIZE, secno ++) &#123;</span><br><span class="line">        readsect((<span class="keyword">void</span> *)va, secno); <span class="comment">// 每次读一个扇区</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>bootmain</code>函数中：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line">bootmain(<span class="keyword">void</span>) &#123;</span><br><span class="line">    <span class="comment">// 首先读取ELF的头部</span></span><br><span class="line">    readseg((<span class="keyword">uintptr_t</span>)ELFHDR, SECTSIZE * <span class="number">8</span>, <span class="number">0</span>);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 通过储存在头部的幻数判断是否是合法的ELF文件</span></span><br><span class="line">    <span class="keyword">if</span> (ELFHDR-&gt;e_magic != ELF_MAGIC) &#123;</span><br><span class="line">        <span class="keyword">goto</span> bad;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">proghdr</span> *<span class="title">ph</span>, *<span class="title">eph</span>;</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// ELF头部有描述ELF文件应加载到内存什么位置的描述表，先将描述表的头地址存在ph</span></span><br><span class="line">    ph = (struct proghdr *)((<span class="keyword">uintptr_t</span>)ELFHDR + ELFHDR-&gt;e_phoff);</span><br><span class="line">    eph = ph + ELFHDR-&gt;e_phnum;</span><br><span class="line">    <span class="comment">// 按照描述表将ELF文件中数据载入内存</span></span><br><span class="line">    <span class="keyword">for</span> (; ph &lt; eph; ph ++) &#123;</span><br><span class="line">        readseg(ph-&gt;p_va &amp; <span class="number">0xFFFFFF</span>, ph-&gt;p_memsz, ph-&gt;p_offset);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">// ELF文件0x1000位置后面的0xd1ec比特被载入内存0x00100000</span></span><br><span class="line">    <span class="comment">// ELF文件0xf000位置后面的0x1d20比特被载入内存0x0010e000</span></span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 根据ELF头部储存的入口信息，找到内核的入口</span></span><br><span class="line">    ((<span class="keyword">void</span> (*)(<span class="keyword">void</span>))(ELFHDR-&gt;e_entry &amp; <span class="number">0xFFFFFF</span>))();</span><br><span class="line"></span><br><span class="line">bad:</span><br><span class="line">    outw(<span class="number">0x8A00</span>, <span class="number">0x8A00</span>);</span><br><span class="line">    outw(<span class="number">0x8A00</span>, <span class="number">0x8E00</span>);</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* do nothing */</span></span><br><span class="line">    <span class="keyword">while</span> (<span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="练习5-实现函数调用堆栈跟踪函数"><a href="#练习5-实现函数调用堆栈跟踪函数" class="headerlink" title="练习5 - 实现函数调用堆栈跟踪函数"></a>练习5 - 实现函数调用堆栈跟踪函数</h2><p>终于遇到一个需要写的练习了</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">print_stackframe</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">     <span class="comment">/* LAB1 YOUR CODE : STEP 1 */</span></span><br><span class="line">     <span class="comment">/* (1) call read_ebp() to get the value of ebp. the type is (uint32_t);</span></span><br><span class="line"><span class="comment">      * (2) call read_eip() to get the value of eip. the type is (uint32_t);</span></span><br><span class="line"><span class="comment">      * (3) from 0 .. STACKFRAME_DEPTH</span></span><br><span class="line"><span class="comment">      *    (3.1) printf value of ebp, eip</span></span><br><span class="line"><span class="comment">      *    (3.2) (uint32_t)calling arguments [0..4] = the contents in address (uint32_t)ebp +2 [0..4]</span></span><br><span class="line"><span class="comment">      *    (3.3) cprintf(&quot;\n&quot;);</span></span><br><span class="line"><span class="comment">      *    (3.4) call print_debuginfo(eip-1) to print the C calling function name and line number, etc.</span></span><br><span class="line"><span class="comment">      *    (3.5) popup a calling stackframe</span></span><br><span class="line"><span class="comment">      *           NOTICE: the calling funciton&#x27;s return addr eip  = ss:[ebp+4]</span></span><br><span class="line"><span class="comment">      *                   the calling funciton&#x27;s ebp = ss:[ebp]</span></span><br><span class="line"><span class="comment">      */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>当然不是从零开始，程序已经写好了一些函数：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> STACKFRAME_DEPTH 20</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> __noinline <span class="keyword">uint32_t</span> <span class="title">read_eip</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">uint32_t</span> eip;</span><br><span class="line">    <span class="function"><span class="keyword">asm</span> <span class="title">volatile</span><span class="params">(<span class="string">&quot;movl 4(%%ebp), %0&quot;</span> : <span class="string">&quot;=r&quot;</span> (eip))</span></span>;</span><br><span class="line">    <span class="keyword">return</span> eip;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">uint32_t</span> <span class="title">read_ebp</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">uint32_t</span> ebp;</span><br><span class="line">    <span class="function"><span class="keyword">asm</span> <span class="title">volatile</span> <span class="params">(<span class="string">&quot;movl %%ebp, %0&quot;</span> : <span class="string">&quot;=r&quot;</span> (ebp))</span></span>;</span><br><span class="line">    <span class="keyword">return</span> ebp;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">print_debuginfo</span><span class="params">(<span class="keyword">uintptr_t</span> eip)</span> </span>&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">eipdebuginfo</span> <span class="title">info</span>;</span></span><br><span class="line">    <span class="keyword">if</span> (debuginfo_eip(eip, &amp;info) != <span class="number">0</span>) &#123;</span><br><span class="line">        cprintf(<span class="string">&quot;    &lt;unknow&gt;: -- 0x%08x --\n&quot;</span>, eip);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span> &#123;</span><br><span class="line">        <span class="keyword">char</span> fnname[<span class="number">256</span>];</span><br><span class="line">        <span class="keyword">int</span> j;</span><br><span class="line">        <span class="keyword">for</span> (j = <span class="number">0</span>; j &lt; info.eip_fn_namelen; j ++) &#123;</span><br><span class="line">            fnname[j] = info.eip_fn_name[j];</span><br><span class="line">        &#125;</span><br><span class="line">        fnname[j] = <span class="string">&#x27;\0&#x27;</span>;</span><br><span class="line">        cprintf(<span class="string">&quot;    %s:%d: %s+%d\n&quot;</span>, info.eip_file, info.eip_line,</span><br><span class="line">                fnname, eip - info.eip_fn_addr);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>翻译翻译实验想让我们干什么：</p>
+<ul>
+<li>打印 ebp eip 的地址</li>
+<li>打印调用的参数</li>
+<li>调用“print_debuginfo（eip-1）”打印C调用函数名和行号等</li>
+<li>弹出一个调用堆栈帧（按照提示做）</li>
+</ul>
+<p>首次进行尝试：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">print_stackframe</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">size_t</span> ebp = read_ebp();</span><br><span class="line">    <span class="keyword">size_t</span> eip = read_eip();</span><br><span class="line">    <span class="keyword">int</span> i;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 这里一定要使用&quot;cprintf&quot;，原版&quot;printf&quot;直接报错</span></span><br><span class="line">    cprintf(<span class="string">&quot;ebp:0x%08x eip:0x%08x&quot;</span>,ebp,eip); </span><br><span class="line">    cprintf(<span class="string">&quot;args:0x%08x\n&quot;</span>,*(<span class="keyword">size_t</span>*)(ebp+<span class="number">1</span>)); <span class="comment">// 写在一起不好看</span></span><br><span class="line">    cprintf(<span class="string">&quot;args:0x%08x\n&quot;</span>,*(<span class="keyword">size_t</span>*)(ebp+<span class="number">2</span>));</span><br><span class="line">    cprintf(<span class="string">&quot;args:0x%08x\n&quot;</span>,*(<span class="keyword">size_t</span>*)(ebp+<span class="number">3</span>));</span><br><span class="line">    cprintf(<span class="string">&quot;args:0x%08x\n&quot;</span>,*(<span class="keyword">size_t</span>*)(ebp+<span class="number">4</span>));</span><br><span class="line">    </span><br><span class="line">    cprintf(<span class="string">&quot;\n&quot;</span>);</span><br><span class="line">    print_debuginfo(eip - <span class="number">1</span>);</span><br><span class="line">    </span><br><span class="line">    eip = *(<span class="keyword">size_t</span>*)(ebp + <span class="number">1</span>);</span><br><span class="line">    ebp = *(<span class="keyword">size_t</span>*)(ebp);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>回头看答案发现我少了一个循环，后来发现这是要求的一部分，另外，“read_ebp”和“read_eip”的返回参数类型是“uint32_t”，还是改为“uint32_t”比较好</p>
+<p>再次尝试：（部分地方进行了修改）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">print_stackframe</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">uint32_t</span> ebp = read_ebp();</span><br><span class="line">    <span class="keyword">uint32_t</span> eip = read_eip();</span><br><span class="line">    <span class="keyword">int</span> i;</span><br><span class="line">    </span><br><span class="line">    <span class="keyword">for</span> (i = <span class="number">0</span>; ebp != <span class="number">0</span> &amp;&amp; i &lt; STACKFRAME_DEPTH; i ++) &#123;</span><br><span class="line">        cprintf(<span class="string">&quot;ebp:0x%08x eip:0x%08x\n&quot;</span>,ebp,eip); </span><br><span class="line">        cprintf(<span class="string">&quot;args_1:0x%08x\n&quot;</span>,*(<span class="keyword">uint32_t</span>*)(ebp+<span class="number">1</span>));</span><br><span class="line">        cprintf(<span class="string">&quot;args_2:0x%08x\n&quot;</span>,*(<span class="keyword">uint32_t</span>*)(ebp+<span class="number">2</span>));</span><br><span class="line">        cprintf(<span class="string">&quot;args_3:0x%08x\n&quot;</span>,*(<span class="keyword">uint32_t</span>*)(ebp+<span class="number">3</span>));</span><br><span class="line">        cprintf(<span class="string">&quot;args_4:0x%08x\n&quot;</span>,*(<span class="keyword">uint32_t</span>*)(ebp+<span class="number">4</span>));</span><br><span class="line">    &#125;</span><br><span class="line">    cprintf(<span class="string">&quot;\n&quot;</span>);</span><br><span class="line">    print_debuginfo(eip - <span class="number">1</span>);</span><br><span class="line">    </span><br><span class="line">    eip = *(<span class="keyword">uint32_t</span>*)(ebp + <span class="number">1</span>);</span><br><span class="line">    ebp = *(<span class="keyword">uint32_t</span>*)(ebp);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>效果：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">➜  lab1 (THU.CST) os is loading ...</span><br><span class="line"></span><br><span class="line">Special kernel symbols:</span><br><span class="line">  entry  <span class="number">0x00100000</span> (phys)</span><br><span class="line">  etext  <span class="number">0x001032e9</span> (phys)</span><br><span class="line">  edata  <span class="number">0x0010ea16</span> (phys)</span><br><span class="line">  end    <span class="number">0x0010fd20</span> (phys)</span><br><span class="line">Kernel executable memory footprint: <span class="number">64</span>KB</span><br><span class="line">ebp:<span class="number">0x00007b28</span> eip:<span class="number">0x00100a63</span></span><br><span class="line">args_1:<span class="number">0x6a00007b</span></span><br><span class="line">args_2:<span class="number">0x0d6a0000</span></span><br><span class="line">args_3:<span class="number">0x100d6a00</span></span><br><span class="line">args_4:<span class="number">0x00100d6a</span></span><br><span class="line">ebp:<span class="number">0x00007b28</span> eip:<span class="number">0x00100a63</span></span><br><span class="line">args_1:<span class="number">0x6a00007b</span></span><br><span class="line">args_2:<span class="number">0x0d6a0000</span></span><br><span class="line">args_3:<span class="number">0x100d6a00</span></span><br><span class="line">args_4:<span class="number">0x00100d6a</span></span><br></pre></td></tr></table></figure>
+<h2 id="练习6-完善中断初始化和处理"><a href="#练习6-完善中断初始化和处理" class="headerlink" title="练习6 - 完善中断初始化和处理"></a>练习6 - 完善中断初始化和处理</h2><p>中断描述符表（Interrupt Descriptor Table，IDT）是保护模式下用于存储中断处理程序的数据结构，CPU在接收到中断时，会根据中断向量在中断描述符表中检索对应的描述符</p>
+<p>实验目的：</p>
+<ul>
+<li>请编程完善“kern/trap/trap.c”中对中断向量表进行初始化的函数idt_init</li>
+<li>在idt_init函数中，依次对所有中断入口进行初始化</li>
+<li>使用mmu.h中的SETGATE宏，填充idt数组内容</li>
+<li>每个中断的入口由“tools/vectors.c”生成，使用trap.c中声明的vectors数组即可</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* idt_init - initialize IDT to each of the entry points in kern/trap/vectors.S */</span></span><br><span class="line"><span class="function"><span class="keyword">void</span></span></span><br><span class="line"><span class="function"><span class="title">idt_init</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">     <span class="comment">/* LAB1 YOUR CODE : STEP 2 */</span></span><br><span class="line">     <span class="comment">/* (1) Where are the entry addrs of each Interrupt Service Routine (ISR)?</span></span><br><span class="line"><span class="comment">      *     All ISR&#x27;s entry addrs are stored in __vectors. where is uintptr_t __vectors[] ?</span></span><br><span class="line"><span class="comment">      *     __vectors[] is in kern/trap/vector.S which is produced by tools/vector.c</span></span><br><span class="line"><span class="comment">      *     (try &quot;make&quot; command in lab1, then you will find vector.S in kern/trap DIR)</span></span><br><span class="line"><span class="comment">      *     You can use  &quot;extern uintptr_t __vectors[];&quot; to define this extern variable which will be used later.</span></span><br><span class="line"><span class="comment">      * (2) Now you should setup the entries of ISR in Interrupt Description Table (IDT).</span></span><br><span class="line"><span class="comment">      *     Can you see idt[256] in this file? Yes, it&#x27;s IDT! you can use SETGATE macro to setup each item of IDT</span></span><br><span class="line"><span class="comment">      * (3) After setup the contents of IDT, you will let CPU know where is the IDT by using &#x27;lidt&#x27; instruction.</span></span><br><span class="line"><span class="comment">      *     You don&#x27;t know the meaning of this instruction? just google it! and check the libs/x86.h to know more.</span></span><br><span class="line"><span class="comment">      *     Notice: the argument of lidt is idt_pd. try to find it!</span></span><br><span class="line"><span class="comment">      */</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">/* trap_dispatch - dispatch based on what type of trap occurred */</span></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span></span></span><br><span class="line"><span class="function"><span class="title">trap_dispatch</span><span class="params">(struct trapframe *tf)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">char</span> c;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">switch</span> (tf-&gt;tf_trapno) &#123;</span><br><span class="line">    <span class="keyword">case</span> IRQ_OFFSET + IRQ_TIMER:</span><br><span class="line">        <span class="comment">/* LAB1 YOUR CODE : STEP 3 */</span></span><br><span class="line">        <span class="comment">/* handle the timer interrupt */</span></span><br><span class="line">        <span class="comment">/* (1) After a timer interrupt, you should record this event using a global variable (increase it), such as ticks in kern/driver/clock.c</span></span><br><span class="line"><span class="comment">         * (2) Every TICK_NUM cycle, you can print some info using a funciton, such as print_ticks().</span></span><br><span class="line"><span class="comment">         * (3) Too Simple? Yes, I think so!</span></span><br><span class="line"><span class="comment">         */</span></span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line">    <span class="keyword">case</span> IRQ_OFFSET + IRQ_COM1:</span><br><span class="line">        c = cons_getc();</span><br><span class="line">        cprintf(<span class="string">&quot;serial [%03d] %c\n&quot;</span>, c, c);</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line">    <span class="keyword">case</span> IRQ_OFFSET + IRQ_KBD:</span><br><span class="line">        c = cons_getc();</span><br><span class="line">        cprintf(<span class="string">&quot;kbd [%03d] %c\n&quot;</span>, c, c);</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line">    <span class="comment">//LAB1 CHALLENGE 1 : YOUR CODE you should modify below codes.</span></span><br><span class="line">    <span class="keyword">case</span> T_SWITCH_TOU:</span><br><span class="line">    <span class="keyword">case</span> T_SWITCH_TOK:</span><br><span class="line">        panic(<span class="string">&quot;T_SWITCH_** ??\n&quot;</span>);</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line">    <span class="keyword">case</span> IRQ_OFFSET + IRQ_IDE1:</span><br><span class="line">    <span class="keyword">case</span> IRQ_OFFSET + IRQ_IDE2:</span><br><span class="line">        <span class="comment">/* do nothing */</span></span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line">    <span class="keyword">default</span>:</span><br><span class="line">        <span class="comment">// in kernel, it must be a mistake</span></span><br><span class="line">        <span class="keyword">if</span> ((tf-&gt;tf_cs &amp; <span class="number">3</span>) == <span class="number">0</span>) &#123;</span><br><span class="line">            print_trapframe(tf);</span><br><span class="line">            panic(<span class="string">&quot;unexpected trap in kernel.\n&quot;</span>);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SETGATE(gate, istrap, sel, off, dpl) &#123;            \</span></span><br><span class="line"><span class="meta">    (gate).gd_off_15_0 = (uint32_t)(off) &amp; 0xffff;        \</span></span><br><span class="line"><span class="meta">    (gate).gd_ss = (sel);                                \</span></span><br><span class="line"><span class="meta">    (gate).gd_args = 0;                                    \</span></span><br><span class="line"><span class="meta">    (gate).gd_rsv1 = 0;                                    \</span></span><br><span class="line"><span class="meta">    (gate).gd_type = (istrap) ? STS_TG32 : STS_IG32;    \</span></span><br><span class="line"><span class="meta">    (gate).gd_s = 0;                                    \</span></span><br><span class="line"><span class="meta">    (gate).gd_dpl = (dpl);                                \</span></span><br><span class="line"><span class="meta">    (gate).gd_p = 1;                                    \</span></span><br><span class="line"><span class="meta">    (gate).gd_off_31_16 = (uint32_t)(off) &gt;&gt; 16;        \</span></span><br><span class="line"><span class="meta">&#125;</span></span><br></pre></td></tr></table></figure>
+<p>简单来说，就是要写一个“idt_init”函数来对中断向量表进行初始化，并且完善“trap_dispatch”函数</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">idt_init</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">	<span class="keyword">extern</span> <span class="keyword">uintptr_t</span> __vectors[];</span><br><span class="line">	<span class="keyword">int</span> i;</span><br><span class="line">	<span class="keyword">for</span>(i=<span class="number">0</span>;i&lt;<span class="number">256</span>;i++) &#123;</span><br><span class="line">	    SETGATE(idt[i],<span class="number">0</span>,GD_KTEXT,__vectors[i],DPL_KERNEL);</span><br><span class="line">      <span class="comment">// 目标idt项为idt[i]</span></span><br><span class="line">      <span class="comment">// 该idt项为内核代码，所以使用GD_KTEXT段选择子</span></span><br><span class="line">      <span class="comment">// 中断处理程序的入口地址存放于__vectors[i]</span></span><br><span class="line">      <span class="comment">// 特权级为DPL_KERNEL</span></span><br><span class="line">	&#125;</span><br><span class="line">	SETGATE(idt[T_SWITCH_TOK],<span class="number">0</span>,GD_KTEXT,__vectors[T_SWITCH_TOK],DPL_USER);</span><br><span class="line">    <span class="comment">// 设置从用户态转为内核态的中断的特权级为DPL_USER</span></span><br><span class="line">	lidt(&amp;idt_pd);</span><br><span class="line">    <span class="comment">// 加载该IDT</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">case</span> IRQ_OFFSET + IRQ_TIMER: <span class="comment">// 使操作系统每遇到100次时钟中断,就调用print_ticks子程序</span></span><br><span class="line">ticks++;</span><br><span class="line"><span class="keyword">if</span>(ticks%TICK_NUM == <span class="number">0</span>)</span><br><span class="line">	print_ticks();</span><br><span class="line"><span class="keyword">break</span>;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">  -check ticks:                              OK</span><br><span class="line">Total Score: <span class="number">10</span>/<span class="number">40</span></span><br><span class="line">make: *** [Makefile:<span class="number">241</span>：grade] 错误 <span class="number">1</span></span><br></pre></td></tr></table></figure>
+<p>基础分 10 分已经全部获得</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/miscellaneous/" rel="tag"><i class="fa fa-tag"></i> miscellaneous</a>
+              <a href="/tags/Kernel/" rel="tag"><i class="fa fa-tag"></i> Kernel</a>
+              <a href="/tags/Ucore/" rel="tag"><i class="fa fa-tag"></i> Ucore</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/04/06/House%20Of%20Botcake-%E5%8E%9F%E7%90%86/" rel="prev" title="House Of Botcake-原理">
+      <i class="fa fa-chevron-left"></i> House Of Botcake-原理
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/" rel="next" title="操作系统真象还原（持续更新）">
+      操作系统真象还原（持续更新） <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#x86%E5%90%AF%E5%8A%A8%E9%A1%BA%E5%BA%8F"><span class="nav-number">1.</span> <span class="nav-text">x86启动顺序</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#x86%E4%B8%AD%E6%96%AD%E7%AE%80%E8%BF%B0"><span class="nav-number">2.</span> <span class="nav-text">x86中断简述</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#x86%E4%B8%AD%E6%96%AD%E5%A4%84%E7%90%86"><span class="nav-number">3.</span> <span class="nav-text">x86中断处理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#x86%E7%89%B9%E6%9D%83%E7%BA%A7%E5%88%AB%E7%AE%80%E8%BF%B0"><span class="nav-number">4.</span> <span class="nav-text">x86特权级别简述</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#x86%E7%89%B9%E6%9D%83%E7%BA%A7%E5%88%AB%E8%BF%90%E7%94%A8"><span class="nav-number">5.</span> <span class="nav-text">x86特权级别运用</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#x86%E6%A0%88%E7%AE%80%E8%BF%B0"><span class="nav-number">6.</span> <span class="nav-text">x86栈简述</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#x86%E6%98%BE%E7%A4%BA%E5%AD%97%E7%AC%A6%E4%B8%B2"><span class="nav-number">7.</span> <span class="nav-text">x86显示字符串</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BB%83%E4%B9%A01-%E9%95%9C%E5%83%8F%E6%96%87%E4%BB%B6%E7%9A%84%E7%94%9F%E6%88%90"><span class="nav-number">8.</span> <span class="nav-text">练习1 - 镜像文件的生成</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BB%83%E4%B9%A02-%E5%8D%95%E6%AD%A5%E8%B7%9F%E8%B8%AABIOS%E7%9A%84%E6%89%A7%E8%A1%8C"><span class="nav-number">9.</span> <span class="nav-text">练习2 - 单步跟踪BIOS的执行</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BB%83%E4%B9%A03-%E5%88%86%E6%9E%90bootloader%E8%BF%9B%E5%85%A5%E4%BF%9D%E6%8A%A4%E6%A8%A1%E5%BC%8F%E7%9A%84%E8%BF%87%E7%A8%8B"><span class="nav-number">10.</span> <span class="nav-text">练习3 - 分析bootloader进入保护模式的过程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BB%83%E4%B9%A04-%E5%88%86%E6%9E%90bootloader%E5%8A%A0%E8%BD%BDELF%E6%A0%BC%E5%BC%8F%E7%9A%84OS%E7%9A%84%E8%BF%87%E7%A8%8B"><span class="nav-number">11.</span> <span class="nav-text">练习4 - 分析bootloader加载ELF格式的OS的过程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BB%83%E4%B9%A05-%E5%AE%9E%E7%8E%B0%E5%87%BD%E6%95%B0%E8%B0%83%E7%94%A8%E5%A0%86%E6%A0%88%E8%B7%9F%E8%B8%AA%E5%87%BD%E6%95%B0"><span class="nav-number">12.</span> <span class="nav-text">练习5 - 实现函数调用堆栈跟踪函数</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BB%83%E4%B9%A06-%E5%AE%8C%E5%96%84%E4%B8%AD%E6%96%AD%E5%88%9D%E5%A7%8B%E5%8C%96%E5%92%8C%E5%A4%84%E7%90%86"><span class="nav-number">13.</span> <span class="nav-text">练习6 - 完善中断初始化和处理</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">113</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">79</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.5m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">22:58</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

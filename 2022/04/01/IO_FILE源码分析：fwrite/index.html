@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="IO_FILE源码分析：fwrite直接上源码： 1234567891011121314151617181920212223_IO_size_t_IO_fwrite (buf, size, count, fp)     const void *buf;     _IO_size_t size;     _IO_size_t count;     _IO_FILE *fp;&amp;#123;  _IO_s">
+<meta property="og:type" content="article">
+<meta property="og:title" content="IO_FILE源码分析：fwrite">
+<meta property="og:url" content="http://example.com/2022/04/01/IO_FILE%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90%EF%BC%9Afwrite/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="IO_FILE源码分析：fwrite直接上源码： 1234567891011121314151617181920212223_IO_size_t_IO_fwrite (buf, size, count, fp)     const void *buf;     _IO_size_t size;     _IO_size_t count;     _IO_FILE *fp;&amp;#123;  _IO_s">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2022-03-31T16:00:36.000Z">
+<meta property="article:modified_time" content="2022-03-31T16:01:30.005Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="IO_FILE">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2022/04/01/IO_FILE%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90%EF%BC%9Afwrite/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>IO_FILE源码分析：fwrite | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/04/01/IO_FILE%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90%EF%BC%9Afwrite/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          IO_FILE源码分析：fwrite
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-04-01 00:00:36 / Modified: 00:01:30" itemprop="dateCreated datePublished" datetime="2022-04-01T00:00:36+08:00">2022-04-01</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/SourceCodeAnalysis/" itemprop="url" rel="index"><span itemprop="name">SourceCodeAnalysis</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>8.5k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>8 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="IO-FILE源码分析：fwrite"><a href="#IO-FILE源码分析：fwrite" class="headerlink" title="IO_FILE源码分析：fwrite"></a>IO_FILE源码分析：fwrite</h2><p>直接上源码：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">_IO_size_t</span><br><span class="line">_IO_fwrite (buf, size, count, fp)</span><br><span class="line">     <span class="keyword">const</span> <span class="keyword">void</span> *buf;</span><br><span class="line">     _IO_size_t size;</span><br><span class="line">     _IO_size_t count;</span><br><span class="line">     _IO_FILE *fp;</span><br><span class="line">&#123;</span><br><span class="line">  _IO_size_t request = size * count;</span><br><span class="line">  _IO_size_t written = <span class="number">0</span>;</span><br><span class="line">  CHECK_FILE (fp, <span class="number">0</span>);</span><br><span class="line">  <span class="keyword">if</span> (request == <span class="number">0</span>)</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">  _IO_cleanup_region_start ((<span class="keyword">void</span> (*) __P ((<span class="keyword">void</span> *))) _IO_funlockfile, fp);</span><br><span class="line">  _IO_flockfile (fp);</span><br><span class="line">  <span class="keyword">if</span> (fp-&gt;_vtable_offset != <span class="number">0</span> || _IO_fwide (fp, <span class="number">-1</span>) == <span class="number">-1</span>)</span><br><span class="line">    written = _IO_sputn (fp, (<span class="keyword">const</span> <span class="keyword">char</span> *) buf, request); <span class="comment">/* vtable-&gt;__xsputn */</span></span><br><span class="line">  _IO_funlockfile (fp);</span><br><span class="line">  _IO_cleanup_region_end (<span class="number">0</span>);</span><br><span class="line">  <span class="keyword">if</span> (written == request)</span><br><span class="line">    <span class="keyword">return</span> count;</span><br><span class="line">  <span class="keyword">else</span></span><br><span class="line">    <span class="keyword">return</span> written / size;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这里重点关注一下 _IO_sputn 函数（vtable-&gt;__xsputn），其他的东西都不用管</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta"># <span class="meta-keyword">define</span> _IO_new_file_xsputn _IO_file_xsputn</span></span><br><span class="line"></span><br><span class="line">_IO_size_t</span><br><span class="line">_IO_new_file_xsputn (f, data, n) <span class="comment">/* n==request */</span></span><br><span class="line">     _IO_FILE *f;</span><br><span class="line">     <span class="keyword">const</span> <span class="keyword">void</span> *data;</span><br><span class="line">     _IO_size_t n;</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">register</span> <span class="keyword">const</span> <span class="keyword">char</span> *s = (<span class="keyword">const</span> <span class="keyword">char</span> *) data;</span><br><span class="line">  _IO_size_t to_do = n;</span><br><span class="line">  <span class="keyword">int</span> must_flush = <span class="number">0</span>;</span><br><span class="line">  _IO_size_t count;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (n &lt;= <span class="number">0</span>) </span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">  <span class="comment">/* First figure out how much space is available in the buffer. */</span></span><br><span class="line">  count = f-&gt;_IO_write_end - f-&gt;_IO_write_ptr; <span class="comment">/* 判断输出缓冲区还有多少空间 */</span></span><br><span class="line">  <span class="keyword">if</span> ((f-&gt;_flags &amp; _IO_LINE_BUF) &amp;&amp; (f-&gt;_flags &amp; _IO_CURRENTLY_PUTTING))</span><br><span class="line">    &#123;</span><br><span class="line">      count = f-&gt;_IO_buf_end - f-&gt;_IO_write_ptr; <span class="comment">/* 判断输出缓冲区还有多少空间 */</span></span><br><span class="line">      <span class="keyword">if</span> (count &gt;= n) <span class="comment">/* 输出缓冲区够用 */</span></span><br><span class="line">	&#123;</span><br><span class="line">	  <span class="keyword">register</span> <span class="keyword">const</span> <span class="keyword">char</span> *p;</span><br><span class="line">	  <span class="keyword">for</span> (p = s + n; p &gt; s; )</span><br><span class="line">	    &#123;</span><br><span class="line">	      <span class="keyword">if</span> (*--p == <span class="string">&#x27;\n&#x27;</span>)</span><br><span class="line">		&#123;</span><br><span class="line">		  count = p - s + <span class="number">1</span>; <span class="comment">/* 重新调整输出缓冲区的可用size */</span></span><br><span class="line">		  must_flush = <span class="number">1</span>;</span><br><span class="line">		  <span class="keyword">break</span>;</span><br><span class="line">		&#125;</span><br><span class="line">	    &#125;</span><br><span class="line">	&#125;</span><br><span class="line">    &#125;</span><br><span class="line">  <span class="comment">/* Then fill the buffer. */</span></span><br><span class="line">  <span class="keyword">if</span> (count &gt; <span class="number">0</span>) <span class="comment">/* 如果输出缓冲区有空间，则先把数据拷贝至输出缓冲区 */</span></span><br><span class="line">    &#123;</span><br><span class="line">      <span class="keyword">if</span> (count &gt; to_do)</span><br><span class="line">	count = to_do;</span><br><span class="line">      <span class="keyword">if</span> (count &gt; <span class="number">20</span>)</span><br><span class="line">	&#123;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> _LIBC</span></span><br><span class="line">	  f-&gt;_IO_write_ptr = __mempcpy (f-&gt;_IO_write_ptr, s, count);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line">	  <span class="built_in">memcpy</span> (f-&gt;_IO_write_ptr, s, count); <span class="comment">/* 将目标输出数据拷贝至输出缓冲区 */</span></span><br><span class="line">	  f-&gt;_IO_write_ptr += count;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">	  s += count; <span class="comment">/* 计算是否还有目标输出数据剩余 */</span></span><br><span class="line">	&#125;</span><br><span class="line">      <span class="keyword">else</span></span><br><span class="line">	&#123;</span><br><span class="line">	  <span class="keyword">register</span> <span class="keyword">char</span> *p = f-&gt;_IO_write_ptr;</span><br><span class="line">	  <span class="keyword">register</span> <span class="keyword">int</span> i = (<span class="keyword">int</span>) count;</span><br><span class="line">	  <span class="keyword">while</span> (--i &gt;= <span class="number">0</span>)</span><br><span class="line">	    *p++ = *s++;</span><br><span class="line">	  f-&gt;_IO_write_ptr = p;</span><br><span class="line">	&#125;</span><br><span class="line">      to_do -= count; <span class="comment">/* 计算是否还有目标输出数据剩余 */</span></span><br><span class="line">    &#125;</span><br><span class="line">  <span class="keyword">if</span> (to_do + must_flush &gt; <span class="number">0</span>) </span><br><span class="line">      <span class="comment">/* 如果还有目标数据剩余，此时则表明输出缓冲区未建立或输出缓冲区已经满了 */</span></span><br><span class="line">    &#123;</span><br><span class="line">      _IO_size_t block_size, do_write;</span><br><span class="line">      <span class="comment">/* Next flush the (full) buffer. */</span></span><br><span class="line">      <span class="keyword">if</span> (_IO_OVERFLOW (f, EOF) == EOF)</span><br><span class="line">	<span class="keyword">return</span> n - to_do;</span><br><span class="line"></span><br><span class="line">      <span class="comment">/* Try to maintain alignment: write a whole number of blocks.</span></span><br><span class="line"><span class="comment">	 dont_write is what gets left over. */</span></span><br><span class="line">      block_size = f-&gt;_IO_buf_end - f-&gt;_IO_buf_base; <span class="comment">/* 检查输出数据是否是大块 */</span></span><br><span class="line">      do_write = to_do - (block_size &gt;= <span class="number">128</span> ? to_do % block_size : <span class="number">0</span>);</span><br><span class="line"></span><br><span class="line">      <span class="keyword">if</span> (do_write)</span><br><span class="line">        &#123;</span><br><span class="line">	  count = new_do_write (f, s, do_write);</span><br><span class="line">	  to_do -= count;</span><br><span class="line">	  <span class="keyword">if</span> (count &lt; do_write)</span><br><span class="line">	    <span class="keyword">return</span> n - to_do;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">      <span class="comment">/* Now write out the remainder.  Normally, this will fit in the</span></span><br><span class="line"><span class="comment">	 buffer, but it&#x27;s somewhat messier for line-buffered files,</span></span><br><span class="line"><span class="comment">	 so we let _IO_default_xsputn handle the general case. */</span></span><br><span class="line">      <span class="keyword">if</span> (to_do)</span><br><span class="line">	to_do -= _IO_default_xsputn (f, s+do_write, to_do);</span><br><span class="line">    &#125;</span><br><span class="line">  <span class="keyword">return</span> n - to_do;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>fwrite</code> 的主要实现在 <code>_IO_new_file_xsputn</code> 中，整体流程包含四个部分：</p>
+<ul>
+<li>首先判断输出缓冲区还有多少剩余，如果有剩余则将目标输出数据拷贝至输出缓冲区（能拷贝多少就拷贝多少）</li>
+<li>如果输出缓冲区没有剩余（输出缓冲区未建立也是没有剩余）或输出缓冲区不够则调用 <code>_IO_OVERFLOW</code> 建立输出缓冲区或刷新输出缓冲区</li>
+<li>输出缓冲区刷新后判断剩余的目标输出数据是否超过块的size，如果超过块的size，则不通过输出缓冲区直接以块为单位，使用 <code>new_do_write</code> 输出目标数据</li>
+<li>如果按块输出数据后还剩下一点数据则调用 <code>_IO_default_xsputn</code> 将数据拷贝至输出缓冲</li>
+</ul>
+<p>接下来就分析这些过程：（第一部分在注释中已经解释了，略过）</p>
+<p><strong>建立输出缓冲区或刷新输出缓冲区</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"> <span class="keyword">if</span> (to_do + must_flush &gt; <span class="number">0</span>) </span><br><span class="line">     <span class="comment">/* 如果还有目标数据剩余，此时则表明输出缓冲区未建立或输出缓冲区已经满了 */</span></span><br><span class="line">   &#123;</span><br><span class="line">     _IO_size_t block_size, do_write;</span><br><span class="line">     <span class="keyword">if</span> (_IO_OVERFLOW (f, EOF) == EOF)</span><br><span class="line"><span class="keyword">return</span> n - to_do;</span><br><span class="line">     ......</span><br></pre></td></tr></table></figure>
+<p>追踪进入 _IO_OVERFLOW ：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> _IO_OVERFLOW(FP, CH) JUMP1 (__overflow, FP, CH)</span></span><br></pre></td></tr></table></figure>
+<p>可以发现 <code>_IO_OVERFLOW</code> 的调用是虚表调用（可以进行劫持或伪造，FSOP惯用手段），其指向内容为 <code>_IO_new_file_overflow</code></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta"># <span class="meta-keyword">define</span> _IO_new_file_overflow _IO_file_overflow</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span></span><br><span class="line">_IO_new_file_overflow (f, ch)</span><br><span class="line">      _IO_FILE *f;</span><br><span class="line">      <span class="keyword">int</span> ch;</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">if</span> (f-&gt;_flags &amp; _IO_NO_WRITES) </span><br><span class="line">      <span class="comment">/* 检测IO_FILE的_flags是否包含_IO_NO_WRITES标志位 */</span></span><br><span class="line">    &#123;</span><br><span class="line">      f-&gt;_flags |= _IO_ERR_SEEN;</span><br><span class="line">      __set_errno (EBADF);</span><br><span class="line">      <span class="keyword">return</span> EOF;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> ((f-&gt;_flags &amp; _IO_CURRENTLY_PUTTING) == <span class="number">0</span> || f-&gt;_IO_write_base == <span class="number">0</span>)</span><br><span class="line">    &#123;</span><br><span class="line">      <span class="keyword">if</span> (f-&gt;_IO_write_base == <span class="number">0</span>) <span class="comment">/* 表明输出缓冲区尚未建立 */</span></span><br><span class="line">	&#123;</span><br><span class="line">	  _IO_doallocbuf (f); <span class="comment">/* 调用_IO_doallocbuf函数去分配输出缓冲区 */</span></span><br><span class="line">	  _IO_setg (f, f-&gt;_IO_buf_base, f-&gt;_IO_buf_base, f-&gt;_IO_buf_base);</span><br><span class="line">	&#125;</span><br><span class="line">      <span class="comment">/* Otherwise must be currently reading.</span></span><br><span class="line"><span class="comment">	 If _IO_read_ptr (and hence also _IO_read_end) is at the buffer end,</span></span><br><span class="line"><span class="comment">	 logically slide the buffer forwards one block (by setting the</span></span><br><span class="line"><span class="comment">	 read pointers to all point at the beginning of the block).  This</span></span><br><span class="line"><span class="comment">	 makes room for subsequent output.</span></span><br><span class="line"><span class="comment">	 Otherwise, set the read pointers to _IO_read_end (leaving that</span></span><br><span class="line"><span class="comment">	 alone, so it can continue to correspond to the external position). */</span></span><br><span class="line">      <span class="keyword">if</span> (f-&gt;_IO_read_ptr == f-&gt;_IO_buf_end) <span class="comment">/* 初始化其他指针 */</span></span><br><span class="line">	f-&gt;_IO_read_end = f-&gt;_IO_read_ptr = f-&gt;_IO_buf_base;</span><br><span class="line">      f-&gt;_IO_write_ptr = f-&gt;_IO_read_ptr;</span><br><span class="line">      f-&gt;_IO_write_base = f-&gt;_IO_write_ptr;</span><br><span class="line">      f-&gt;_IO_write_end = f-&gt;_IO_buf_end;</span><br><span class="line">      f-&gt;_IO_read_base = f-&gt;_IO_read_ptr = f-&gt;_IO_read_end;</span><br><span class="line"></span><br><span class="line">      f-&gt;_flags |= _IO_CURRENTLY_PUTTING;</span><br><span class="line">      <span class="keyword">if</span> (f-&gt;_mode &lt;= <span class="number">0</span> &amp;&amp; f-&gt;_flags &amp; (_IO_LINE_BUF+_IO_UNBUFFERED))</span><br><span class="line">	f-&gt;_IO_write_end = f-&gt;_IO_write_ptr;</span><br><span class="line">    &#125;</span><br><span class="line">  <span class="keyword">if</span> (ch == EOF)</span><br><span class="line">    <span class="keyword">return</span> _IO_new_do_write(f, f-&gt;_IO_write_base,</span><br><span class="line">			    f-&gt;_IO_write_ptr - f-&gt;_IO_write_base);</span><br><span class="line">    <span class="comment">/* 执行_IO_new_do_write,利用系统调用write输出输出缓冲区 */</span></span><br><span class="line">  <span class="keyword">if</span> (f-&gt;_IO_write_ptr == f-&gt;_IO_buf_end ) <span class="comment">/* Buffer is really full */</span></span><br><span class="line">    <span class="keyword">if</span> (_IO_do_flush (f) == EOF)</span><br><span class="line">      <span class="keyword">return</span> EOF;</span><br><span class="line">  *f-&gt;_IO_write_ptr++ = ch;</span><br><span class="line">  <span class="keyword">if</span> ((f-&gt;_flags &amp; _IO_UNBUFFERED)</span><br><span class="line">      || ((f-&gt;_flags &amp; _IO_LINE_BUF) &amp;&amp; ch == <span class="string">&#x27;\n&#x27;</span>))</span><br><span class="line">    <span class="keyword">if</span> (_IO_new_do_write(f, f-&gt;_IO_write_base,</span><br><span class="line">			 f-&gt;_IO_write_ptr - f-&gt;_IO_write_base) == EOF)</span><br><span class="line">      <span class="keyword">return</span> EOF;</span><br><span class="line">  <span class="keyword">return</span> (<span class="keyword">unsigned</span> <span class="keyword">char</span>) ch;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>该函数功能主要是实现刷新输出缓冲区或建立缓冲区，其核心部分就是“_IO_new_do_write”（其他的代码都是进行检查或者更新设置）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta"># <span class="meta-keyword">define</span> _IO_new_do_write _IO_do_write</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span></span><br><span class="line">_IO_new_do_write (fp, data, to_do)</span><br><span class="line">     _IO_FILE *fp;</span><br><span class="line">     <span class="keyword">const</span> <span class="keyword">char</span> *data;</span><br><span class="line">     _IO_size_t to_do;</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">return</span> (to_do == <span class="number">0</span> || new_do_write (fp, data, to_do) == to_do) ? <span class="number">0</span> : EOF;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span></span></span><br><span class="line"><span class="function"><span class="keyword">int</span></span></span><br><span class="line"><span class="function"><span class="title">new_do_write</span> <span class="params">(fp, data, to_do)</span></span></span><br><span class="line"><span class="function">     _IO_FILE *fp</span>;</span><br><span class="line">     <span class="keyword">const</span> <span class="keyword">char</span> *data;</span><br><span class="line">     _IO_size_t to_do;</span><br><span class="line">&#123;</span><br><span class="line">  _IO_size_t count;</span><br><span class="line">  <span class="keyword">if</span> (fp-&gt;_flags &amp; _IO_IS_APPENDING)</span><br><span class="line">    <span class="comment">/* On a system without a proper O_APPEND implementation,</span></span><br><span class="line"><span class="comment">       you would need to sys_seek(0, SEEK_END) here, but is</span></span><br><span class="line"><span class="comment">       is not needed nor desirable for Unix- or Posix-like systems.</span></span><br><span class="line"><span class="comment">       Instead, just indicate that offset (before and after) is</span></span><br><span class="line"><span class="comment">       unpredictable. */</span></span><br><span class="line">    fp-&gt;_offset = _IO_pos_BAD;</span><br><span class="line">  <span class="keyword">else</span> <span class="keyword">if</span> (fp-&gt;_IO_read_end != fp-&gt;_IO_write_base)</span><br><span class="line">    &#123;</span><br><span class="line">      _IO_off64_t new_pos</span><br><span class="line">	= _IO_SYSSEEK (fp, fp-&gt;_IO_write_base - fp-&gt;_IO_read_end, <span class="number">1</span>); </span><br><span class="line">      <span class="comment">/* 调整文件偏移 */</span></span><br><span class="line">      <span class="keyword">if</span> (new_pos == _IO_pos_BAD)</span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">      fp-&gt;_offset = new_pos;</span><br><span class="line">    &#125;</span><br><span class="line">  count = _IO_SYSWRITE (fp, data, to_do); <span class="comment">/* 利用系统调用更新输出缓冲区 */</span></span><br><span class="line">  <span class="keyword">if</span> (fp-&gt;_cur_column &amp;&amp; count)</span><br><span class="line">    fp-&gt;_cur_column = _IO_adjust_column (fp-&gt;_cur_column - <span class="number">1</span>, data, count) + <span class="number">1</span>;</span><br><span class="line">  _IO_setg (fp, fp-&gt;_IO_buf_base, fp-&gt;_IO_buf_base, fp-&gt;_IO_buf_base);</span><br><span class="line">    <span class="comment">/* 刷新设置缓冲区指针 */</span></span><br><span class="line">  fp-&gt;_IO_write_base = fp-&gt;_IO_write_ptr = fp-&gt;_IO_buf_base;</span><br><span class="line">  fp-&gt;_IO_write_end = (fp-&gt;_mode &lt;= <span class="number">0</span></span><br><span class="line">		       &amp;&amp; (fp-&gt;_flags &amp; (_IO_LINE_BUF+_IO_UNBUFFERED))</span><br><span class="line">		       ? fp-&gt;_IO_buf_base : fp-&gt;_IO_buf_end);</span><br><span class="line">  <span class="keyword">return</span> count;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>以块为单位直接输出数据</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">      <span class="comment">/* Try to maintain alignment: write a whole number of blocks.</span></span><br><span class="line"><span class="comment">	 dont_write is what gets left over. */</span></span><br><span class="line">      block_size = f-&gt;_IO_buf_end - f-&gt;_IO_buf_base; <span class="comment">/* 检查输出数据是否是大块 */</span></span><br><span class="line">      do_write = to_do - (block_size &gt;= <span class="number">128</span> ? to_do % block_size : <span class="number">0</span>);</span><br><span class="line"><span class="comment">/* 如果超过输入缓冲区&quot;f-&gt;_IO_buf_end - f-&gt;_IO_buf_base&quot;的大小，则为了提高效率，不再使用输出缓冲区 */</span></span><br><span class="line"></span><br><span class="line">      <span class="keyword">if</span> (do_write)</span><br><span class="line">        &#123;</span><br><span class="line">	  count = new_do_write (f, s, do_write); </span><br><span class="line">          <span class="comment">/* 以块为基本单位直接将缓冲区调用new_do_write输出 */</span></span><br><span class="line">	  to_do -= count;</span><br><span class="line">	  <span class="keyword">if</span> (count &lt; do_write) </span><br><span class="line">	    <span class="keyword">return</span> n - to_do;</span><br><span class="line">        &#125;</span><br></pre></td></tr></table></figure>
+<p>已经经历过了 <code>_IO_OVERFLOW</code> ，此时的IO FILE缓冲区指针的状态是处于刷新的初始化状态，输出缓冲区中也没有数据</p>
+<p>根据输出size的大小，判断是否需要继续使用输出缓存区</p>
+<p><strong>剩余目标输出数据放入输出缓冲区中</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">     <span class="comment">/* Now write out the remainder.  Normally, this will fit in the</span></span><br><span class="line"><span class="comment"> buffer, but it&#x27;s somewhat messier for line-buffered files,</span></span><br><span class="line"><span class="comment"> so we let _IO_default_xsputn handle the general case. */</span></span><br><span class="line">     <span class="keyword">if</span> (to_do)</span><br><span class="line">to_do -= _IO_default_xsputn (f, s+do_write, to_do);</span><br><span class="line">   &#125;</span><br></pre></td></tr></table></figure>
+<p>跟进函数 _IO_default_xsputn ：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br></pre></td><td class="code"><pre><span class="line">_IO_size_t</span><br><span class="line">_IO_default_xsputn (f, data, n)</span><br><span class="line">     _IO_FILE *f;</span><br><span class="line">     <span class="keyword">const</span> <span class="keyword">void</span> *data;</span><br><span class="line">     _IO_size_t n;</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">const</span> <span class="keyword">char</span> *s = (<span class="keyword">char</span> *) data;</span><br><span class="line">  _IO_size_t more = n;</span><br><span class="line">  <span class="keyword">if</span> (more &lt;= <span class="number">0</span>)</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">  <span class="keyword">for</span> (;;)</span><br><span class="line">    &#123;</span><br><span class="line">      <span class="comment">/* Space available. */</span></span><br><span class="line">      _IO_ssize_t count = f-&gt;_IO_write_end - f-&gt;_IO_write_ptr;</span><br><span class="line">      <span class="keyword">if</span> (count &gt; <span class="number">0</span>)</span><br><span class="line">	&#123;</span><br><span class="line">	  <span class="keyword">if</span> ((_IO_size_t) count &gt; more)</span><br><span class="line">	    count = more;</span><br><span class="line">	  <span class="keyword">if</span> (count &gt; <span class="number">20</span>) <span class="comment">/* 当长度大于20时，使用memcpy拷贝 */</span></span><br><span class="line">	    &#123;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> _LIBC</span></span><br><span class="line">	      f-&gt;_IO_write_ptr = __mempcpy (f-&gt;_IO_write_ptr, s, count);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line">	      <span class="built_in">memcpy</span> (f-&gt;_IO_write_ptr, s, count);</span><br><span class="line">	      f-&gt;_IO_write_ptr += count;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">	      s += count;</span><br><span class="line">            &#125;</span><br><span class="line">	  <span class="keyword">else</span> <span class="keyword">if</span> (count &lt;= <span class="number">0</span>)</span><br><span class="line">	    count = <span class="number">0</span>;</span><br><span class="line">	  <span class="keyword">else</span> <span class="comment">/* 当长度小于20时，使用for循环赋值拷贝 */</span></span><br><span class="line">	    &#123;</span><br><span class="line">	      <span class="keyword">char</span> *p = f-&gt;_IO_write_ptr;</span><br><span class="line">	      _IO_ssize_t i;</span><br><span class="line">	      <span class="keyword">for</span> (i = count; --i &gt;= <span class="number">0</span>; )</span><br><span class="line">		*p++ = *s++;</span><br><span class="line">	      f-&gt;_IO_write_ptr = p;</span><br><span class="line">            &#125;</span><br><span class="line">	  more -= count;</span><br><span class="line">        &#125;</span><br><span class="line">      <span class="keyword">if</span> (more == <span class="number">0</span> || _IO_OVERFLOW (f, (<span class="keyword">unsigned</span> <span class="keyword">char</span>) *s++) == EOF)</span><br><span class="line">          <span class="comment">/* 如果输出缓冲区为空，则调用_IO_OVERFLOW进行输出 */</span></span><br><span class="line">	<span class="keyword">break</span>;</span><br><span class="line">      more--;</span><br><span class="line">    &#125;</span><br><span class="line">  <span class="keyword">return</span> n - more;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>函数最主要的作用就是将剩余的目标输出数据拷贝到输出缓冲区里 </p>
+<hr>
+<p>在 fwrite 的源码分析中，我们发现了一个老朋友： <code>_IO_OVERFLOW</code> </p>
+<p><code>_IO_OVERFLOW</code> 可是FSOP的常客，因为发生内存错误时会调用 <code>_IO_flush_all_lockp</code> ，进而调用  <code>_IO_OVERFLOW</code> ，就是因为它容易触发并且容易被劫持（或伪造），FSOP才拥有如此广阔的应用范围</p>
+<p>后续的漏洞利用分析中，我会重点分析FSOP的原理，主要原因还是我做了一个FSOP和堆上ORW相结合的题目（做的我想吐），趁着印象还比较深刻，想总结分析一下（还有个原因就是：之前总结的FSOP有点草率）</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/IO-FILE/" rel="tag"><i class="fa fa-tag"></i> IO_FILE</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/03/31/%E7%88%AC%E8%99%AB%E5%B0%8F%E5%AD%90%EF%BC%9A%E4%BA%8C%E6%AC%A1%E5%85%83%E7%9A%84%E7%A6%8F%E9%9F%B3/" rel="prev" title="不务正业系列：爬虫小子（偶尔更新）">
+      <i class="fa fa-chevron-left"></i> 不务正业系列：爬虫小子（偶尔更新）
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/04/01/IO_FILE%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90%EF%BC%9AFSOP/" rel="next" title="IO_FILE源码分析：FSOP">
+      IO_FILE源码分析：FSOP <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#IO-FILE%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90%EF%BC%9Afwrite"><span class="nav-number">1.</span> <span class="nav-text">IO_FILE源码分析：fwrite</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">113</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">79</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.5m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">22:58</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

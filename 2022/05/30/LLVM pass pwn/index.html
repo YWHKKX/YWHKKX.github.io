@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="LLVMLLVM 项目是模块化、可重用的编译器以及工具链技术的集合，用于优化以任意程序语言编写的程序的编译时间 (compile-time)，链接时间 (link-time)，运行时间 (run-time)，以及空闲时间 (idle-time)  LLVM 官方文档：https:&#x2F;&#x2F;llvm.org&#x2F;docs&#x2F;WritingAnLLVMPass.html LLVM 的安装：一份关于各种安装LLVM">
+<meta property="og:type" content="article">
+<meta property="og:title" content="LLVM pass pwn">
+<meta property="og:url" content="http://example.com/2022/05/30/LLVM%20pass%20pwn/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="LLVMLLVM 项目是模块化、可重用的编译器以及工具链技术的集合，用于优化以任意程序语言编写的程序的编译时间 (compile-time)，链接时间 (link-time)，运行时间 (run-time)，以及空闲时间 (idle-time)  LLVM 官方文档：https:&#x2F;&#x2F;llvm.org&#x2F;docs&#x2F;WritingAnLLVMPass.html LLVM 的安装：一份关于各种安装LLVM">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2022/05/30/LLVM%20pass%20pwn/1653907281879-1654355265749.png">
+<meta property="og:image" content="http://example.com/2022/05/30/LLVM%20pass%20pwn/1653907435235-1654355265749.png">
+<meta property="og:image" content="http://example.com/2022/05/30/LLVM%20pass%20pwn/1653910982270-1654355265749.png">
+<meta property="og:image" content="http://example.com/2022/05/30/LLVM%20pass%20pwn/1653917067225-1654355265749.png">
+<meta property="og:image" content="http://example.com/2022/05/30/LLVM%20pass%20pwn/1653917316159-1654355265750.png">
+<meta property="og:image" content="http://example.com/2022/05/30/LLVM%20pass%20pwn/1653917365912-1654355265750.png">
+<meta property="article:published_time" content="2022-05-30T13:49:07.000Z">
+<meta property="article:modified_time" content="2022-06-04T15:11:42.795Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="LLVM pass pwn">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2022/05/30/LLVM%20pass%20pwn/1653907281879-1654355265749.png">
+
+<link rel="canonical" href="http://example.com/2022/05/30/LLVM%20pass%20pwn/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>LLVM pass pwn | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/05/30/LLVM%20pass%20pwn/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          LLVM pass pwn
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-05-30 21:49:07" itemprop="dateCreated datePublished" datetime="2022-05-30T21:49:07+08:00">2022-05-30</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-06-04 23:11:42" itemprop="dateModified" datetime="2022-06-04T23:11:42+08:00">2022-06-04</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Technology/" itemprop="url" rel="index"><span itemprop="name">Technology</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>6.8k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="LLVM"><a href="#LLVM" class="headerlink" title="LLVM"></a>LLVM</h2><p>LLVM 项目是模块化、可重用的编译器以及工具链技术的集合，用于优化以任意程序语言编写的程序的编译时间 (compile-time)，链接时间 (link-time)，运行时间 (run-time)，以及空闲时间 (idle-time) </p>
+<p>LLVM 官方文档：<a target="_blank" rel="noopener" href="https://llvm.org/docs/WritingAnLLVMPass.html">https://llvm.org/docs/WritingAnLLVMPass.html</a></p>
+<p>LLVM 的安装：<a target="_blank" rel="noopener" href="https://blog.csdn.net/chikey/article/details/85004556">一份关于各种安装LLVM的方法的总结</a> </p>
+<p>报错 llvm-config 无法找到：sudo apt install llvm</p>
+<img src="/2022/05/30/LLVM%20pass%20pwn/1653907281879-1654355265749.png" class width="1653907281879"> 
+<p>报错 Failed building wheel for llvmlite：<a target="_blank" rel="noopener" href="https://blog.csdn.net/qq_41977618/article/details/119572879">Python安装llvmlite、numba报错解决方案</a> </p>
+<img src="/2022/05/30/LLVM%20pass%20pwn/1653907435235-1654355265749.png" class width="1653907435235"> 
+<h2 id="LLVM-IR"><a href="#LLVM-IR" class="headerlink" title="LLVM IR"></a>LLVM IR</h2><p>在开发编译器时，通常的做法是将源代码编译到某种中间表示（Intermediate Representation，一般称为 IR），然后再将 IR 翻译为目标体系结构的汇编（比如 MIPS 或 X86） </p>
+<p>传给 LLVM PASS 进行优化的数据是 LLVM IR，即代码的中间表示，LLVM IR有三种表示形式 ：这三种中间格式是完全等价的：</p>
+<ul>
+<li>在内存中的编译中间语言（我们无法通过文件的形式得到）</li>
+<li>在硬盘上存储的二进制中间语言（格式为 <code>.bc</code>）</li>
+<li>人类可读的代码语言（格式为 <code>.ll</code>）</li>
+</ul>
+<p>从对应格式转化到另一格式的命令如下： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">.c -&gt; .ll：clang -emit-llvm -S a.c -o a.ll</span><br><span class="line">.c -&gt; .bc: clang -emit-llvm -c a.c -o a.bc</span><br><span class="line">.ll -&gt; .bc: llvm-as a.ll -o a.bc</span><br><span class="line">.bc -&gt; .ll: llvm-dis a.bc -o a.ll</span><br><span class="line">.bc -&gt; .s: llc a.bc -o a.s</span><br></pre></td></tr></table></figure>
+<p>案例：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">   <span class="keyword">char</span> name[<span class="number">0x10</span>];</span><br><span class="line">   read(<span class="number">0</span>,name,<span class="number">0x10</span>);</span><br><span class="line">   write(<span class="number">1</span>,name,<span class="number">0x10</span>);</span><br><span class="line">   <span class="built_in">printf</span>(<span class="string">&quot;bye\n&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>运行以下命令：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">➜  clang -emit-llvm -S main.c -o main.ll</span><br></pre></td></tr></table></figure>
+<p>结果：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line">; ModuleID = &#x27;test.c&#x27;</span><br><span class="line">source_filename = &quot;test.c&quot;</span><br><span class="line">target datalayout = &quot;e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128&quot; // 数据布局</span><br><span class="line">target triple = &quot;x86_64-pc-linux-gnu&quot;</span><br><span class="line"></span><br><span class="line">@.str = private unnamed_addr constant [5 x i8] c&quot;bye\0A\00&quot;, align 1</span><br><span class="line"></span><br><span class="line">; Function Attrs: noinline nounwind optnone uwtable</span><br><span class="line">define dso_local i32 @main() #0 &#123;</span><br><span class="line">  %1 = alloca [16 x i8], align 16 /* char name[0x10]; */</span><br><span class="line">  %2 = getelementptr inbounds [16 x i8], [16 x i8]* %1, i64 0, i64 0</span><br><span class="line">  %3 = call i64 @read(i32 0, i8* %2, i64 16)</span><br><span class="line">  %4 = getelementptr inbounds [16 x i8], [16 x i8]* %1, i64 0, i64 0</span><br><span class="line">  %5 = call i64 @write(i32 1, i8* %4, i64 16)</span><br><span class="line">  %6 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([5 x i8], [5 x i8]* @.str, i64 0, i64 0))</span><br><span class="line">  ret i32 0</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">declare dso_local i64 @read(i32, i8*, i64) #1</span><br><span class="line"></span><br><span class="line">declare dso_local i64 @write(i32, i8*, i64) #1</span><br><span class="line"></span><br><span class="line">declare dso_local i32 @printf(i8*, ...) #1</span><br><span class="line"></span><br><span class="line">attributes #0 = &#123; noinline nounwind optnone uwtable &quot;correctly-rounded-divide-sqrt-fp-math&quot;=&quot;false&quot; &quot;disable-tail-calls&quot;=&quot;false&quot; &quot;frame-pointer&quot;=&quot;all&quot; &quot;less-precise-fpmad&quot;=&quot;false&quot; &quot;min-legal-vector-width&quot;=&quot;0&quot; &quot;no-infs-fp-math&quot;=&quot;false&quot; &quot;no-jump-tables&quot;=&quot;false&quot; &quot;no-nans-fp-math&quot;=&quot;false&quot; &quot;no-signed-zeros-fp-math&quot;=&quot;false&quot; &quot;no-trapping-math&quot;=&quot;false&quot; &quot;stack-protector-buffer-size&quot;=&quot;8&quot; &quot;target-cpu&quot;=&quot;x86-64&quot; &quot;target-features&quot;=&quot;+cx8,+fxsr,+mmx,+sse,+sse2,+x87&quot; &quot;unsafe-fp-math&quot;=&quot;false&quot; &quot;use-soft-float&quot;=&quot;false&quot; &#125;</span><br><span class="line">attributes #1 = &#123; &quot;correctly-rounded-divide-sqrt-fp-math&quot;=&quot;false&quot; &quot;disable-tail-calls&quot;=&quot;false&quot; &quot;frame-pointer&quot;=&quot;all&quot; &quot;less-precise-fpmad&quot;=&quot;false&quot; &quot;no-infs-fp-math&quot;=&quot;false&quot; &quot;no-nans-fp-math&quot;=&quot;false&quot; &quot;no-signed-zeros-fp-math&quot;=&quot;false&quot; &quot;no-trapping-math&quot;=&quot;false&quot; &quot;stack-protector-buffer-size&quot;=&quot;8&quot; &quot;target-cpu&quot;=&quot;x86-64&quot; &quot;target-features&quot;=&quot;+cx8,+fxsr,+mmx,+sse,+sse2,+x87&quot; &quot;unsafe-fp-math&quot;=&quot;false&quot; &quot;use-soft-float&quot;=&quot;false&quot; &#125;</span><br><span class="line"></span><br><span class="line">!llvm.module.flags = !&#123;!0&#125;</span><br><span class="line">!llvm.ident = !&#123;!1&#125;</span><br><span class="line"></span><br><span class="line">!0 = !&#123;i32 1, !&quot;wchar_size&quot;, i32 4&#125;</span><br><span class="line">!1 = !&#123;!&quot;clang version 10.0.0-4ubuntu1 &quot;&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>@代表全局标识符（函数，全局变量）</li>
+<li>%代表局部标识符（寄存器名称也就是局部变量，类型）</li>
+<li>alloca指令：用于分配内存堆栈给当前执行的函数，当这个函数返回其调用者时自动释放</li>
+</ul>
+<h2 id="LLVM-Pass"><a href="#LLVM-Pass" class="headerlink" title="LLVM Pass"></a>LLVM Pass</h2><p>LLVM 的 pass 框架是 LLVM 系统的一个很重要的部分，LLVM 的优化和转换工作就是由多个 pass 来一起完成的，类似流水线操作一样，每个 pass 完成特定的优化工作，要想真正发挥 LLVM 的威力，掌握 pass 是不可或缺的一环</p>
+<p>总的来说，所有的 pass 大致可以分为两类：</p>
+<ul>
+<li>分析 (<code>analysis</code>) 和转换分析类的 pass 以提供信息为主</li>
+<li>转换类 (<code>transform</code>) 的 pass 优化中间代码</li>
+</ul>
+<p>样例文件在 <code>llvm-project/llvm/lib/Transforms/Hello/Hello.cpp</code> 中，源码如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;llvm/Pass.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;llvm/IR/Function.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;llvm/Support/raw_ostream.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;llvm/IR/LegacyPassManager.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;llvm/Transforms/IPO/PassManagerBuilder.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> llvm;</span><br><span class="line"></span><br><span class="line"><span class="keyword">namespace</span> &#123;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">Hello</span> :</span> <span class="keyword">public</span> FunctionPass &#123;</span><br><span class="line">    <span class="keyword">static</span> <span class="keyword">char</span> ID;</span><br><span class="line">    Hello() : FunctionPass(ID) &#123;&#125;</span><br><span class="line">    <span class="function"><span class="keyword">bool</span> <span class="title">runOnFunction</span><span class="params">(Function &amp;F)</span> <span class="keyword">override</span> </span>&#123;</span><br><span class="line">      errs() &lt;&lt; <span class="string">&quot;Hello: &quot;</span>;</span><br><span class="line">      errs().write_escaped(F.getName()) &lt;&lt; <span class="string">&#x27;\n&#x27;</span>;</span><br><span class="line">      SymbolTableList&lt;BasicBlock&gt;::const_iterator bbEnd = F.end();</span><br><span class="line">      <span class="keyword">for</span>(SymbolTableList&lt;BasicBlock&gt;::const_iterator bbIter=F.begin(); bbIter!=bbEnd; ++bbIter)&#123;</span><br><span class="line">         SymbolTableList&lt;Instruction&gt;::const_iterator instIter = bbIter-&gt;begin();</span><br><span class="line">         SymbolTableList&lt;Instruction&gt;::const_iterator instEnd  = bbIter-&gt;end();</span><br><span class="line">         <span class="keyword">for</span>(; instIter != instEnd; ++instIter)&#123;</span><br><span class="line">            errs() &lt;&lt; <span class="string">&quot;opcode=&quot;</span> &lt;&lt; instIter-&gt;getOpcodeName() &lt;&lt; <span class="string">&quot; NumOperands=&quot;</span> &lt;&lt; instIter-&gt;getNumOperands() &lt;&lt; <span class="string">&quot;\n&quot;</span>;</span><br><span class="line">         &#125;</span><br><span class="line">      &#125;</span><br><span class="line">      <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">char</span> Hello::ID = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// Register for opt</span></span><br><span class="line"><span class="function"><span class="keyword">static</span> RegisterPass&lt;Hello&gt; <span class="title">X</span><span class="params">(<span class="string">&quot;hello&quot;</span>, <span class="string">&quot;Hello World Pass&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// Register for clang</span></span><br><span class="line"><span class="function"><span class="keyword">static</span> RegisterStandardPasses <span class="title">Y</span><span class="params">(PassManagerBuilder::EP_EarlyAsPossible,</span></span></span><br><span class="line"><span class="params"><span class="function">  [](<span class="keyword">const</span> PassManagerBuilder &amp;Builder, legacy::PassManagerBase &amp;PM) &#123;</span></span></span><br><span class="line"><span class="params"><span class="function">    PM.add(<span class="keyword">new</span> Hello());</span></span></span><br><span class="line"><span class="params"><span class="function">&#125;)</span></span>;</span><br></pre></td></tr></table></figure>
+<p>输入一下指令，可以得到编译好的 LLVMHello.so：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">➜  Hello clang `llvm-config --cxxflags` -Wl,-znodelete -fno-rtti -fPIC -shared Hello.cpp -o LLVMHello.so `llvm-config --ldflags`</span><br></pre></td></tr></table></figure>
+<p>用 LLVMHello.so 来测试 main.ll：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">➜  Hello opt -load ./LLVMHello.so -hello ./main.ll</span><br><span class="line">WARNING: Yo<span class="string">u&#x27;re attempting to print out a bitcode file.</span></span><br><span class="line"><span class="string">This is inadvisable as it may cause display problems. If</span></span><br><span class="line"><span class="string">you REALLY want to taste LLVM bitcode first-hand, you</span></span><br><span class="line"><span class="string">can force output with the `-f&#x27;</span> option.</span><br><span class="line"></span><br><span class="line">Hello: main</span><br><span class="line">opcode=alloca NumOperands=<span class="number">1</span></span><br><span class="line">opcode=getelementptr NumOperands=<span class="number">3</span></span><br><span class="line">opcode=call NumOperands=<span class="number">4</span></span><br><span class="line">opcode=getelementptr NumOperands=<span class="number">3</span></span><br><span class="line">opcode=call NumOperands=<span class="number">4</span></span><br><span class="line">opcode=call NumOperands=<span class="number">2</span></span><br><span class="line">opcode=ret NumOperands=<span class="number">1</span></span><br></pre></td></tr></table></figure>
+<h2 id="BogusControlFlow"><a href="#BogusControlFlow" class="headerlink" title="BogusControlFlow"></a>BogusControlFlow</h2><p>BogusControlFlow 是一个结构体，跟到 runOnFunction </p>
+<p>BogusControlFlow 的功能是为函数增加新的虚假控制流和添加垃圾指令</p>
+<h2 id="runOnFunction"><a href="#runOnFunction" class="headerlink" title="runOnFunction"></a>runOnFunction</h2><p>runOnFunction 是入口函数，BogusControlFlow 继承了 FunctionPass，因此它的入口函数即为 runOnFunction </p>
+<p>在 IDA7.7 中可以直接搜索 runOnFunction：</p>
+<img src="/2022/05/30/LLVM%20pass%20pwn/1653910982270-1654355265749.png" class width="1653910982270"> 
+<p>如果 IDA 没有找到 runOnFunction，就只能通过调试来寻找它了：</p>
+<ul>
+<li>由于模块是动态加载的，并且运行时也不会暂停下来等我们用调试器去<code>Attach</code>，因此我们可以直接使用 IDA 来进行调试</li>
+</ul>
+<p>还有另一种方法：</p>
+<ul>
+<li>在 IDA 中搜索题目给定的“在代码中注册的名字”，找到对应的函数</li>
+</ul>
+<img src="/2022/05/30/LLVM%20pass%20pwn/1653917067225-1654355265749.png" class width="1653917067225"> 
+<ul>
+<li>在这个函数及其子函数中寻找 off-xxxx 就可能找到虚表（尽量找那些未命名的函数）</li>
+</ul>
+<img src="/2022/05/30/LLVM%20pass%20pwn/1653917316159-1654355265750.png" class width="1653917316159"> 
+<ul>
+<li>虚表的最后一个条目就是 runOnFunction</li>
+</ul>
+<img src="/2022/05/30/LLVM%20pass%20pwn/1653917365912-1654355265750.png" class width="1653917365912"> 
+<h2 id="LLVM-原理"><a href="#LLVM-原理" class="headerlink" title="LLVM 原理"></a>LLVM 原理</h2><p>传统编译器分三个阶段： </p>
+<p>前端（Frontend）— 优化器（Optimizer）— 后端（Backend）</p>
+<ul>
+<li>前端负责分析源代码，可以检查语法级错误，并构建针对语言的抽象语法树（AST），抽象语法树可以进一步转换为优化，最终转为新的表示方式，然后再交给让优化器和后端处理</li>
+<li>最终由后端生成可执行的机器码 </li>
+</ul>
+<p>LLVM 也分三个阶段，但是设计上略微的有些区别，LLVM 不同的就是对于不同的语言它都提供了同一种中间表示： </p>
+<ul>
+<li>前端可以使用不同的编译工具对代码文件做词法分析以形成抽象语法树（AST），然后将分析好的代码转换成 LLVM 的中间表示 IR（intermediate representation）</li>
+<li>中间部分的优化器只对中间表示 IR 进行操作，通过一系列的 pass 对 IR 做优化</li>
+<li>后端负责将优化好的 IR 解释成对应平台的机器码</li>
+</ul>
+<p>LLVM 的优点在于：中间表示 IR 代码编写良好，而且不同的前端语言最终都转换成同一种的 IR</p>
+<ul>
+<li>计算机科学领域的任何问题都可以通过增加一个间接的中间层来解决</li>
+</ul>
+<p><strong>所以 LLVM 就是在执行优化操作之前，先把代码转化为 LLVM 的中间表示 IR，然后对 IR 进行优化，最后交给后端翻译为机器码</strong></p>
+<p>使用 LLVM 的对一门语言编译如下所示： </p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">源代码 =&gt; (词法分析) =&gt; Token =&gt; (语法分析) =&gt; AST =&gt; (代码生成) =&gt; LLVM IR =&gt; (优化) =&gt; LLVM IR(已优化) =&gt; (生成汇编代码) =&gt; 汇编代码 =&gt; (汇编) =&gt; 目标文件 =&gt; (Link) =&gt; 可执行文件</span><br></pre></td></tr></table></figure>
+<p>PS：至于 LLVM pass，复现 “红帽杯 simpleVM” 会有深刻的理解</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/LLVM-pass-pwn/" rel="tag"><i class="fa fa-tag"></i> LLVM pass pwn</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/05/28/mybuddy/" rel="prev" title="mybuddy">
+      <i class="fa fa-chevron-left"></i> mybuddy
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/05/31/Jemalloc/" rel="next" title="Jemalloc">
+      Jemalloc <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#LLVM"><span class="nav-number">1.</span> <span class="nav-text">LLVM</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#LLVM-IR"><span class="nav-number">2.</span> <span class="nav-text">LLVM IR</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#LLVM-Pass"><span class="nav-number">3.</span> <span class="nav-text">LLVM Pass</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#BogusControlFlow"><span class="nav-number">4.</span> <span class="nav-text">BogusControlFlow</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#runOnFunction"><span class="nav-number">5.</span> <span class="nav-text">runOnFunction</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#LLVM-%E5%8E%9F%E7%90%86"><span class="nav-number">6.</span> <span class="nav-text">LLVM 原理</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">113</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">79</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.5m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">22:58</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

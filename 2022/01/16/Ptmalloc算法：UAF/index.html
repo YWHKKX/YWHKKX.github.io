@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="Ptmalloc算法：UAF堆利用中较为常见的漏洞，利用了“free”函数本身的缺陷，对已经置空的指针进行操作 UAF一般有以下几种情况：  内存块被释放后，其对应的指针被设置为 NULL ， 然后再次使用，自然程序会崩溃 内存块被释放后，其对应的指针没有被设置为 NULL ，然后在它下一次被使用之前，没有代码对这块内存块进行修改，那么程序很有可能可以正常运转 内存块被释放后，其对应的指针没有被设">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Ptmalloc算法：UAF">
+<meta property="og:url" content="http://example.com/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="Ptmalloc算法：UAF堆利用中较为常见的漏洞，利用了“free”函数本身的缺陷，对已经置空的指针进行操作 UAF一般有以下几种情况：  内存块被释放后，其对应的指针被设置为 NULL ， 然后再次使用，自然程序会崩溃 内存块被释放后，其对应的指针没有被设置为 NULL ，然后在它下一次被使用之前，没有代码对这块内存块进行修改，那么程序很有可能可以正常运转 内存块被释放后，其对应的指针没有被设">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/1638959281581-1639312548300-1642849652608-1647533569928.png">
+<meta property="og:image" content="http://example.com/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/1641885199475-1642849652609-1647533569929.png">
+<meta property="og:image" content="http://example.com/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/1638952496892-1642849652609-1647533569929.png">
+<meta property="og:image" content="http://example.com/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/1642849862503-1647533569929.png">
+<meta property="og:image" content="http://example.com/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/1642849962521-1647533569929.png">
+<meta property="article:published_time" content="2022-01-16T07:51:12.000Z">
+<meta property="article:modified_time" content="2022-03-17T16:12:50.308Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="UAF">
+<meta property="article:tag" content="ptmalloc">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/1638959281581-1639312548300-1642849652608-1647533569928.png">
+
+<link rel="canonical" href="http://example.com/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>Ptmalloc算法：UAF | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Ptmalloc算法：UAF
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-01-16 15:51:12" itemprop="dateCreated datePublished" datetime="2022-01-16T15:51:12+08:00">2022-01-16</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-03-18 00:12:50" itemprop="dateModified" datetime="2022-03-18T00:12:50+08:00">2022-03-18</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/SourceCodeAnalysis/" itemprop="url" rel="index"><span itemprop="name">SourceCodeAnalysis</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>6.7k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="Ptmalloc算法：UAF"><a href="#Ptmalloc算法：UAF" class="headerlink" title="Ptmalloc算法：UAF"></a>Ptmalloc算法：UAF</h2><p>堆利用中较为常见的漏洞，利用了“free”函数本身的缺陷，对已经置空的指针进行操作</p>
+<p>UAF一般有以下几种情况：</p>
+<ul>
+<li>内存块被释放后，其对应的指针被设置为 NULL ， 然后再次使用，自然程序会崩溃</li>
+<li>内存块被释放后，其对应的指针没有被设置为 NULL ，然后在它下一次被使用之前，没有代码对这块内存块进行修改，那么<strong>程序很有可能可以正常运转</strong></li>
+<li>内存块被释放后，其对应的指针没有被设置为 NULL，但是在它下一次使用之前，有代码对这块内存进行了修改，那么当程序再次使用这块内存时，<strong>就很有可能会出现奇怪的问题</strong></li>
+</ul>
+<p>UAF漏洞主要是后两种，被置空的指针被称为<strong>“dangling pointer”</strong></p>
+<hr>
+<h2 id="数据结构bins"><a href="#数据结构bins" class="headerlink" title="数据结构bins"></a>数据结构bins</h2><p>简单来说bin就是<strong>free chunk的容器</strong></p>
+<p><strong>ptmalloc</strong> 把大小相似的 chunk，用双向链表连接起来，这样就形成了一个 bin，ptmalloc 一共维护了 128 个这样的 bin，并使用数组来存储这些 bin 如下：（32位）</p>
+<img src="/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/1638959281581-1639312548300-1642849652608-1647533569928.png" class title="1638959281581-1639312548300">
+<p>从第2个到第64个bin是small bin，small bin中的chunk<strong>大小相同</strong>，small bin是一个双向链表</p>
+<p>在某一条bin中(chunk大小相同)按照<strong>「先入先出」</strong>（FIFO 的规则）进行排序，也就是说，刚被释放的放在前面</p>
+<p>bins分类：fast bin，small bin，unsorted bin，large bin</p>
+<img src="/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/1641885199475-1642849652609-1647533569929.png" class width="1641885199475"> 
+<p>bin链都是由当前线程的arena管理的</p>
+<p><strong>Fast bin</strong></p>
+<p>Fast bin可以看着是 small bins 的一小部分 cache ，设计初衷就是进行快速的小内存分配和释放</p>
+<p>概念：chunk 的大小在32字节~128字节（0x20~0x80）的 chunk 称为“fast chunk”（大小不是 malloc 时的大小，而是在内存中 struct malloc_chunk 的大小，包含前2个成员） </p>
+<p>特征：</p>
+<ul>
+<li>Fast bin是 <strong>单向链表</strong> 只有 FD 指针</li>
+<li>Fast chunk 不会对其他 free chunk 进行合并</li>
+<li>系统将属于 Fast bin 的 chunk 的 PREV_INUSE 位总是设置为1 </li>
+<li>Fast bin 中无论是添加还是移除 fast chunk，都是对“链表头”进行操作，而不会对某个中间的 fast chunk 进行操作</li>
+</ul>
+<p>使用次序：后入先出（可以类比一下栈）</p>
+<ul>
+<li>释放时：将此 chunk 插入到该 Fast bin 的“链表头”</li>
+<li>申请时：优先申请 Fast bin “链表头”处的 chunk（从前向后申请）</li>
+</ul>
+<p>通常情况下：</p>
+<ul>
+<li>如果chunk大小 小于“0x40(32位) / 0x80(64位)”，那么该chunk会直接存入Fast bin</li>
+<li>如果内存请求 小于“0x40(32位) / 0x80(64位)”，那么程序会优先在 Fast bin 中查找</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> *p1,*p2,*p3,*p4,*p5,*p6;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> *a,*b,*c;</span><br><span class="line">	</span><br><span class="line">	p1=<span class="built_in">malloc</span>(<span class="number">0x50</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,p1<span class="number">-4</span>);</span><br><span class="line">	p2=<span class="built_in">malloc</span>(<span class="number">0x50</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,p2<span class="number">-4</span>);</span><br><span class="line">	p3=<span class="built_in">malloc</span>(<span class="number">0x50</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,p3<span class="number">-4</span>);</span><br><span class="line">	p4=<span class="built_in">malloc</span>(<span class="number">0x50</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,p4<span class="number">-4</span>);</span><br><span class="line">	p5=<span class="built_in">malloc</span>(<span class="number">0x50</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,p5<span class="number">-4</span>);</span><br><span class="line">	p6=<span class="built_in">malloc</span>(<span class="number">0x50</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,p6<span class="number">-4</span>);</span><br><span class="line">	</span><br><span class="line">	<span class="built_in">free</span>(p1); <span class="comment">// 直接插入表头</span></span><br><span class="line">	<span class="built_in">free</span>(p3);</span><br><span class="line">	<span class="built_in">free</span>(p5);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;--------------\n&quot;</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;fastbin:%p -&gt; %p -&gt; %p\n&quot;</span>,p5<span class="number">-4</span>,p3<span class="number">-4</span>,p1<span class="number">-4</span>);</span><br><span class="line"></span><br><span class="line">	a=<span class="built_in">malloc</span>(<span class="number">0x50</span>); <span class="comment">// 从表头开始申请</span></span><br><span class="line">	b=<span class="built_in">malloc</span>(<span class="number">0x50</span>);</span><br><span class="line">	c=<span class="built_in">malloc</span>(<span class="number">0x50</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;--------------\n&quot;</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,a<span class="number">-4</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,b<span class="number">-4</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,c<span class="number">-4</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;--------------\n&quot;</span>);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">➜  [/home/ywhkkx/桌面] ./test </span><br><span class="line"><span class="number">0x56000683a000</span></span><br><span class="line"><span class="number">0x56000683a470</span></span><br><span class="line"><span class="number">0x56000683a4d0</span></span><br><span class="line"><span class="number">0x56000683a530</span></span><br><span class="line"><span class="number">0x56000683a590</span></span><br><span class="line"><span class="number">0x56000683a5f0</span></span><br><span class="line">--------------</span><br><span class="line">fastbin:<span class="number">0x56000683a590</span> -&gt; <span class="number">0x56000683a4d0</span> -&gt; <span class="number">0x56000683a000</span></span><br><span class="line">--------------</span><br><span class="line"><span class="number">0x56000683a590</span></span><br><span class="line"><span class="number">0x56000683a4d0</span></span><br><span class="line"><span class="number">0x56000683a000</span></span><br><span class="line">--------------</span><br></pre></td></tr></table></figure>
+<p><strong>Small bin</strong></p>
+<p>small bins 中一共有 62 个循环双向链表，每个链表中存储的 chunk 大小都一致</p>
+<p>使用次序：先入先出（可以类比一下食堂排队）</p>
+<ul>
+<li>释放时：将此 chunk 插入到该 Small bin 的“链表头”</li>
+<li>申请时：优先申请 Small bin “链表尾”处的 chunk（从后向前申请）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> *p1,*p2,*p3,*p4;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> a,b,c;</span><br><span class="line">	</span><br><span class="line">	p1=<span class="built_in">malloc</span>(<span class="number">0x80</span>);</span><br><span class="line">	p2=<span class="built_in">malloc</span>(<span class="number">0x100</span>);</span><br><span class="line">	<span class="built_in">free</span>(p1);</span><br><span class="line">	p3=<span class="built_in">malloc</span>(<span class="number">0x40</span>); <span class="comment">// 直接插入表头</span></span><br><span class="line">	p4=<span class="built_in">malloc</span>(<span class="number">0x100</span>); <span class="comment">// 重新分配:把unsortedbin中的chunk转移到smallbin&amp;largebin中</span></span><br><span class="line">	a=p3+<span class="number">0x10</span>; </span><br><span class="line">	</span><br><span class="line">	p1=<span class="built_in">malloc</span>(<span class="number">0x80</span>);</span><br><span class="line">	p2=<span class="built_in">malloc</span>(<span class="number">0x100</span>);</span><br><span class="line">	<span class="built_in">free</span>(p1);</span><br><span class="line">	p3=<span class="built_in">malloc</span>(<span class="number">0x40</span>);</span><br><span class="line">	p4=<span class="built_in">malloc</span>(<span class="number">0x100</span>);</span><br><span class="line">	p1=<span class="built_in">malloc</span>(<span class="number">0x80</span>);</span><br><span class="line">	b=p3+<span class="number">0x10</span>;</span><br><span class="line">	</span><br><span class="line">	p2=<span class="built_in">malloc</span>(<span class="number">0x100</span>);</span><br><span class="line">	<span class="built_in">free</span>(p1);</span><br><span class="line">	p3=<span class="built_in">malloc</span>(<span class="number">0x40</span>);</span><br><span class="line">	p4=<span class="built_in">malloc</span>(<span class="number">0x100</span>);</span><br><span class="line">	c=p3+<span class="number">0x10</span>;</span><br><span class="line"></span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;smallbin:0x5555%x -&gt; 0x5555%x -&gt; 0x5555%x\n&quot;</span>,c,b,a);</span><br><span class="line">	p1=<span class="built_in">malloc</span>(<span class="number">0x30</span>); <span class="comment">// 从表尾开始，向前申请</span></span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;chunk1:%p\n&quot;</span>,p1<span class="number">-4</span>);</span><br><span class="line">	p2=<span class="built_in">malloc</span>(<span class="number">0x30</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;chunk2:%p\n&quot;</span>,p2<span class="number">-4</span>);</span><br><span class="line">	p3=<span class="built_in">malloc</span>(<span class="number">0x30</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;chunk3:%p\n&quot;</span>,p3<span class="number">-4</span>);</span><br><span class="line">	</span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">➜  [/home/ywhkkx/桌面] ./test               </span><br><span class="line">smallbin:<span class="number">0x5555a66515b0</span> -&gt; <span class="number">0x5555a6651300</span> -&gt; <span class="number">0x5555a6651050</span></span><br><span class="line">chunk1:<span class="number">0x5580a6651050</span></span><br><span class="line">chunk2:<span class="number">0x5580a6651300</span></span><br><span class="line">chunk3:<span class="number">0x5580a66515b0</span></span><br></pre></td></tr></table></figure>
+<p><strong>Large bin</strong></p>
+<p>large bins 中一共包括 63 个 bin，每个 bin 中的 chunk 的大小不一致，而是处于一定区间范围内 </p>
+<ul>
+<li>概念：大于等于1024字节（0x400）的chunk称之为large chunk，large bin就是用于管理这些largechunk的</li>
+<li>large bin链表的个数为63个，被分为6组</li>
+<li>largechunk使用 fd_nextsize、bk_nextsize 连接起来的<ul>
+<li>fd_nextsize：指向前一个与当前chunk大小不同的第一个空闲块，不包含 bin 的头指针</li>
+<li>bk_nextsize：指向后一个与当前 chunk 大小不同的第一个空闲块，不包含 bin 的头指针 </li>
+</ul>
+</li>
+<li>合并操作：类似于small bin</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><span class="line">#<span class="function">define <span class="title">largebin_index_32</span><span class="params">(sz)</span>                                                  \</span></span><br><span class="line"><span class="function">    <span class="params">(((((unsigned <span class="keyword">long</span>)</span> <span class="params">(sz)</span>) &gt;&gt; 6) &lt;</span>= <span class="number">38</span>)                                     \</span><br><span class="line">         ? <span class="number">56</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">6</span>)                                  \</span><br><span class="line">         : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">9</span>) &lt;= <span class="number">20</span>)                               \</span><br><span class="line">               ? <span class="number">91</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">9</span>)                            \</span><br><span class="line">               : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">12</span>) &lt;= <span class="number">10</span>)                        \</span><br><span class="line">                     ? <span class="number">110</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">12</span>)                    \</span><br><span class="line">                     : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">15</span>) &lt;= <span class="number">4</span>)                   \</span><br><span class="line">                           ? <span class="number">119</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">15</span>)              \</span><br><span class="line">                           : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">18</span>) &lt;= <span class="number">2</span>)             \</span><br><span class="line">                                 ? <span class="number">124</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">18</span>)        \</span><br><span class="line">                                 : <span class="number">126</span>)</span><br><span class="line"></span><br><span class="line">#<span class="function">define <span class="title">largebin_index_32_big</span><span class="params">(sz)</span>                                              \</span></span><br><span class="line"><span class="function">    <span class="params">(((((unsigned <span class="keyword">long</span>)</span> <span class="params">(sz)</span>) &gt;&gt; 6) &lt;</span>= <span class="number">45</span>)                                     \</span><br><span class="line">         ? <span class="number">49</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">6</span>)                                  \</span><br><span class="line">         : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">9</span>) &lt;= <span class="number">20</span>)                               \</span><br><span class="line">               ? <span class="number">91</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">9</span>)                            \</span><br><span class="line">               : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">12</span>) &lt;= <span class="number">10</span>)                        \</span><br><span class="line">                     ? <span class="number">110</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">12</span>)                    \</span><br><span class="line">                     : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">15</span>) &lt;= <span class="number">4</span>)                   \</span><br><span class="line">                           ? <span class="number">119</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">15</span>)              \</span><br><span class="line">                           : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">18</span>) &lt;= <span class="number">2</span>)             \</span><br><span class="line">                                 ? <span class="number">124</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">18</span>)        \</span><br><span class="line">                                 : <span class="number">126</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment">// XXX It remains to be seen whether it is good to keep the widths of</span></span><br><span class="line"><span class="comment">// XXX the buckets the same or whether it should be scaled by a factor</span></span><br><span class="line"><span class="comment">// XXX of two as well.</span></span><br><span class="line">#<span class="function">define <span class="title">largebin_index_64</span><span class="params">(sz)</span>                                                  \</span></span><br><span class="line"><span class="function">    <span class="params">(((((unsigned <span class="keyword">long</span>)</span> <span class="params">(sz)</span>) &gt;&gt; 6) &lt;</span>= <span class="number">48</span>)                                     \</span><br><span class="line">         ? <span class="number">48</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">6</span>)                                  \</span><br><span class="line">         : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">9</span>) &lt;= <span class="number">20</span>)                               \</span><br><span class="line">               ? <span class="number">91</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">9</span>)                            \</span><br><span class="line">               : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">12</span>) &lt;= <span class="number">10</span>)                        \</span><br><span class="line">                     ? <span class="number">110</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">12</span>)                    \</span><br><span class="line">                     : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">15</span>) &lt;= <span class="number">4</span>)                   \</span><br><span class="line">                           ? <span class="number">119</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">15</span>)              \</span><br><span class="line">                           : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">18</span>) &lt;= <span class="number">2</span>)             \</span><br><span class="line">                                 ? <span class="number">124</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">18</span>)        \</span><br><span class="line">                                 : <span class="number">126</span>)</span><br><span class="line"></span><br><span class="line">#<span class="function">define <span class="title">largebin_index</span><span class="params">(sz)</span>                                                     \</span></span><br><span class="line"><span class="function">    <span class="params">(SIZE_SZ == <span class="number">8</span> ? largebin_index_64(sz)</span> : MALLOC_ALIGNMENT </span>== <span class="number">16</span>             \</span><br><span class="line">                                                ? largebin_index_32_big(sz)    \</span><br><span class="line">                                                : largebin_index_32(sz))</span><br></pre></td></tr></table></figure>
+<p><strong>Unsorted bin</strong></p>
+<p><strong>没有来得及</strong>被其他bin收入的chunk，就会被认为在unsorted bin中</p>
+<p>在使用malloc申请内存时，如果在“fastbin”和“smallbin”中都没有找到合适的free chunk，程序就会在unsorted bin中进行遍历，寻找合适的free chunk，不合适的chunk会被 <strong>排序</strong> 并 <strong>重新分配</strong> 到对应的“bins”中</p>
+<h2 id="关于bins的内存分配"><a href="#关于bins的内存分配" class="headerlink" title="关于bins的内存分配"></a>关于bins的内存分配</h2><p>用户释放掉的 chunk 不会马上归还给系统，ptmalloc 会统一管理 heap 和 mmap 映射区域中的空闲的 chunk，当用户再一次请求分配内存时，ptmalloc 分配器会试图在空闲的 chunk 中挑选一块合适的给用户，这样可以避免频繁的系统调用，降低内存分配的开销</p>
+<p>详细过程：</p>
+<ul>
+<li><p>malloc的时候，不论malloc的大小，ptmalloc首先会去检查每个bins链（除去fastbins链）是否有与malloc相等大小的freechunk，如果没有就去检查bins链中是否有 <strong>大的freechunk</strong> 可以切割</p>
+</li>
+<li><p>如果存在，那么就切割大的freechunk，那么切割之后 <strong>剩余 </strong>的chunk成为 <strong>last remainder chunk</strong> ，并且last remainder chunk会被放入到 <strong>unsorted bin</strong> 中</p>
+</li>
+<li><p>如果没有 <strong>大的free chunk</strong> 可以切割，程序就会查询 <strong>top chunk</strong> ，如果top chunk的大小比用户请求的大小要大的话，就将该top chunk分作两部分：1.用户请求的chunk，2.新的top chunk，否则，就需要扩展heap或分配新的heap了——在 <strong>main arena</strong> 中通过 <strong>sbrk</strong> 扩展heap，而在 <strong>thread arena</strong> 中通过 <strong>mmap</strong> 分配新的heap</p>
+</li>
+</ul>
+<p>流程图：</p>
+<img src="/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/1638952496892-1642849652609-1647533569929.png" class width="1638952496892"> 
+<h2 id="UAF的利用姿势"><a href="#UAF的利用姿势" class="headerlink" title="UAF的利用姿势"></a>UAF的利用姿势</h2><p>UAF的利用比较简单，重点看下程序的“free模块”，看下哪些指针没有被置空</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">char</span> *a;</span><br><span class="line">    a = (<span class="keyword">char</span> *) <span class="built_in">malloc</span>(<span class="keyword">sizeof</span>(<span class="keyword">char</span>)*<span class="number">10</span>); <span class="comment">//申请a</span></span><br><span class="line">    <span class="built_in">memcpy</span>(a,<span class="string">&quot;ywhkkx&quot;</span>,<span class="number">10</span>);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;a addr:%x,%s\n&quot;</span>,a,a);</span><br><span class="line">    <span class="built_in">free</span>(a); <span class="comment">//释放a</span></span><br><span class="line">    <span class="keyword">char</span> *b;</span><br><span class="line">    b = (<span class="keyword">char</span> *)<span class="built_in">malloc</span>(<span class="keyword">sizeof</span>(<span class="keyword">char</span>)*<span class="number">10</span>); <span class="comment">//申请相同大小的b</span></span><br><span class="line">    <span class="built_in">memcpy</span>(a,<span class="string">&quot;isacaib&quot;</span>,<span class="number">10</span>);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;b addr:%x,%s\n&quot;</span>,b,b);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;a addr:%x,%s\n&quot;</span>,a,a);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">a addr:<span class="number">6792</span>d2a0,ywhkkx</span><br><span class="line">b addr:<span class="number">6792</span>d2a0,isacaib</span><br><span class="line">a addr:<span class="number">6792</span>d2a0,isacaib</span><br></pre></td></tr></table></figure>
+<p>可以发现，“a”和“b”指向了同一片内存：对“a”进行控制，就相当于控制了“b”</p>
+<h2 id="UAF利用姿势"><a href="#UAF利用姿势" class="headerlink" title="UAF利用姿势"></a>UAF利用姿势</h2><p>利用条件：</p>
+<ul>
+<li>“free模块”没有置空指针</li>
+<li>可以对chunk进行读写</li>
+</ul>
+<p>利用效果：</p>
+<ul>
+<li>WAA</li>
+</ul>
+<p>利用姿势：</p>
+<p>一，申请一个chunk，然后释放：</p>
+<img src="/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/1642849862503-1647533569929.png" class width="1642849862503"> 
+<p>二，修改该chunk的FD指针为“ Malloc_hook - 0x10 ”：</p>
+<img src="/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/1642849962521-1647533569929.png" class width="1642849962521"> 
+<p>三，再次申请chunk，并进行修改</p>
+<p>原理总述：</p>
+<p>利用UAF的特性（可以申请到相同的chunk），先在某个chunk的FD指针中写入 “目标地址 - 0x10” ，程序会误以为它是某个chunk，于是会把这片区域当成chunk给申请出来，最后就可以直接修改了</p>
+<p>​        // 如果程序没有提供“修改模块”，则使用Double Free</p>
+<hr>
+<p>PS：</p>
+<p>基于UAF，可以实现一种被称为<strong>Alloc to Stack</strong>的技术，和上述操作一致，只不过把“目标地址”换做了栈地址</p>
+<p>Wiki上把它归为Fastbin Attack，但它的利用核心还是UAF</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/UAF/" rel="tag"><i class="fa fa-tag"></i> UAF</a>
+              <a href="/tags/ptmalloc/" rel="tag"><i class="fa fa-tag"></i> ptmalloc</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/01/10/free_hook+off-by-one/" rel="prev" title="free_hook+off-by-one">
+      <i class="fa fa-chevron-left"></i> free_hook+off-by-one
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/01/16/UAF+fmt/" rel="next" title="UAF+fmt">
+      UAF+fmt <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF"><span class="nav-number">1.</span> <span class="nav-text">Ptmalloc算法：UAF</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84bins"><span class="nav-number">2.</span> <span class="nav-text">数据结构bins</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%B3%E4%BA%8Ebins%E7%9A%84%E5%86%85%E5%AD%98%E5%88%86%E9%85%8D"><span class="nav-number">3.</span> <span class="nav-text">关于bins的内存分配</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#UAF%E7%9A%84%E5%88%A9%E7%94%A8%E5%A7%BF%E5%8A%BF"><span class="nav-number">4.</span> <span class="nav-text">UAF的利用姿势</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#UAF%E5%88%A9%E7%94%A8%E5%A7%BF%E5%8A%BF"><span class="nav-number">5.</span> <span class="nav-text">UAF利用姿势</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">113</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">79</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.5m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">22:58</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

