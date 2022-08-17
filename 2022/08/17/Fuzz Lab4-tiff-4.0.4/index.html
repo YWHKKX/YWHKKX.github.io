@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="Fuzz-Lab4：LibTIFF这次我们将模糊 LibTIFF 图像库（读取和写入 tiff 文件最主要的一个开源库），目标是在 libtiff 4.0.4 中为 [CVE-2016-9297] 找到 crash&#x2F;PoC，并 测量 crash&#x2F;PoC 的代码覆盖率数据  CVE-2016-9297 是一个越界读取漏洞，可以通过特制的 TIFF_SETGET_C16_ASCII 或 TIFF_SE">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Fuzz Lab4-tiff-4.0.4">
+<meta property="og:url" content="http://example.com/2022/08/17/Fuzz%20Lab4-tiff-4.0.4/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="Fuzz-Lab4：LibTIFF这次我们将模糊 LibTIFF 图像库（读取和写入 tiff 文件最主要的一个开源库），目标是在 libtiff 4.0.4 中为 [CVE-2016-9297] 找到 crash&#x2F;PoC，并 测量 crash&#x2F;PoC 的代码覆盖率数据  CVE-2016-9297 是一个越界读取漏洞，可以通过特制的 TIFF_SETGET_C16_ASCII 或 TIFF_SE">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2022/08/17/Fuzz%20Lab4-tiff-4.0.4/1660625470639.png">
+<meta property="og:image" content="http://example.com/2022/08/17/Fuzz%20Lab4-tiff-4.0.4/1660626617061.png">
+<meta property="og:image" content="http://example.com/2022/08/17/Fuzz%20Lab4-tiff-4.0.4/1660629761847.png">
+<meta property="article:published_time" content="2022-08-17T08:32:29.000Z">
+<meta property="article:modified_time" content="2022-08-17T08:34:25.198Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="fuzz">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2022/08/17/Fuzz%20Lab4-tiff-4.0.4/1660625470639.png">
+
+<link rel="canonical" href="http://example.com/2022/08/17/Fuzz%20Lab4-tiff-4.0.4/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>Fuzz Lab4-tiff-4.0.4 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/17/Fuzz%20Lab4-tiff-4.0.4/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Fuzz Lab4-tiff-4.0.4
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-08-17 16:32:29 / Modified: 16:34:25" itemprop="dateCreated datePublished" datetime="2022-08-17T16:32:29+08:00">2022-08-17</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>14k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>13 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="Fuzz-Lab4：LibTIFF"><a href="#Fuzz-Lab4：LibTIFF" class="headerlink" title="Fuzz-Lab4：LibTIFF"></a>Fuzz-Lab4：LibTIFF</h2><p>这次我们将模糊 <strong>LibTIFF</strong> 图像库（读取和写入 tiff 文件最主要的一个开源库），目标是在 libtiff 4.0.4 中为 [<strong>CVE-2016-9297</strong>] 找到 crash/PoC，并 <strong>测量 crash/PoC 的代码覆盖率数据</strong></p>
+<ul>
+<li><strong>CVE-2016-9297</strong> 是一个越界读取漏洞，可以通过特制的 TIFF_SETGET_C16_ASCII 或 TIFF_SETGET_C32_ASCII 标记值触发<ul>
+<li>越界读取是当程序读取超出预期缓冲区末尾或开头之前的数据时发生的漏洞</li>
+<li>结果，它允许远程攻击者导致拒绝服务或可能从进程内存中获取潜在的敏感信息</li>
+</ul>
+</li>
+</ul>
+<p>完成本练习后，您将了解：</p>
+<ul>
+<li>如何使用 LCOV 测量代码覆盖率</li>
+<li>如何使用代码覆盖率数据来提高模糊测试的有效性</li>
+</ul>
+<h2 id="Do-it-yourself"><a href="#Do-it-yourself" class="headerlink" title="Do it yourself!"></a>Do it yourself!</h2><p>为了完成这个练习，你需要：</p>
+<ul>
+<li>Fuzz LibTiff（启用 ASan）直到出现一些独特的崩溃</li>
+<li>对崩溃进行分类以找到漏洞的 PoC</li>
+<li>测量这个 PoC 的代码覆盖率</li>
+<li>修复问题</li>
+</ul>
+<h2 id="Download-and-build-your-target"><a href="#Download-and-build-your-target" class="headerlink" title="Download and build your target"></a>Download and build your target</h2><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">cd $HOME</span><br><span class="line">mkdir fuzzing_tiff &amp;&amp; cd fuzzing_tiff/</span><br><span class="line"></span><br><span class="line">cd ..</span><br><span class="line">wget https://download.osgeo.org/libtiff/tiff-4.0.4.tar.gz # 下载libtiff-4.0.4</span><br><span class="line">tar -xzvf tiff-4.0.4.tar.gz</span><br><span class="line"></span><br><span class="line">cd tiff-4.0.4/ # 构建和安装libtiff</span><br><span class="line">./configure --prefix=&quot;$HOME/fuzzing_tiff/install2/&quot; --disable-shared</span><br><span class="line">make</span><br><span class="line">make install</span><br></pre></td></tr></table></figure>
+<p>作为目标二进制文件，我们可以对位于 <code>/bin</code> 文件夹中的 <code>tiffinfo</code> 二进制文件进行模糊测试，作为种子输入语料库，我们将使用 <code>/test/images/</code> 文件夹中的示例图像</p>
+<p>要测试一切是否正常，只需键入：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span><span class="bash">HOME/fuzzing_tiff/install2/bin/tiffinfo -D -j -c -r -s -w <span class="variable">$HOME</span>/tiff-4.0.4/<span class="built_in">test</span>/images/palette-1c-1b.tiff</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>在最后一个命令行中，您可以看到我启用了所有这些标志：“-j -c -r -s -w”，这是为了提高 <strong>代码覆盖率</strong> 并增加发现错误的机会</li>
+</ul>
+<p>结果：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">TIFF Directory at offset <span class="number">0xbd4</span> (<span class="number">3028</span>)</span><br><span class="line">  Image Width: <span class="number">157</span> Image Length: <span class="number">151</span></span><br><span class="line">  Bits/Sample: <span class="number">1</span></span><br><span class="line">  Sample Format: <span class="keyword">unsigned</span> integer</span><br><span class="line">  Compression Scheme: None</span><br><span class="line">  Photometric Interpretation: <span class="function">palette <span class="title">color</span> <span class="params">(RGB from colormap)</span></span></span><br><span class="line"><span class="function">  Samples/Pixel: 1</span></span><br><span class="line"><span class="function">  Rows/Strip: 409</span></span><br><span class="line"><span class="function">  Planar Configuration: single image plane</span></span><br><span class="line"><span class="function">  Page Number: 0-1</span></span><br><span class="line"><span class="function">  Color Map: </span></span><br><span class="line"><span class="function">       0:     0     0     0</span></span><br><span class="line"><span class="function">       1: 65535 65535 65535</span></span><br><span class="line"><span class="function">  DocumentName: palette-1c-1b.tiff</span></span><br><span class="line"><span class="function">  Software: GraphicsMagick 1.2 unreleased Q16 http:<span class="comment">//www.GraphicsMagick.org/</span></span></span><br><span class="line"><span class="function">  1 Strips:</span></span><br><span class="line"><span class="function">      0: [       8,     3020]</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>标签图像文件格式（Tag Image File Format，TIFF）是一种灵活的位图格式，主要用来存储包括照片和艺术图在内的图像</li>
+<li>而 LibTIFF 就是打开 TIFF 文件的一种工具</li>
+</ul>
+<h2 id="Code-coverage"><a href="#Code-coverage" class="headerlink" title="Code coverage"></a>Code coverage</h2><p>代码覆盖率是一种软件指标，显示每行代码被触发的次数，通过使用代码覆盖率，我们将了解模糊器已到达代码的哪些部分并 <strong>可视化</strong> 模糊测试过程</p>
+<p>首先，我们需要安装 lcov ，我们可以使用以下命令来完成：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo apt install lcov</span><br></pre></td></tr></table></figure>
+<ul>
+<li>lcov 是 gcc 测试覆盖率的前端图形展示工具</li>
+</ul>
+<p>现在我们需要使用 —coverage 标志（编译器和链接器）重建 libTIFF：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">cd $HOME/tiff-4.0.4/</span><br><span class="line">make clean</span><br><span class="line">  </span><br><span class="line">CFLAGS=&quot;--coverage&quot; LDFLAGS=&quot;--coverage&quot; ./configure --prefix=&quot;$HOME/fuzzing_tiff/install/&quot; --disable-shared</span><br><span class="line">make</span><br><span class="line">make install</span><br></pre></td></tr></table></figure>
+<p>然后我们依次输入以下内容来收集代码覆盖率数据：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">cd $HOME/tiff-4.0.4/</span><br><span class="line">lcov --zerocounters --directory ./ # 重置以前的计数器</span><br><span class="line">lcov --capture --initial --directory ./ --output-file app.info # 返回“基线”覆盖率数据文件,其中包含每条检测线的零覆盖率</span><br><span class="line"><span class="meta">$</span><span class="bash">HOME/fuzzing_tiff/install/bin/tiffinfo -D -j -c -r -s -w <span class="variable">$HOME</span>/tiff-4.0.4/<span class="built_in">test</span>/images/palette-1c-1b.tiff <span class="comment"># 运行您要分析的应用程序,您可以使用不同的输入多次运行它</span></span></span><br><span class="line">lcov --no-checksum --directory ./ --capture --output-file app2.info # 将当前覆盖状态保存到app2.info文件中</span><br></pre></td></tr></table></figure>
+<p>最后，我们必须生成 HTML 输出：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">genhtml --highlight --legend -output-directory ./html-coverage/ ./app2.info</span><br></pre></td></tr></table></figure>
+<ul>
+<li>如果一切顺利，代码覆盖率报告将在 html-coverage 文件夹中创建，只需打开 <code>./html-coverage/index.html</code> 文件，您应该会看到如下内容：</li>
+</ul>
+<img src="/2022/08/17/Fuzz%20Lab4-tiff-4.0.4/1660625470639.png" class width="1660625470639"> 
+<ul>
+<li>其实我并不知道这个东西有什么用</li>
+</ul>
+<h2 id="Fuzz-LibTIFF"><a href="#Fuzz-LibTIFF" class="headerlink" title="Fuzz LibTIFF"></a>Fuzz LibTIFF</h2><p>现在我们将在启用 ASAN 的情况下编译 libtiff</p>
+<p>首先，我们要清理所有以前编译的目标文件和可执行文件：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">rm -r $HOME/fuzzing_tiff/install</span><br><span class="line">cd $HOME/tiff-4.0.4/</span><br><span class="line">make clean</span><br></pre></td></tr></table></figure>
+<p>现在，我们在调用 make 之前设置 AFL_USE_ASAN=1：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">export LLVM_CONFIG=&quot;llvm-config-11&quot;</span><br><span class="line">CC=afl-clang-lto ./configure --prefix=&quot;$HOME/fuzzing_tiff/install/&quot; --disable-shared</span><br><span class="line">AFL_USE_ASAN=1 make -j4</span><br><span class="line">AFL_USE_ASAN=1 make install</span><br></pre></td></tr></table></figure>
+<p>现在，您可以使用以下命令运行模糊器：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">afl-fuzz -m none -i $HOME/tiff-4.0.4/test/images/ -o $HOME/fuzzing_tiff/out/ -s 123 -- $HOME/fuzzing_tiff/install/bin/tiffinfo -D -j -c -r -s -w @@</span><br></pre></td></tr></table></figure>
+<p>结果：</p>
+<img src="/2022/08/17/Fuzz%20Lab4-tiff-4.0.4/1660626617061.png" class width="1660626617061"> 
+<h2 id="Triage"><a href="#Triage" class="headerlink" title="Triage"></a>Triage</h2><p>接下来我们要使用 ASan 对崩溃进行分类</p>
+<p>调试使用 ASan 构建的程序比前面的练习要容易得多，我们需要做的就是向程序提供崩溃文件：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span><span class="bash">HOME/fuzzing_tiff/install/bin/tiffinfo -D -j -c -r -s -w ./id:000000,sig:11,src:000009,time:67581,execs:76549,op:havoc,rep:4</span> </span><br></pre></td></tr></table></figure>
+<p>结果如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line">TIFFReadDirectory: Warning, Bogus <span class="string">&quot;StripByteCounts&quot;</span> field, ignoring <span class="keyword">and</span> calculating from imagelength.</span><br><span class="line">TIFF Directory at offset <span class="number">0xbd4</span> (<span class="number">3028</span>)</span><br><span class="line">  Image Width: <span class="number">157</span> Image Length: <span class="number">151</span></span><br><span class="line">  Bits/Sample: <span class="number">1537</span></span><br><span class="line">  Sample Format: <span class="keyword">unsigned</span> integer</span><br><span class="line">  Compression Scheme: None</span><br><span class="line">  Photometric Interpretation: <span class="function">palette <span class="title">color</span> <span class="params">(RGB from colormap)</span></span></span><br><span class="line"><span class="function">  Samples/Pixel: 1</span></span><br><span class="line"><span class="function">  Rows/Strip: 409</span></span><br><span class="line"><span class="function">  Planar Configuration: single image plane</span></span><br><span class="line"><span class="function">  Page Number: 0-1</span></span><br><span class="line"><span class="function">  Color Map: </span></span><br><span class="line"><span class="function">AddressSanitizer:DEADLYSIGNAL</span></span><br><span class="line"><span class="function"></span>=================================================================</span><br><span class="line">==<span class="number">3472169</span>==ERROR: AddressSanitizer: SEGV on unknown address <span class="number">0x000000000000</span> (pc <span class="number">0x00000046e5f3</span> bp <span class="number">0x7ffdb4e2bf10</span> sp <span class="number">0x7ffdb4e2bd80</span> T0)</span><br><span class="line">==<span class="number">3472169</span>==The signal is caused by a READ memory access.</span><br><span class="line">==<span class="number">3472169</span>==Hint: address points to the zero page.</span><br><span class="line">    #<span class="number">0</span> <span class="number">0x46e5f3</span> in TIFFPrintDirectory /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/libtiff/tif_print.c</span><br><span class="line">    #<span class="number">1</span> <span class="number">0x33fbad</span> in tiffinfo /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/tools/tiffinfo.c:<span class="number">449</span>:<span class="number">2</span></span><br><span class="line">    #<span class="number">2</span> <span class="number">0x33f1d4</span> in main /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/tools/tiffinfo.c:<span class="number">152</span>:<span class="number">6</span></span><br><span class="line">    #<span class="number">3</span> <span class="number">0x7f60e75b6082</span> in __libc_start_main /build/glibc-SzIz7B/glibc<span class="number">-2.31</span>/csu/../csu/libc-start.c:<span class="number">308</span>:<span class="number">16</span></span><br><span class="line">    #<span class="number">4</span> <span class="number">0x29165d</span> in _start (/home/yhellow/fuzzing_tiff/install/bin/tiffinfo+<span class="number">0x29165d</span>)</span><br><span class="line"></span><br><span class="line">AddressSanitizer can <span class="keyword">not</span> provide additional info.</span><br><span class="line">SUMMARY: AddressSanitizer: SEGV /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/libtiff/tif_print.c in TIFFPrintDirectory</span><br><span class="line">==<span class="number">3472169</span>==ABORTING</span><br></pre></td></tr></table></figure>
+<ul>
+<li>输出的上半截就是报错信息，下半截是执行跟踪</li>
+<li>程序 crash 的原因是无效的地址 <code>0x000000000000</code></li>
+</ul>
+<p>除了这种 crash 以外，还有其他原因：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span><span class="bash">HOME/fuzzing_tiff/install/bin/tiffinfo -D -j -c -r -s -w ./id:000002,sig:06,src:000009,time:81829,execs:92343,op:havoc,rep:8</span> </span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br></pre></td><td class="code"><pre><span class="line">TIFFReadDirectoryCheckOrder: Warning, Invalid TIFF directory; tags are <span class="keyword">not</span> sorted in ascending order.</span><br><span class="line">TIFFReadDirectory: Warning, Unknown field with tag <span class="number">7217</span> (<span class="number">0x1c31</span>) encountered.</span><br><span class="line">TIFF Directory at offset <span class="number">0xbd4</span> (<span class="number">3028</span>)</span><br><span class="line">  Image Width: <span class="number">157</span> Image Length: <span class="number">151</span></span><br><span class="line">  Bits/Sample: <span class="number">1</span></span><br><span class="line">  Sample Format: <span class="keyword">unsigned</span> integer</span><br><span class="line">  Compression Scheme: None</span><br><span class="line">  Photometric Interpretation: <span class="function">palette <span class="title">color</span> <span class="params">(RGB from colormap)</span></span></span><br><span class="line"><span class="function">  Samples/Pixel: 1</span></span><br><span class="line"><span class="function">  Rows/Strip: 409</span></span><br><span class="line"><span class="function">  Planar Configuration: single image plane</span></span><br><span class="line"><span class="function">  Page Number: 0-1</span></span><br><span class="line"><span class="function">  Color Map: </span></span><br><span class="line"><span class="function">       0: 29281 26979 24935</span></span><br><span class="line"><span class="function">       1: 28776 29517 26979</span></span><br><span class="line"><span class="function">  DocumentName: palette-1c-1b.tiff</span></span><br><span class="line"><span class="function"></span>=================================================================</span><br><span class="line">==<span class="number">3582061</span>==ERROR: AddressSanitizer: heap-buffer-overflow on address <span class="number">0x6070000000d1</span> at pc <span class="number">0x0000002aadf2</span> bp <span class="number">0x7ffc31f49e70</span> sp <span class="number">0x7ffc31f49630</span></span><br><span class="line">READ of size <span class="number">66</span> at <span class="number">0x6070000000d1</span> thread T0</span><br><span class="line">    #<span class="number">0</span> <span class="number">0x2aadf1</span> in <span class="built_in">fputs</span> (/home/yhellow/fuzzing_tiff/install/bin/tiffinfo+<span class="number">0x2aadf1</span>)</span><br><span class="line">    #<span class="number">1</span> <span class="number">0x47068f</span> in _TIFFPrintField /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/libtiff/tif_print.c:<span class="number">127</span>:<span class="number">4</span></span><br><span class="line">    #<span class="number">2</span> <span class="number">0x47068f</span> in TIFFPrintDirectory /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/libtiff/tif_print.c:<span class="number">641</span>:<span class="number">5</span></span><br><span class="line">    #<span class="number">3</span> <span class="number">0x33fbad</span> in tiffinfo /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/tools/tiffinfo.c:<span class="number">449</span>:<span class="number">2</span></span><br><span class="line">    #<span class="number">4</span> <span class="number">0x33f1d4</span> in main /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/tools/tiffinfo.c:<span class="number">152</span>:<span class="number">6</span></span><br><span class="line">    #<span class="number">5</span> <span class="number">0x7f68b28f1082</span> in __libc_start_main /build/glibc-SzIz7B/glibc<span class="number">-2.31</span>/csu/../csu/libc-start.c:<span class="number">308</span>:<span class="number">16</span></span><br><span class="line">    #<span class="number">6</span> <span class="number">0x29165d</span> in _start (/home/yhellow/fuzzing_tiff/install/bin/tiffinfo+<span class="number">0x29165d</span>)</span><br><span class="line"></span><br><span class="line"><span class="number">0x6070000000d1</span> is located <span class="number">0</span> bytes to the right of <span class="number">65</span>-byte region [<span class="number">0x607000000090</span>,<span class="number">0x6070000000d1</span>)</span><br><span class="line">allocated by thread T0 here:</span><br><span class="line">    #<span class="number">0</span> <span class="number">0x30b6cd</span> in <span class="built_in">malloc</span> (/home/yhellow/fuzzing_tiff/install/bin/tiffinfo+<span class="number">0x30b6cd</span>)</span><br><span class="line">    #<span class="number">1</span> <span class="number">0x3564d5</span> in _TIFFmalloc /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/libtiff/tif_unix.c:<span class="number">283</span>:<span class="number">10</span></span><br><span class="line">    #<span class="number">2</span> <span class="number">0x3564d5</span> in setByteArray /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/libtiff/tif_dir.c:<span class="number">51</span>:<span class="number">19</span></span><br><span class="line">    #<span class="number">3</span> <span class="number">0x3564d5</span> in _TIFFVSetField /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/libtiff/tif_dir.c:<span class="number">539</span>:<span class="number">4</span></span><br><span class="line">    #<span class="number">4</span> <span class="number">0x34c2d6</span> in TIFFVSetField /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/libtiff/tif_dir.c:<span class="number">820</span>:<span class="number">6</span></span><br><span class="line">    #<span class="number">5</span> <span class="number">0x34c2d6</span> in TIFFSetField /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/libtiff/tif_dir.c:<span class="number">764</span>:<span class="number">11</span></span><br><span class="line">    #<span class="number">6</span> <span class="number">0x38464e</span> in TIFFFetchNormalTag /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/libtiff/tif_dirread.c:<span class="number">5164</span>:<span class="number">8</span></span><br><span class="line">    #<span class="number">7</span> <span class="number">0x377976</span> in TIFFReadDirectory /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/libtiff/tif_dirread.c:<span class="number">3810</span>:<span class="number">12</span></span><br><span class="line">    #<span class="number">8</span> <span class="number">0x433bc9</span> in TIFFClientOpen /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/libtiff/tif_open.c:<span class="number">466</span>:<span class="number">8</span></span><br><span class="line">    #<span class="number">9</span> <span class="number">0x33ef47</span> in TIFFFdOpen /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/libtiff/tif_unix.c:<span class="number">178</span>:<span class="number">8</span></span><br><span class="line">    #<span class="number">10</span> <span class="number">0x33ef47</span> in TIFFOpen /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/libtiff/tif_unix.c:<span class="number">217</span>:<span class="number">8</span></span><br><span class="line">    #<span class="number">11</span> <span class="number">0x33ef47</span> in main /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/tools/tiffinfo.c:<span class="number">140</span>:<span class="number">9</span></span><br><span class="line">    #<span class="number">12</span> <span class="number">0x7f68b28f1082</span> in __libc_start_main /build/glibc-SzIz7B/glibc<span class="number">-2.31</span>/csu/../csu/libc-start.c:<span class="number">308</span>:<span class="number">16</span></span><br><span class="line"></span><br><span class="line">SUMMARY: AddressSanitizer: heap-buffer-overflow (/home/yhellow/fuzzing_tiff/install/bin/tiffinfo+<span class="number">0x2aadf1</span>) in <span class="built_in">fputs</span></span><br><span class="line">Shadow bytes around the buggy address:</span><br><span class="line">  <span class="number">0x0c0e7fff7fc0</span>: <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span></span><br><span class="line">  <span class="number">0x0c0e7fff7fd0</span>: <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span></span><br><span class="line">  <span class="number">0x0c0e7fff7fe0</span>: <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span></span><br><span class="line">  <span class="number">0x0c0e7fff7ff0</span>: <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span></span><br><span class="line">  <span class="number">0x0c0e7fff8000</span>: fa fa fa fa fd fd fd fd fd fd fd fd fd fa fa fa</span><br><span class="line">=&gt;<span class="number">0x0c0e7fff8010</span>: fa fa <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span>[<span class="number">01</span>]fa fa fa fa fa</span><br><span class="line">  <span class="number">0x0c0e7fff8020</span>: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa</span><br><span class="line">  <span class="number">0x0c0e7fff8030</span>: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa</span><br><span class="line">  <span class="number">0x0c0e7fff8040</span>: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa</span><br><span class="line">  <span class="number">0x0c0e7fff8050</span>: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa</span><br><span class="line">  <span class="number">0x0c0e7fff8060</span>: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa</span><br><span class="line">Shadow byte legend (one shadow byte represents <span class="number">8</span> application bytes):</span><br><span class="line">  Addressable:           <span class="number">00</span></span><br><span class="line">  Partially addressable: <span class="number">01</span> <span class="number">02</span> <span class="number">03</span> <span class="number">04</span> <span class="number">05</span> <span class="number">06</span> <span class="number">07</span> </span><br><span class="line">  Heap left redzone:       fa</span><br><span class="line">  Freed heap region:       fd</span><br><span class="line">  Stack left redzone:      f1</span><br><span class="line">  Stack mid redzone:       f2</span><br><span class="line">  Stack right redzone:     f3</span><br><span class="line">  Stack after <span class="keyword">return</span>:      f5</span><br><span class="line">  Stack use after scope:   f8</span><br><span class="line">  Global redzone:          f9</span><br><span class="line">  Global init order:       f6</span><br><span class="line">  Poisoned by user:        f7</span><br><span class="line">  Container overflow:      fc</span><br><span class="line">  Array cookie:            ac</span><br><span class="line">  Intra object redzone:    bb</span><br><span class="line">  ASan internal:           fe</span><br><span class="line">  Left alloca redzone:     ca</span><br><span class="line">  Right alloca redzone:    cb</span><br><span class="line">  Shadow gap:              cc</span><br><span class="line">==<span class="number">3582061</span>==ABORTING</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这种 crash 的原因就是堆溢出</li>
+<li>目前只发现这两种类型的 crash</li>
+</ul>
+<p>经过对比发现：<strong>[CVE-2016-9297]</strong> 的 PoC 为 <code>id:000002</code>（通过精心编制的 TIFF_SETGET_C16ASCII 或 TIFF_SETGET_C32_ASCII 标记值来造成越界读取） </p>
+<h2 id="PoC-Code-coverage"><a href="#PoC-Code-coverage" class="headerlink" title="PoC Code coverage"></a>PoC Code coverage</h2><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">cd $HOME/tiff-4.0.4/</span><br><span class="line">make clean</span><br><span class="line">  </span><br><span class="line">CFLAGS=&quot;--coverage&quot; LDFLAGS=&quot;--coverage&quot; ./configure --prefix=&quot;$HOME/fuzzing_tiff/coverage/&quot; --disable-shared</span><br><span class="line">make</span><br><span class="line">make install</span><br></pre></td></tr></table></figure>
+<p>然后我们依次输入以下内容来收集代码覆盖率数据：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">cd $HOME/tiff-4.0.4/</span><br><span class="line">lcov --zerocounters --directory ./ # 重置以前的计数器</span><br><span class="line">lcov --capture --initial --directory ./ --output-file app.info # 返回“基线”覆盖率数据文件,其中包含每条检测线的零覆盖率</span><br><span class="line"><span class="meta">$</span><span class="bash">HOME/fuzzing_tiff/coverage/bin/tiffinfo -D -j -c -r -s -w <span class="variable">$HOME</span>/fuzzing_tiff/out/default/crashes/<span class="built_in">test</span> <span class="comment"># 运行您要分析的应用程序,您可以使用不同的输入多次运行它</span></span></span><br><span class="line">lcov --no-checksum --directory ./ --capture --output-file app2.info # 将当前覆盖状态保存到app2.info文件中</span><br></pre></td></tr></table></figure>
+<p>最后，我们必须生成 HTML 输出：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">genhtml --highlight --legend -output-directory ./html-coverage/ ./app2.info</span><br></pre></td></tr></table></figure>
+<ul>
+<li>如果一切顺利，代码覆盖率报告将在 html-coverage 文件夹中创建，只需打开 <code>./html-coverage/index.html</code> 文件，您应该会看到如下内容：</li>
+</ul>
+<img src="/2022/08/17/Fuzz%20Lab4-tiff-4.0.4/1660629761847.png" class width="1660629761847"> 
+<h2 id="Reproduce-the-crash"><a href="#Reproduce-the-crash" class="headerlink" title="Reproduce the crash"></a>Reproduce the crash</h2><p>先使用没有 ASan 的 <code>tiffinfo</code> 来运行 crash 文件：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">➜  bin ./tiffinfo test</span><br><span class="line">TIFFReadDirectoryCheckOrder: Warning, Invalid TIFF directory; tags are <span class="keyword">not</span> sorted in ascending order.</span><br><span class="line">TIFFReadDirectory: Warning, Unknown field with tag <span class="number">7217</span> (<span class="number">0x1c31</span>) encountered.</span><br><span class="line">TIFF Directory at offset <span class="number">0xbd4</span> (<span class="number">3028</span>)</span><br><span class="line">  Image Width: <span class="number">157</span> Image Length: <span class="number">151</span></span><br><span class="line">  Bits/Sample: <span class="number">1</span></span><br><span class="line">  Sample Format: <span class="keyword">unsigned</span> integer</span><br><span class="line">  Compression Scheme: None</span><br><span class="line">  Photometric Interpretation: <span class="function">palette <span class="title">color</span> <span class="params">(RGB from colormap)</span></span></span><br><span class="line"><span class="function">  Samples/Pixel: 1</span></span><br><span class="line"><span class="function">  Rows/Strip: 409</span></span><br><span class="line"><span class="function">  Planar Configuration: single image plane</span></span><br><span class="line"><span class="function">  Page Number: 0-1</span></span><br><span class="line"><span class="function">  Color Map: <span class="params">(present)</span></span></span><br><span class="line"><span class="function">  DocumentName: palette-1c-1b.tiff</span></span><br><span class="line"><span class="function">  Tag 7217: GraphicsMagick 1.2 unreleased Q16 http:<span class="comment">//ww��������������������w.#)</span></span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>发现程序的输出异常，我们先利用 ASan 进行调试，ASan 提供的报错信息如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">==<span class="number">3333</span>==ERROR: AddressSanitizer: heap-buffer-overflow on address <span class="number">0x6070000000d1</span> at pc <span class="number">0x0000002aadf2</span> bp <span class="number">0x7fffffffda30</span> sp <span class="number">0x7fffffffd1f0</span></span><br><span class="line">READ of size <span class="number">66</span> at <span class="number">0x6070000000d1</span> thread T0</span><br><span class="line">[Attaching after Thread <span class="number">0x7ffff7c01800</span> (LWP <span class="number">3333</span>) fork to child process <span class="number">3337</span>]</span><br><span class="line">[New inferior <span class="number">2</span> (process <span class="number">3337</span>)]</span><br><span class="line">[Detaching after fork from parent process <span class="number">3333</span>]</span><br><span class="line">[Inferior <span class="number">1</span> (process <span class="number">3333</span>) detached]</span><br><span class="line">[Thread debugging <span class="keyword">using</span> libthread_db enabled]</span><br><span class="line">Using host libthread_db library <span class="string">&quot;/lib/x86_64-linux-gnu/libthread_db.so.1&quot;</span>.</span><br><span class="line">process <span class="number">3337</span> is executing <span class="keyword">new</span> program: /usr/lib/llvm<span class="number">-11</span>/bin/llvm-symbolizer</span><br><span class="line">[Thread debugging <span class="keyword">using</span> libthread_db enabled]</span><br><span class="line">Using host libthread_db library <span class="string">&quot;/lib/x86_64-linux-gnu/libthread_db.so.1&quot;</span>.</span><br><span class="line">    #<span class="number">0</span> <span class="number">0x2aadf1</span> in <span class="built_in">fputs</span> (/home/yhellow/fuzzing_tiff/install/bin/tiffinfo+<span class="number">0x2aadf1</span>)</span><br><span class="line">    #<span class="number">1</span> <span class="number">0x47068f</span> in _TIFFPrintField /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/libtiff/tif_print.c:<span class="number">127</span>:<span class="number">4</span></span><br><span class="line">    #<span class="number">2</span> <span class="number">0x47068f</span> in TIFFPrintDirectory /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/libtiff/tif_print.c:<span class="number">641</span>:<span class="number">5</span></span><br><span class="line">    #<span class="number">3</span> <span class="number">0x33fbad</span> in tiffinfo /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/tools/tiffinfo.c:<span class="number">449</span>:<span class="number">2</span></span><br><span class="line">    #<span class="number">4</span> <span class="number">0x33f1d4</span> in main /home/yhellow/tiff<span class="number">-4.0</span><span class="number">.4</span>/tools/tiffinfo.c:<span class="number">152</span>:<span class="number">6</span></span><br><span class="line">    #<span class="number">5</span> <span class="number">0x7ffff7c28082</span> in __libc_start_main /build/glibc-SzIz7B/glibc<span class="number">-2.31</span>/csu/../csu/libc-start.c:<span class="number">308</span>:<span class="number">16</span></span><br><span class="line">    #<span class="number">6</span> <span class="number">0x29165d</span> in _start (/home/yhellow/fuzzing_tiff/install/bin/tiffinfo+<span class="number">0x29165d</span>)</span><br></pre></td></tr></table></figure>
+<ul>
+<li>根据 ASan 提供的信息，在 <code>0x2aadf2</code> 打上断点，对比溢出点执行前后 heap 的变化：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">*RAX  <span class="number">0x2aadf2</span> (<span class="built_in">fputs</span>+<span class="number">386</span>) ◂— lea    rdx, [rbp - <span class="number">0x840</span>]</span><br><span class="line">*RBX  <span class="number">0x607000000090</span> ◂— <span class="number">0x7363696870617247</span> (<span class="string">&#x27;Graphics&#x27;</span>)</span><br><span class="line">*RCX  <span class="number">0x0</span></span><br><span class="line">*RDX  <span class="number">0x14</span></span><br><span class="line">*RDI  <span class="number">0x232900</span> (__asan::kInterceptorViaLibrary) ◂— <span class="string">&#x27;interceptor_via_lib&#x27;</span></span><br><span class="line">*RSI  <span class="number">0x232900</span> (__asan::kInterceptorViaLibrary) ◂— <span class="string">&#x27;interceptor_via_lib&#x27;</span></span><br><span class="line">*RBP  <span class="number">0x7fffffffda30</span> —▸ <span class="number">0x7fffffffdbd0</span> —▸ <span class="number">0x7fffffffdc90</span> —▸ <span class="number">0x7fffffffdde0</span> ◂— <span class="number">0x0</span></span><br><span class="line">*RSP  <span class="number">0x7fffffffd1f0</span> ◂— <span class="number">0x0</span></span><br><span class="line">*RIP  <span class="number">0x2aadf2</span> (<span class="built_in">fputs</span>+<span class="number">386</span>) ◂— lea    rdx, [rbp - <span class="number">0x840</span>]</span><br><span class="line">──────────────────────────────────────────────────────────────────────────────────</span><br><span class="line"> ► <span class="number">0x2aadf2</span> &lt;<span class="built_in">fputs</span>+<span class="number">386</span>&gt;    lea    rdx, [rbp - <span class="number">0x840</span>]</span><br><span class="line">   <span class="number">0x2aadf9</span> &lt;<span class="built_in">fputs</span>+<span class="number">393</span>&gt;    mov    rdi, rax</span><br><span class="line">   <span class="number">0x2aadfc</span> &lt;<span class="built_in">fputs</span>+<span class="number">396</span>&gt;    mov    rsi, r13</span><br><span class="line">   <span class="number">0x2aadff</span> &lt;<span class="built_in">fputs</span>+<span class="number">399</span>&gt;    mov    rcx, r12</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"> RAX  <span class="number">0x2aadf2</span> (<span class="built_in">fputs</span>+<span class="number">386</span>) ◂— lea    rdx, [rbp - <span class="number">0x840</span>]</span><br><span class="line"> RBX  <span class="number">0x607000000090</span> ◂— <span class="number">0x7363696870617247</span> (<span class="string">&#x27;Graphics&#x27;</span>)</span><br><span class="line"> RCX  <span class="number">0x0</span></span><br><span class="line">*RDX  <span class="number">0x7fffffffd1f0</span> ◂— <span class="number">0x0</span></span><br><span class="line"> RDI  <span class="number">0x232900</span> (__asan::kInterceptorViaLibrary) ◂— <span class="string">&#x27;interceptor_via_lib&#x27;</span></span><br><span class="line"> RSI  <span class="number">0x232900</span> (__asan::kInterceptorViaLibrary) ◂— <span class="string">&#x27;interceptor_via_lib&#x27;</span></span><br><span class="line"> RBP  <span class="number">0x7fffffffda30</span> —▸ <span class="number">0x7fffffffdbd0</span> —▸ <span class="number">0x7fffffffdc90</span> —▸ <span class="number">0x7fffffffdde0</span> ◂— <span class="number">0x0</span></span><br><span class="line"> RSP  <span class="number">0x7fffffffd1f0</span> ◂— <span class="number">0x0</span></span><br><span class="line">*RIP  <span class="number">0x2aadf9</span> (<span class="built_in">fputs</span>+<span class="number">393</span>) ◂— mov    rdi, rax</span><br><span class="line">──────────────────────────────────────────────────────────────────────────────────</span><br><span class="line">   <span class="number">0x2aadf2</span> &lt;<span class="built_in">fputs</span>+<span class="number">386</span>&gt;    lea    rdx, [rbp - <span class="number">0x840</span>]</span><br><span class="line"> ► <span class="number">0x2aadf9</span> &lt;<span class="built_in">fputs</span>+<span class="number">393</span>&gt;    mov    rdi, rax</span><br><span class="line">   <span class="number">0x2aadfc</span> &lt;<span class="built_in">fputs</span>+<span class="number">396</span>&gt;    mov    rsi, r13</span><br><span class="line">   <span class="number">0x2aadff</span> &lt;<span class="built_in">fputs</span>+<span class="number">399</span>&gt;    mov    rcx, r12</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x7fffffffda30</span><span class="number">-0x840</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│ rdx rsp <span class="number">0x7fffffffd1f0</span> ◂— <span class="number">0x0</span></span><br><span class="line">... ↓            <span class="number">5</span> skipped</span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│         <span class="number">0x7fffffffd220</span> ◂— <span class="number">0x1b</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│         <span class="number">0x7fffffffd228</span> ◂— <span class="number">0x400</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>其实这里还不容易看出内存泄露</li>
+<li>所以我们用 GDB 在没有 ASan 的 <code>tiffinfo-&gt;tif_print.c:127</code> 处打断点，进行调试：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x289711</span> &lt;TIFFPrintDirectory+<span class="number">11761</span>&gt;    call   <span class="built_in">fputs</span>@plt                      &lt;<span class="built_in">fputs</span>@plt&gt;</span><br><span class="line">       s: <span class="number">0x49edc0</span> ◂— <span class="number">0x7363696870617247</span> (<span class="string">&#x27;Graphics&#x27;</span>)</span><br><span class="line">       stream: <span class="number">0x7ffff7e416a0</span> (_IO_2_1_stdout_) ◂— <span class="number">0xfbad2a84</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x49edc0</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x49edc0</span> ◂— <span class="number">0x7363696870617247</span> (<span class="string">&#x27;Graphics&#x27;</span>)</span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x49edc8</span> ◂— <span class="number">0x31206b636967614d</span> (<span class="string">&#x27;Magick 1&#x27;</span>)</span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x49edd0</span> ◂— <span class="number">0x6c65726e7520322e</span> (<span class="string">&#x27;.2 unrel&#x27;</span>)</span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x49edd8</span> ◂— <span class="number">0x3151206465736165</span> (<span class="string">&#x27;eased Q1&#x27;</span>)</span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│  <span class="number">0x49ede0</span> ◂— <span class="number">0x2f3a707474682036</span> (<span class="string">&#x27;6 http:/&#x27;</span>)</span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│  <span class="number">0x49ede8</span> ◂— <span class="number">0xcccccccccc77772f</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│  <span class="number">0x49edf0</span> ◂— <span class="number">0xcccccccccccccccc</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│  <span class="number">0x49edf8</span> ◂— <span class="number">0x77cccccccccccccc</span></span><br><span class="line"><span class="number">08</span>:<span class="number">0040</span>│  <span class="number">0x49ee00</span> —▸ <span class="number">0x29232e</span> (tiffFields+<span class="number">2030</span>) —▸ <span class="number">0x330000</span> (__afl_area_initial+<span class="number">609936</span>) ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">09</span>:<span class="number">0048</span>│  <span class="number">0x49ee08</span> ◂— <span class="number">0x21</span> <span class="comment">/* &#x27;!&#x27; */</span></span><br><span class="line"><span class="number">0</span>a:<span class="number">0050</span>│  <span class="number">0x49ee10</span> ◂— <span class="number">0x734d6963</span> <span class="comment">/* &#x27;ciMs&#x27; */</span></span><br><span class="line">    </span><br><span class="line">pwndbg&gt; x/<span class="number">64</span>xb <span class="number">0x49edc0</span></span><br><span class="line"><span class="number">0x49edc0</span>:	<span class="number">0x47</span>	<span class="number">0x72</span>	<span class="number">0x61</span>	<span class="number">0x70</span>	<span class="number">0x68</span>	<span class="number">0x69</span>	<span class="number">0x63</span>	<span class="number">0x73</span></span><br><span class="line"><span class="number">0x49edc8</span>:	<span class="number">0x4d</span>	<span class="number">0x61</span>	<span class="number">0x67</span>	<span class="number">0x69</span>	<span class="number">0x63</span>	<span class="number">0x6b</span>	<span class="number">0x20</span>	<span class="number">0x31</span></span><br><span class="line"><span class="number">0x49edd0</span>:	<span class="number">0x2e</span>	<span class="number">0x32</span>	<span class="number">0x20</span>	<span class="number">0x75</span>	<span class="number">0x6e</span>	<span class="number">0x72</span>	<span class="number">0x65</span>	<span class="number">0x6c</span></span><br><span class="line"><span class="number">0x49edd8</span>:	<span class="number">0x65</span>	<span class="number">0x61</span>	<span class="number">0x73</span>	<span class="number">0x65</span>	<span class="number">0x64</span>	<span class="number">0x20</span>	<span class="number">0x51</span>	<span class="number">0x31</span></span><br><span class="line"><span class="number">0x49ede0</span>:	<span class="number">0x36</span>	<span class="number">0x20</span>	<span class="number">0x68</span>	<span class="number">0x74</span>	<span class="number">0x74</span>	<span class="number">0x70</span>	<span class="number">0x3a</span>	<span class="number">0x2f</span></span><br><span class="line"><span class="number">0x49ede8</span>:	<span class="number">0x2f</span>	<span class="number">0x77</span>	<span class="number">0x77</span>	<span class="number">0xcc</span>	<span class="number">0xcc</span>	<span class="number">0xcc</span>	<span class="number">0xcc</span>	<span class="number">0xcc</span></span><br><span class="line"><span class="number">0x49edf0</span>:	<span class="number">0xcc</span>	<span class="number">0xcc</span>	<span class="number">0xcc</span>	<span class="number">0xcc</span>	<span class="number">0xcc</span>	<span class="number">0xcc</span>	<span class="number">0xcc</span>	<span class="number">0xcc</span></span><br><span class="line"><span class="number">0x49edf8</span>:	<span class="number">0xcc</span>	<span class="number">0xcc</span>	<span class="number">0xcc</span>	<span class="number">0xcc</span>	<span class="number">0xcc</span>	<span class="number">0xcc</span>	<span class="number">0xcc</span>	<span class="number">0x77</span></span><br><span class="line"><span class="number">0x49ee00</span>:	[<span class="number">0x2e</span>]	[<span class="number">0x23</span>]	[<span class="number">0x29</span>]	<span class="number">0x00</span>	<span class="number">0x00</span>	<span class="number">0x00</span>	<span class="number">0x00</span>	<span class="number">0x00</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>目标 <code>fputs</code> 执行结果：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; c</span><br><span class="line">Continuing.</span><br><span class="line">  Tag <span class="number">7217</span>: GraphicsMagick <span class="number">1.2</span> unreleased Q16 http:<span class="comment">//ww��������������������w.#)</span></span><br><span class="line">  <span class="number">1</span> Strips:</span><br><span class="line">      <span class="number">0</span>: [       <span class="number">8</span>,     <span class="number">3020</span>]</span><br><span class="line">[Inferior <span class="number">1</span> (process <span class="number">4622</span>) exited normally]</span><br></pre></td></tr></table></figure>
+<ul>
+<li>注意 <code>0x49ee00</code> 处：<ul>
+<li><code>[0x2e]-&gt;[.]</code></li>
+<li><code>[0x23]-&gt;[#]</code></li>
+<li><code>[0x29]-&gt;[)]</code></li>
+</ul>
+</li>
+<li>这是 <code>0x29232e (tiffFields+2030)</code> 的后3字节，而 <code>fputs</code> 把它打印出来了（内存泄露）</li>
+</ul>
+<p>因为 <code>fputs</code> 遇到 <code>\x00</code> 才会停止，这就导致了内存泄露</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/fuzz/" rel="tag"><i class="fa fa-tag"></i> fuzz</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/08/16/Fuzz%20Lab3-TCPdump/" rel="prev" title="Fuzz Lab3-TCPdump">
+      <i class="fa fa-chevron-left"></i> Fuzz Lab3-TCPdump
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#Fuzz-Lab4%EF%BC%9ALibTIFF"><span class="nav-number">1.</span> <span class="nav-text">Fuzz-Lab4：LibTIFF</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Do-it-yourself"><span class="nav-number">2.</span> <span class="nav-text">Do it yourself!</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Download-and-build-your-target"><span class="nav-number">3.</span> <span class="nav-text">Download and build your target</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Code-coverage"><span class="nav-number">4.</span> <span class="nav-text">Code coverage</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Fuzz-LibTIFF"><span class="nav-number">5.</span> <span class="nav-text">Fuzz LibTIFF</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Triage"><span class="nav-number">6.</span> <span class="nav-text">Triage</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PoC-Code-coverage"><span class="nav-number">7.</span> <span class="nav-text">PoC Code coverage</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reproduce-the-crash"><span class="nav-number">8.</span> <span class="nav-text">Reproduce the crash</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">134</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">95</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.8m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">26:47</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
