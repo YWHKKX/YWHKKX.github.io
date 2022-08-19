@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="Linux 内核简述Linux 的内核虽然是基于单内核的，但是经过这么多年的发展，也具备微内核的一些特征（体现了 Linux 实用至上的原则） 主要有以下特征：  支持动态加载内核模块 支持对称多处理（SMP） 内核可以抢占（preemptive），允许内核运行的任务有优先执行的能力 不区分线程和进程  Linux 内核源码的结构    目录 说明     arch 特定体系结构的代码   blo">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Linux内核学习笔记（持续更新）">
+<meta property="og:url" content="http://example.com/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="Linux 内核简述Linux 的内核虽然是基于单内核的，但是经过这么多年的发展，也具备微内核的一些特征（体现了 Linux 实用至上的原则） 主要有以下特征：  支持动态加载内核模块 支持对称多处理（SMP） 内核可以抢占（preemptive），允许内核运行的任务有优先执行的能力 不区分线程和进程  Linux 内核源码的结构    目录 说明     arch 特定体系结构的代码   blo">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660827734080-1660902016579.png">
+<meta property="og:image" content="http://example.com/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660832270823-1660902016580.png">
+<meta property="og:image" content="http://example.com/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660832773428-1660902016580.png">
+<meta property="og:image" content="http://example.com/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660834074319-1660902016580.png">
+<meta property="og:image" content="http://example.com/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660834323260-1660902016580.png">
+<meta property="og:image" content="http://example.com/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660836387459-1660902016580.png">
+<meta property="og:image" content="http://example.com/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1655523602992-1660902016580.png">
+<meta property="og:image" content="http://example.com/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660878766425.png">
+<meta property="og:image" content="http://example.com/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660879056533.png">
+<meta property="og:image" content="http://example.com/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660882969270.png">
+<meta property="og:image" content="http://example.com/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660900515527.png">
+<meta property="article:published_time" content="2022-08-18T15:38:46.000Z">
+<meta property="article:modified_time" content="2022-08-19T09:40:17.238Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="kernel">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660827734080-1660902016579.png">
+
+<link rel="canonical" href="http://example.com/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>Linux内核学习笔记（持续更新） | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Linux内核学习笔记（持续更新）
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-08-18 23:38:46" itemprop="dateCreated datePublished" datetime="2022-08-18T23:38:46+08:00">2022-08-18</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-08-19 17:40:17" itemprop="dateModified" datetime="2022-08-19T17:40:17+08:00">2022-08-19</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>13k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>12 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="Linux-内核简述"><a href="#Linux-内核简述" class="headerlink" title="Linux 内核简述"></a>Linux 内核简述</h2><p>Linux 的内核虽然是基于单内核的，但是经过这么多年的发展，也具备微内核的一些特征（体现了 Linux 实用至上的原则）</p>
+<p>主要有以下特征：</p>
+<ul>
+<li>支持动态加载内核模块</li>
+<li>支持对称多处理（SMP）</li>
+<li>内核可以抢占（preemptive），允许内核运行的任务有优先执行的能力</li>
+<li>不区分线程和进程</li>
+</ul>
+<h2 id="Linux-内核源码的结构"><a href="#Linux-内核源码的结构" class="headerlink" title="Linux 内核源码的结构"></a>Linux 内核源码的结构</h2><div class="table-container">
+<table>
+<thead>
+<tr>
+<th><strong>目录</strong></th>
+<th><strong>说明</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>arch</td>
+<td>特定体系结构的代码</td>
+</tr>
+<tr>
+<td>block</td>
+<td>块设备I/O层</td>
+</tr>
+<tr>
+<td>crypo</td>
+<td>加密API</td>
+</tr>
+<tr>
+<td>Documentation</td>
+<td>内核源码文档</td>
+</tr>
+<tr>
+<td>drivers</td>
+<td>设备驱动程序</td>
+</tr>
+<tr>
+<td>firmware</td>
+<td>使用某些驱动程序而需要的设备固件</td>
+</tr>
+<tr>
+<td>fs</td>
+<td>VFS和各种文件系统</td>
+</tr>
+<tr>
+<td>include</td>
+<td>内核头文件</td>
+</tr>
+<tr>
+<td>init</td>
+<td>内核引导和初始化</td>
+</tr>
+<tr>
+<td>ipc</td>
+<td>进程间通信代码</td>
+</tr>
+<tr>
+<td>kernel</td>
+<td>像调度程序这样的核心子系统</td>
+</tr>
+<tr>
+<td>lib</td>
+<td>同样内核函数</td>
+</tr>
+<tr>
+<td>mm</td>
+<td>内存管理子系统和VM</td>
+</tr>
+<tr>
+<td>net</td>
+<td>网络子系统</td>
+</tr>
+<tr>
+<td>samples</td>
+<td>示例，示范代码</td>
+</tr>
+<tr>
+<td>scripts</td>
+<td>编译内核所用的脚本</td>
+</tr>
+<tr>
+<td>security</td>
+<td>Linux 安全模块</td>
+</tr>
+<tr>
+<td>sound</td>
+<td>语音子系统</td>
+</tr>
+<tr>
+<td>usr</td>
+<td>早期用户空间代码（所谓的initramfs）</td>
+</tr>
+<tr>
+<td>tools</td>
+<td>在Linux开发中有用的工具</td>
+</tr>
+<tr>
+<td>virt</td>
+<td>虚拟化基础结构</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="进程和线程"><a href="#进程和线程" class="headerlink" title="进程和线程"></a>进程和线程</h2><p>进程和线程是程序运行时状态，是动态变化的，进程和线程的管理操作（比如，创建，销毁等）都是有内核来实现的</p>
+<p>Windows：开启的一个程序就是一个线程，它只是一个容器，用于装载系统资源，它并不执行代码，它是系统资源分配的最小单元，而在进程中执行代码的是线程，是代码执行的最小单位</p>
+<p>Linux：Linux 中的进程于 Windows 相比是很轻量级的，而且不严格区分进程和线程，Linux 的进程就是 Windows 中的线程，线程就是轻量级的进程</p>
+<p><strong>Linux 进程的创建</strong></p>
+<p>Linux 中创建进程与其他系统有个主要区别，Linux 中创建进程分2步：fork() 和 exec() </p>
+<ul>
+<li>fork：通过拷贝当前进程创建一个子进程</li>
+<li>exec：读取可执行文件，将其载入到内存中运行</li>
+</ul>
+<p>创建的流程： </p>
+<ul>
+<li>fork() 的底层是 _do_fork()，在其中会调用 copy_process()</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">p = copy_process(clone_flags, stack_start, stack_size,</span><br><span class="line">		 child_tidptr, <span class="literal">NULL</span>, trace, tls, NUMA_NO_NODE); <span class="comment">/* task_struct *p */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>调用 dup_task_struct() 为新进程分配内核栈，task_struct 等，其中的内容与父进程相同</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">p = dup_task_struct(current, node); <span class="comment">/* task_struct *p */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>check 新进程（进程数目是否超出上限等）</li>
+<li>清理新进程的信息（比如 PID 置0等），使之与父进程区别开</li>
+<li>新进程状态置为 TASK_UNINTERRUPTIBLE</li>
+<li>更新 task_struct 的 flags 成员</li>
+<li>执行调度程序相关设置，将此任务分配给 CPU，然后调用 copy 系列函数复制所有进程信息</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line">shm_init_task(p);</span><br><span class="line">retval = security_task_alloc(p, clone_flags);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_audit;</span><br><span class="line">retval = copy_semundo(clone_flags, p);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_security;</span><br><span class="line">retval = copy_files(clone_flags, p);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_semundo;</span><br><span class="line">retval = copy_fs(clone_flags, p);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_files;</span><br><span class="line">retval = copy_sighand(clone_flags, p);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_fs;</span><br><span class="line">retval = copy_signal(clone_flags, p);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_sighand;</span><br><span class="line">retval = copy_mm(clone_flags, p);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_signal;</span><br><span class="line">retval = copy_namespaces(clone_flags, p);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_mm;</span><br><span class="line">retval = copy_io(clone_flags, p);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_namespaces;</span><br><span class="line">retval = copy_thread_tls(clone_flags, stack_start, stack_size, p, tls);</span><br><span class="line"><span class="keyword">if</span> (retval)</span><br><span class="line">	<span class="keyword">goto</span> bad_fork_cleanup_io;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>调用 alloc_pid() 为新进程分配一个有效的PID（copy_process() 返回）</li>
+<li>根据 clone() 的参数标志 clone_flags，拷贝或共享相应的信息</li>
+<li>做一些扫尾工作并返回新进程指针</li>
+</ul>
+<p>用户态创建进程的 fork() 函数实际上最终是调用 clone() 系统调用，创建线程和进程的步骤一样，只是最终传给 clone() 的参数不同</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7ffff7ea1f3d</span> &lt;fork+<span class="number">77</span>&gt;    syscall  &lt;SYS_clone&gt;</span><br><span class="line">       fn: <span class="number">0x1200011</span></span><br><span class="line">       child_stack: <span class="number">0x0</span></span><br><span class="line">       flags: <span class="number">0x0</span></span><br><span class="line">       arg: <span class="number">0x7ffff7fb2810</span> ◂— <span class="number">0x0</span></span><br><span class="line">       vararg: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<p>在内核中创建的内核线程与普通的进程之间还有个主要区别在于：</p>
+<ul>
+<li>内核线程没有独立的地址空间，它们只能在内核空间运行</li>
+<li>这与之前提到的 Linux 内核是个单内核有关</li>
+</ul>
+<p><strong>Linux 进程的终止</strong></p>
+<p>和创建进程一样，终结一个进程同样有很多步骤：</p>
+<p>子进程上的操作：（do_exit）</p>
+<ul>
+<li>设置 task_struct 中的标识成员设置为 PF_EXITING</li>
+<li>调用 del_timer_sync() 删除内核定时器, 确保没有定时器在排队和运行</li>
+<li>调用 exit_mm() 释放进程占用的 mm_struct</li>
+<li>调用 sem__exit() ，使进程离开等待 IPC 信号的队列</li>
+<li>调用 exit_files() 和 exit_fs()，释放进程占用的文件描述符和文件系统资源</li>
+<li>把 task_struct 的 exit_code 设置为进程的返回值</li>
+<li>调用 exit_notify() 向父进程发送信号，并把自己的状态设为 EXIT_ZOMBIE</li>
+<li>切换到新进程继续执行</li>
+</ul>
+<p>子进程进入 EXIT_ZOMBIE 之后，虽然永远不会被调度，关联的资源也释放掉了，但是它本身占用的内存还没有释放（比如：创建时分配的内核栈，task_struct 结构等），这些由父进程来释放</p>
+<p>父进程上的操作：（release_task）</p>
+<ul>
+<li>父进程受到子进程发送的 exit_notify() 信号后，将该子进程的进程描述符和所有进程独享的资源全部删除</li>
+</ul>
+<p>从上面的步骤可以看出，必须要确保每个子进程都有父进程，如果父进程在子进程结束之前就已经结束了会怎么样呢？</p>
+<ul>
+<li>子进程在调用 exit_notify() 时已经考虑到了这点</li>
+<li>如果子进程的父进程已经退出了，那么子进程在退出时，exit_notify() 函数会先调用 forget_original_parent() ，然后再调用 find_new_reaper() 来寻找新的父进程</li>
+<li>find_new_reaper() 函数先在当前线程组中找一个线程作为父亲，如果找不到，就让 init 做父进程（init 进程是在 linux 启动时就一直存在的）</li>
+</ul>
+<h2 id="进程的调度"><a href="#进程的调度" class="headerlink" title="进程的调度"></a>进程的调度</h2><p>现在的操作系统都是多任务的，为了能让更多的任务能同时在系统上更好的运行，需要一个管理程序来管理计算机上同时运行的各个任务（也就是进程）</p>
+<p>这个管理程序就是调度程序，它的功能说起来很简单：</p>
+<ul>
+<li>决定哪些进程运行，哪些进程等待</li>
+<li>决定每个进程运行多长时间</li>
+</ul>
+<p>此外，为了获得更好的用户体验，运行中的进程还可以立即被其他更紧急的进程打断</p>
+<p>总之，调度是一个平衡的过程：</p>
+<ul>
+<li>一方面，它要保证各个运行的进程能够最大限度的使用CPU（即尽量少的切换进程，进程切换过多，CPU的时间会浪费在切换上）</li>
+<li>另一方面，保证各个进程能公平的使用CPU（即防止一个进程长时间独占CPU的情况）</li>
+</ul>
+<p><strong>完全公平调度器 CFS</strong></p>
+<p>前面说过，调度功能就是决定哪个进程运行以及进程运行多长时间</p>
+<p>进程的优先级有2种度量方法，一种是 nice 值，一种是实时优先级：（实时优先级 &gt; nice 值）</p>
+<ul>
+<li>nice 值的范围是 -20～19，值越大优先级越低，也就是说 nice 值为 -20 的进程优先级最大</li>
+<li>实时优先级的范围是 0～99，与 nice 值的定义相反，实时优先级是值越大优先级越高</li>
+</ul>
+<p>实时进程都是一些对响应时间要求比较高的进程，因此系统中有实时优先级高的进程处于运行队列的话，它们会抢占一般的进程的运行时间</p>
+<p>介绍下 CFS：</p>
+<ul>
+<li>CFS 使用红黑树结构，来存储要调度的任务队列</li>
+<li>每个节点代表了一个要调度的任务，节点的 key 即为虚拟时间（vruntime），虚拟时间由这个人物的运行时间计算而来</li>
+<li>key 越小，也就是 vruntime 越小的话，红黑树对应的节点就越靠左</li>
+<li>CFS scheduler 每次都挑选最左边的节点作为下一个要运行的任务，这个节点是“缓存的”，由一个特殊的指针指向，不需要进行 <code>O(logn)</code> 遍历来查找，也因此，CFS 搜索的时间是 <code>O(1)</code></li>
+</ul>
+<p>vruntime(key) 的计算公式：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">vruntime += 实际运行时间(time process run) * <span class="number">1024</span> / 进程权重(load weight of <span class="keyword">this</span> process)</span><br></pre></td></tr></table></figure>
+<ul>
+<li>实际运行时间：该程序已经运行了多久 </li>
+<li>进程权重：根据任务的 nice 值进行索引</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">const</span> <span class="keyword">int</span> prio_to_weight[<span class="number">40</span>] = &#123;</span><br><span class="line"> <span class="comment">/* -20 */</span>     <span class="number">88761</span>,     <span class="number">71755</span>,     <span class="number">56483</span>,     <span class="number">46273</span>,     <span class="number">36291</span>,</span><br><span class="line"> <span class="comment">/* -15 */</span>     <span class="number">29154</span>,     <span class="number">23254</span>,     <span class="number">18705</span>,     <span class="number">14949</span>,     <span class="number">11916</span>,</span><br><span class="line"> <span class="comment">/* -10 */</span>      <span class="number">9548</span>,      <span class="number">7620</span>,      <span class="number">6100</span>,      <span class="number">4904</span>,      <span class="number">3906</span>,</span><br><span class="line"> <span class="comment">/*  -5 */</span>      <span class="number">3121</span>,      <span class="number">2501</span>,      <span class="number">1991</span>,      <span class="number">1586</span>,      <span class="number">1277</span>,</span><br><span class="line"> <span class="comment">/*   0 */</span>      <span class="number">1024</span>,       <span class="number">820</span>,       <span class="number">655</span>,       <span class="number">526</span>,       <span class="number">423</span>,</span><br><span class="line"> <span class="comment">/*   5 */</span>       <span class="number">335</span>,       <span class="number">272</span>,       <span class="number">215</span>,       <span class="number">172</span>,       <span class="number">137</span>,</span><br><span class="line"> <span class="comment">/*  10 */</span>       <span class="number">110</span>,        <span class="number">87</span>,        <span class="number">70</span>,        <span class="number">56</span>,        <span class="number">45</span>,</span><br><span class="line"> <span class="comment">/*  15 */</span>        <span class="number">36</span>,        <span class="number">29</span>,        <span class="number">23</span>,        <span class="number">18</span>,        <span class="number">15</span>,</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>相当于 nice 和 weight 是等价的，但是不同 nice 值的任务权重差别变大了</li>
+</ul>
+<p>例子：现在我们有一个刚来的进程 [time=0，nice=0，priority=1024]：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">vruntime += <span class="number">0</span> * <span class="number">1024</span> / <span class="number">1024</span> = <span class="number">10</span> <span class="comment">/* vruntime有一个最小值min_vruntime */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>vruntime 并不是无限小的，有一个最小值来限定 min_vruntime </li>
+<li>假如新进程的 vruntime 初值为0的话，比老进程的值小很多，那么它在相当长的时间内都会保持抢占CPU的优势，老进程就要饿死了，这显然是不公平的</li>
+</ul>
+<p>CFS 是这样做的：每个CPU的运行队列 cfs_rq 都维护一个 min_vruntime 字段，记录该运行队列中所有进程的 vruntime 最小值，新进程的初始 vruntime 值就以它所在运行队列的 min_vruntime 为基础来设置，与老进程保持在合理的差距范围内</p>
+<p>对于新任务来说，vruntime = 0（任务：用于完成某个操作的一组 [进程,线程]，用 <code>task_struct</code> 结构体来描述）</p>
+<p><strong>关于时间片</strong></p>
+<p>决定哪个进程运行以及运行多长时间都和进程的优先级有关，但是对于调度程序来说，并不是运行一次就结束了，还必须知道间隔多久进行下次调度</p>
+<p>为了确定一个进程到底能持续运行多长时间，调度中还引入了时间片的概念，也可以认为是进程在下次调度发生前运行的时间（除非进程主动放弃CPU，或者有实时进程来抢占CPU）</p>
+<p>时间片的大小设置并不简单：</p>
+<ul>
+<li>设大了，系统响应变慢（调度周期长）</li>
+<li>设小了，进程频繁切换带来的处理器消耗</li>
+<li>默认的时间片一般是10ms</li>
+</ul>
+<p><strong>调度策略</strong></p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>策略</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SCHED_NORMAL</td>
+<td>普通的分时进程，使用的 fair_sched_class 调度类</td>
+</tr>
+<tr>
+<td>SCHED_FIFO</td>
+<td>先进先出的实时进程，当调用程序把CPU分配给进程的时候，它把该进程描述符保留在运行队列链表的当前位置，此调度策略的进程一旦使用CPU则一直运行，如果没有其他可运行的更高优先级实时进程，进程就继续使用CPU，想用多久就用多久，即使还有其他具有相同优先级的实时进程处于可运行状态，使用的是 rt_sched_class 调度类</td>
+</tr>
+<tr>
+<td>SCHED_RR</td>
+<td>时间片轮转的实时进程，当调度程序把CPU分配给进程的时候，它把该进程的描述符放在运行队列链表的末尾，这种策略保证对所有具有相同优先级的 SCHED_RR 实时进程进行公平分配CPU时间，使用的 rt_sched_class 调度类</td>
+</tr>
+<tr>
+<td>SCHED_BATCH</td>
+<td>是 SCHED_NORMAL 的分化版本，采用分时策略，根据动态优先级，分配CPU资源，在有实时进程的时候，实时进程优先调度，但针对吞吐量优化，除了不能抢占外与常规进程一样，允许任务运行更长时间，更好使用高速缓存，适合于成批处理的工作，使用的 fair_shed_class 调度类</td>
+</tr>
+<tr>
+<td>SCHED_IDLE</td>
+<td>优先级最低，在系统空闲时运行，使用的是 idle_sched_class 调度类，给0号进程使用</td>
+</tr>
+<tr>
+<td>SCHED_DEADLINE</td>
+<td>新支持的实时进程调度策略，针对突发型计算，并且对延迟和完成时间敏感的任务使用，基于 EDF（earliest deadline first），使用的是 dl_sched_class 调度类</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="系统调用"><a href="#系统调用" class="headerlink" title="系统调用"></a>系统调用</h2><p>简单来说，系统调用就是用户程序和硬件设备之间的桥梁，用户程序在需要的时候，通过系统调用来使用硬件设备</p>
+<p>系统调用的存在，有以下重要的意义：</p>
+<ul>
+<li>用户程序通过系统调用来使用硬件，而不用关心具体的硬件设备，这样大大简化了用户程序的开发 </li>
+<li>系统调用使得用户程序有更好的可移植性</li>
+<li>系统调用使得内核能更好的管理用户程序，增强了系统的稳定性 </li>
+<li>系统调用有效的分离了用户程序和内核的开发</li>
+</ul>
+<p>用户程序，系统调用，内核，硬件设备的调用关系如下图： </p>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660827734080-1660902016579.png" class width="1660827734080"> 
+<p>要想实现系统调用，主要实现以下几个方面：</p>
+<ul>
+<li>通知内核调用一个哪个系统调用（系统调用号）</li>
+<li>用户程序把系统调用的参数传递给内核（前5个参数放在 [ebx,ecx,edx,esi,edi] 中，如果参数多的话，还需要用个单独的寄存器存放指向所有参数在用户空间地址的指针）</li>
+<li>用户程序获取内核返回的系统调用返回值（获取系统调用的返回值也是通过寄存器，在x86系统上，返回值放在 [eax] 中）</li>
+</ul>
+<h2 id="内核数据结构"><a href="#内核数据结构" class="headerlink" title="内核数据结构"></a>内核数据结构</h2><p>Linux 中4个基本的内核数据结构：链表，队列，映射，红黑树</p>
+<p><strong>链表</strong></p>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660832270823-1660902016580.png" class width="1660832270823"> 
+<ul>
+<li>有个单独的头结点（head）</li>
+<li>每个节点（node）除了包含必要的数据之外，还有2个指针（pre,next）</li>
+<li>pre 指针指向前一个节点（node），next 指针指向后一个节点（node）</li>
+<li>头结点（head）的 pre 指针指向链表的最后一个节点</li>
+<li>最后一个节点的next指针指向头结点（head）</li>
+</ul>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660832773428-1660902016580.png" class width="1660832773428"> 
+<ul>
+<li>其实就是把数据放在前面了而已</li>
+</ul>
+<p><strong>队列</strong></p>
+<p>内核中的队列是以字节形式保存数据的，所以获取数据的时候，需要知道数据的大小，如果从队列中取得数据时指定的大小不对的话，取得数据会不完整或过大</p>
+<ul>
+<li>队列是限制在两端进行插入操作和删除操作的线性表，允许进行存入操作的一端称为“队尾”，允许进行删除操作的一端称为“队头”</li>
+<li>当线性表中没有元素时，称为“空队”</li>
+<li>特点：先进先出（FIFO）</li>
+</ul>
+<p>顺序队列：</p>
+<p>建立顺序队列结构必须为其静态分配或动态申请一片连续的存储空间，并设置两个指针进行管理：</p>
+<ul>
+<li>一个是队头指针 front，它指向队头元素</li>
+<li>另一个是队尾指针 rear，它指向下一个入队元素的存储位置 </li>
+</ul>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660834074319-1660902016580.png" class width="1660834074319"> 
+<p>链式队列：</p>
+<p>一个链队列显然需要两个分别指示队头和队尾的指针（分别成为头指针和尾指针）才能唯一确定：</p>
+<ul>
+<li>这里，和线性表的单链表一样，为了操作方便起见，我们也给队列添加一个头结点，并令头指针指向头节点</li>
+<li>由此，空的链队列的判决条件为头指针和尾指针均指向头结点</li>
+</ul>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660834323260-1660902016580.png" class width="1660834323260"> 
+<p><strong>映射</strong></p>
+<p>映射（也称为关联数组）是实现（key，value）绑定的一种数据结构（有点像其他语言中的字典类型），每个唯一的ID对应一个自定义的数据结构</p>
+<p>在 Linux 中的使用案例就是：整数ID管理机制（IDR）</p>
+<ul>
+<li>IDR 是用于将 uid 和一个数据地址进行绑定的一种映射</li>
+<li>IDR 把每一个ID分级数据进行管理，每一级维护着ID的5位数据，这样就可以把IDR分为7级进行管理</li>
+<li>IDR 底层使用了 redix 树 </li>
+</ul>
+<p>IDR 怎么对于数据ID管理呢？传统上我们对于未使用的ID进行管理的时候可以使用位图进行管理，也可以使用数组进行管理，也可以使用链表进行ID管理，三个个各有优缺点：</p>
+<ul>
+<li>使用位图进行管理：使用空间少，但是对于位图对应的数据结构支持不太友好</li>
+<li>使用数组进行管理：寻址快速，但是只能管理比较少量的ID数目</li>
+<li>使用链表进行管理：可以支持大量的数据ID，但是通过链表的指针寻址比较慢</li>
+</ul>
+<p>而 IDR 管理可以集合以上3者的优点</p>
+<p>IDR 中有两个数据结构：idr 和 idr_layer </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">idr</span> &#123;</span>                    </span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">idr_layer</span> __<span class="title">rcu</span>    *<span class="title">hint</span>;</span>      <span class="comment">/* 最近一个存储指针数据的的idr_layer结构  */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">idr_layer</span> __<span class="title">rcu</span>    *<span class="title">top</span>;</span>       <span class="comment">/* idr的顶层(根节点) */</span></span><br><span class="line">    <span class="keyword">int</span>            layers;                <span class="comment">/* idr树中的idr_layer层数量 */</span></span><br><span class="line">    <span class="keyword">int</span>            cur;                   <span class="comment">/* current pos for cyclic allocation */</span></span><br><span class="line">    <span class="keyword">spinlock_t</span>        lock;                </span><br><span class="line">    <span class="keyword">int</span>            id_free_cnt;			<span class="comment">/* idr_layer空闲链表中剩余的idr_layer个数 */</span>            </span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">idr_layer</span>    *<span class="title">id_free</span>;</span>		<span class="comment">/* 指向idr_layer的空闲链表 */</span>        </span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>struct idr 类似于 list_head，用于管理 IDR 整个树的信息</li>
+<li>其中最关键的是 top，它指向了根节点的 idr_layer</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">idr_layer</span> &#123;</span></span><br><span class="line">	<span class="keyword">int</span>			prefix;                        <span class="comment">/* the ID prefix of this idr_layer */</span></span><br><span class="line">	<span class="keyword">int</span>			layer;                        <span class="comment">/* 第几层 distance from leaf */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">idr_layer</span> __<span class="title">rcu</span>	*<span class="title">ary</span>[1&lt;</span>&lt;IDR_BITS]; <span class="comment">/* IDR_BITS = 8 该层有256个指针,指向256个idr_layer */</span></span><br><span class="line">	<span class="keyword">int</span>			count;                        <span class="comment">/* ary数组使用计数 */</span></span><br><span class="line">	<span class="class"><span class="keyword">union</span> &#123;</span></span><br><span class="line">		DECLARE_BITMAP(bitmap, IDR_SIZE);	  <span class="comment">/* 槽位图 */</span>		</span><br><span class="line">		<span class="class"><span class="keyword">struct</span> <span class="title">rcu_head</span>		<span class="title">rcu_head</span>;</span></span><br><span class="line">	&#125;;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>如图：</p>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660836387459-1660902016580.png" class width="1660836387459"> 
+<p>参考：<a target="_blank" rel="noopener" href="https://cloud.tencent.com/developer/article/1432802">linux内核IDR机制详解</a> </p>
+<p><strong>红黑树</strong></p>
+<p>红黑树是对概念模型2-3-4树的一种实现，由于直接进行不同节点间的转化会造成较大的开销，所以选择以二叉树为基础，在二叉树的属性中加入一个 <strong>颜色属性</strong> 来表示2-3-4树中不同的节点</p>
+<p>红黑规则：</p>
+<ul>
+<li>节点不是黑色，就是红色（非黑即红）</li>
+<li>根节点为黑色，叶节点为黑色（叶节点是指末梢的空节点 <code>Nil</code>或<code>Null</code>）</li>
+<li>一个节点为红色，则其两个子节点必须是黑色的（根到叶子的所有路径，不可能存在两个连续的红色节点）</li>
+<li>每个节点到叶子节点的所有路径，都包含相同数目的黑色节点（相同的黑色高度）</li>
+</ul>
+<p>在插链的过程中，可能会破坏这些规则，这就需要一些机制来恢复平衡：</p>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1655523602992-1660902016580.png" class width="1655523602992"> 
+<h2 id="中断处理"><a href="#中断处理" class="headerlink" title="中断处理"></a>中断处理</h2><p>为了提高CPU和外围硬件（硬盘，键盘，鼠标等等）之间协同工作的性能，引入了中断的机制，中断机制是硬件在需要的时候向CPU发出信号，CPU暂时停止正在进行的工作，来处理硬件请求的一种机制</p>
+<ul>
+<li>异步中断（一般由硬件引起）：CPU 处理中断的时间过长，所以先将硬件复位，使硬件可以继续自己的工作，然后在适当时候处理中断请求中耗时的部分</li>
+<li>同步中断：CPU 处理完中断请求的所有工作后才反馈硬件 </li>
+</ul>
+<p>为了在中断执行时间尽可能短和中断处理需完成大量工作之间找到一个平衡点，Linux 将中断处理程序分解为两个半部：顶半部（top half）和底半部（bottom half）：</p>
+<ul>
+<li>顶半部完成尽可能少的比较紧急的功能，它往往只是 <strong>简单地读取寄存器中的中断状态并清除中断标志后就进行“登记中断”的工作</strong>（“登记中断”：将底半部处理程序挂到该设备的执行队列中去），这样，顶半部执行的速度就会很快，可以服务更多的中断请求</li>
+<li>现在，中断处理工作的重心就落在了底半部的头上，<strong>底半部负责执行中断处理程序</strong>，它来完成中断事件的绝大多数任务，而且可以被新的中断打断</li>
+<li>顶半部往往被设计成不可中断，底半部则相对来说并不是非常紧急的，而且相对比较耗时，不在硬件中断服务程序中执行，所以可以打断</li>
+</ul>
+<p>简单来说就是：</p>
+<ul>
+<li>顶半部：登记中断，把底半部处理程序挂到该设备的执行队列中，不可中断</li>
+<li>底半部：负责中断处理程序的具体实现，可中断</li>
+</ul>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660878766425.png" class width="1660878766425"> 
+<p>实现底半部的方法很多，目前使用最多的是以下3中方法：</p>
+<ul>
+<li>软中断</li>
+<li>tasklet</li>
+<li>工作队列</li>
+</ul>
+<p><strong>软中断</strong></p>
+<p>软中断的流程如下： </p>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660879056533.png" class width="1660879056533"> 
+<p>注册软中断的函数 open_softirq：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">open_softirq</span><span class="params">(<span class="keyword">int</span> nr, <span class="keyword">void</span> (*action)(struct softirq_action *))</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    softirq_vec[nr].action = action; <span class="comment">/* softirq_vec是个struct softirq_action类型的数组 */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><p>将软中断类型和软中断处理函数加入到软中断序列中：</p>
+<ul>
+<li><p>@nr - 软中断类型</p>
+<ul>
+<li>@(<em>action)(struct softirq_action </em>) - 软中断处理的函数指针</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>结构体 softirq_action 如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">softirq_action</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">    <span class="keyword">void</span>    (*action)(struct softirq_action *);</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这个结构体的字段是个函数指针，字段名称是 action</li>
+<li>函数指针的参数是 struct softirq_action 的地址，其实就是指向 softirq_vec 中的某一项：<ul>
+<li>如果 open_softirq 是这样调用的：<code>open_softirq(NET_TX_SOFTIRQ, my_tx_action)</code></li>
+<li>那么 my_tx_action 的参数就是：<code>softirq_vec[NET_TX_SOFTIRQ]</code> 的地址</li>
+</ul>
+</li>
+</ul>
+<p>触发软中断的函数 raise_softirq：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">raise_softirq</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> nr)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> flags;</span><br><span class="line"></span><br><span class="line">    local_irq_save(flags); <span class="comment">/* 保存寄存器 */</span></span><br><span class="line">    raise_softirq_irqoff(nr); <span class="comment">/* 触发软中断 */</span></span><br><span class="line">    local_irq_restore(flags); <span class="comment">/* 恢复寄存器 */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>触发某个中断类型的软中断：<ul>
+<li>@nr - 被触发的中断类型</li>
+</ul>
+</li>
+</ul>
+<p>执行软中断的函数 do_softirq：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">asmlinkage <span class="keyword">void</span> <span class="title">do_softirq</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    __u32 pending;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> flags;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 判断是否在中断处理中，如果正在中断处理，就直接返回 */</span></span><br><span class="line">    <span class="keyword">if</span> (in_interrupt())</span><br><span class="line">        <span class="keyword">return</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 保存当前寄存器的值 */</span></span><br><span class="line">    local_irq_save(flags);</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 取得当前已注册软中断的位图 */</span></span><br><span class="line">    pending = local_softirq_pending();</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 循环处理所有已注册的软中断 */</span></span><br><span class="line">    <span class="keyword">if</span> (pending)</span><br><span class="line">        __do_softirq();</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 恢复寄存器的值到中断处理前 */</span></span><br><span class="line">    local_irq_restore(flags);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>tasklet</strong></p>
+<p>tasklet 也是利用软中断来实现的，但是它提供了比软中断更好用的接口（其实就是基于软中断又封装了一下）</p>
+<ul>
+<li>所以除了对性能要求特别高的情况，一般建议使用 tasklet 来实现自己的中断</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">tasklet_struct</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">tasklet_struct</span> *<span class="title">next</span>;</span> <span class="comment">/* 链表中的下一个tasklet */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> state;         <span class="comment">/* tasklet状态 */</span></span><br><span class="line">    <span class="keyword">atomic_t</span> count;              <span class="comment">/* 引用计数器 */</span></span><br><span class="line">    <span class="keyword">void</span> (*func)(<span class="keyword">unsigned</span> <span class="keyword">long</span>); <span class="comment">/* tasklet处理函数 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> data;          <span class="comment">/* tasklet处理函数的参数 */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p><strong>工作队列</strong></p>
+<p>工作队列子系统是一个 <strong>用于创建内核线程的接口</strong> ，通过它可以创建一个 [工作者线程] 来专门处理中断的下半部工作</p>
+<ul>
+<li>工作队列和 tasklet 不一样，不是基于软中断来实现的</li>
+</ul>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660882969270.png" class width="1660882969270"> 
+<p>工作队列主要用到下面3个结构体，弄懂了这3个结构体的关系，也就知道工作队列的处理流程了：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* 在include/linux/workqueue.h文件中定义 */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">work_struct</span> &#123;</span></span><br><span class="line">    <span class="keyword">atomic_long_t</span> data;             <span class="comment">/* 这个并不是处理函数的参数,而是表示此work是否pending等状态的flag */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> WORK_STRUCT_PENDING 0        <span class="comment">/* T if work item pending execution */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> WORK_STRUCT_FLAG_MASK (3UL)</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> WORK_STRUCT_WQ_DATA_MASK (~WORK_STRUCT_FLAG_MASK)</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">entry</span>;</span>         <span class="comment">/* 中断下半部处理函数的链表 */</span></span><br><span class="line">    <span class="keyword">work_func_t</span> func;               <span class="comment">/* 处理中断下半部工作的函数 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_LOCKDEP</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">lockdep_map</span> <span class="title">lockdep_map</span>;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="comment">/* 在kernel/workqueue.c文件中定义</span></span><br><span class="line"><span class="comment"> * 每个工作者线程对应一个cpu_workqueue_struct,其中包含要处理的工作的链表</span></span><br><span class="line"><span class="comment"> * (即work_struct的链表,当此链表不空时,唤醒工作者线程来进行处理)</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">cpu_workqueue_struct</span> &#123;</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">spinlock_t</span> lock;                   <span class="comment">/* 锁保护这种结构 */</span></span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">worklist</span>;</span>         <span class="comment">/* 工作队列头节点 */</span></span><br><span class="line">    <span class="keyword">wait_queue_head_t</span> more_work;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">work_struct</span> *<span class="title">current_work</span>;</span></span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">workqueue_struct</span> *<span class="title">wq</span>;</span>       <span class="comment">/* 关联工作队列结构 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> *<span class="title">thread</span>;</span>        <span class="comment">/* 关联线程 */</span></span><br><span class="line">&#125; ____cacheline_aligned;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="comment">/* 也是在kernel/workqueue.c文件中定义的</span></span><br><span class="line"><span class="comment"> * 每个workqueue_struct表示一种工作者类型,系统默认的就是events工作者类型</span></span><br><span class="line"><span class="comment"> * 每个工作者类型一般对应n个工作者线程,n就是处理器的个数</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">workqueue_struct</span> &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">cpu_workqueue_struct</span> *<span class="title">cpu_wq</span>;</span>  <span class="comment">/* 工作者线程 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">list</span>;</span></span><br><span class="line">    <span class="keyword">const</span> <span class="keyword">char</span> *name;</span><br><span class="line">    <span class="keyword">int</span> singlethread;</span><br><span class="line">    <span class="keyword">int</span> freezeable;        <span class="comment">/* Freeze threads during suspend */</span></span><br><span class="line">    <span class="keyword">int</span> rt;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_LOCKDEP</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">lockdep_map</span> <span class="title">lockdep_map</span>;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<h2 id="内核同步"><a href="#内核同步" class="headerlink" title="内核同步"></a>内核同步</h2><p>存在共享资源（共享一个文件，一块内存等等）的时候，为了防止并发访问时共享资源的数据不一致，引入了同步机制</p>
+<p>所谓同步，其实防止在临界区中形成竞争条件：</p>
+<ul>
+<li>临界区 - 也称为临界段，就是访问和操作共享数据的代码段</li>
+<li>竞争条件 - 2个或2个以上线程在临界区里同时执行的时候，就构成了竞争条件</li>
+</ul>
+<p>内核同步常见方法如下：</p>
+<p><strong>原子操作</strong></p>
+<p>原子操作是由编译器来保证的，保证一个线程对数据的操作不会被其他线程打断</p>
+<ul>
+<li>所谓原子操作是指不会被线程调度机制打断的操作，这种操作一旦开始，就一直运行到结束，中间不会有任何 context switch</li>
+</ul>
+<p><strong>加锁</strong></p>
+<p>为了给临界区加锁，保证临界区数据的同步，首先了解一下内核中哪些情况下会产生并发 </p>
+<p>内核中造成竞争条件的原因：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th><strong>竞争原因</strong></th>
+<th><strong>说明</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>中断</td>
+<td>中断随时会发生，也就会随时打断当前执行的代码，如果中断和被打断的代码在相同的临界区，就产生了竞争条件</td>
+</tr>
+<tr>
+<td>软中断和tasklet</td>
+<td>软中断和 tasklet 也会随时被内核唤醒执行，也会像中断一样打断正在执行的代码</td>
+</tr>
+<tr>
+<td>内核抢占</td>
+<td>内核具有抢占性，发生抢占时，如果抢占的线程和被抢占的线程在相同的临界区，就产生了竞争条件</td>
+</tr>
+<tr>
+<td>睡眠及用户空间的同步</td>
+<td>用户进程睡眠后，调度程序会唤醒一个新的用户进程，新的用户进程和睡眠的进程可能在同一个临界区中</td>
+</tr>
+<tr>
+<td>对称多处理</td>
+<td>2个或多个处理器可以同时执行相同的代码</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>常见的锁有以下几类：</p>
+<ul>
+<li>自旋锁：当一个线程获取了锁之后，其他试图获取这个锁的线程一直在循环等待获取这个锁，直至锁重新可用（由于线程实在一直循环的获取这个锁，所以会造成CPU处理时间的浪费，因此最好将自旋锁用于能很快处理完的临界区）</li>
+<li>互斥锁：互斥锁也是一种可以睡眠的锁，相当于二值信号量，只是提供的API更加简单，使用的场景也更严格一些 </li>
+</ul>
+<p><strong>信号量</strong></p>
+<p>信号量也是一种锁，和自旋锁不同的是，进程获取不到信号量的时候，不会像自旋锁一样循环的去试图获取锁，而是进入睡眠（进入等待队列），直至有信号量释放出来时，才会唤醒睡眠的进程，进入临界区执行</p>
+<p>信号量结构体具体如下： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">semaphore</span> &#123;</span></span><br><span class="line">    <span class="keyword">spinlock_t</span>        lock;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span>        count; <span class="comment">/* 信号量计数 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>    <span class="title">wait_list</span>;</span> <span class="comment">/* 等待队列 */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>其实信号量就相当于一个 [常数] 加上一个 [等待队列]：</p>
+<ul>
+<li>[常数] &gt; 0：代表了当前临界区可以容纳的进程个数</li>
+<li>[常数] = 0：争用信号量的进程会进入睡眠（进入等待队列）</li>
+<li>[常数] &lt; 0：在等待队列中的进程数目</li>
+</ul>
+<p>当一个进程进入临界区时，会先检查该临界区的 <code>semaphore-&gt;count</code>：</p>
+<ul>
+<li>如果大于“0”就进入该临界区，同时 <code>semaphore-&gt;count--</code></li>
+<li>如果小于等于“0”就进入 <code>semaphore-&gt;wait_list</code>，同时 <code>semaphore-&gt;count--</code></li>
+</ul>
+<p>当一个进程离开临界区时，也会检查该临界区的 <code>semaphore-&gt;count</code>：</p>
+<ul>
+<li>如果小于“0”就把 <code>semaphore-&gt;wait_list</code> 中的一个进程放入临界区，同时 <code>semaphore-&gt;count++</code></li>
+<li>如果大于等于“0”，只执行 <code>semaphore-&gt;count++</code> 就可以了</li>
+</ul>
+<p><strong>完成变量</strong></p>
+<p>完成变量的机制类似于信号量，比如一个线程A进入临界区之后，另一个线程B会在完成变量上等待，线程A完成了任务出了临界区之后，使用完成变量来唤醒线程B</p>
+<ul>
+<li>如果在内核中一个任务需要发出信号通知另一任务发生了某个特定事件，利用完成变量（completion variable）是使两个任务得以同步的简单方法</li>
+<li>如果一个任务要执行一些工作时，另一个任务就会在完成变量上等待</li>
+</ul>
+<p><strong>同步方法选择</strong></p>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660900515527.png" class width="1660900515527"> 
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/kernel/" rel="tag"><i class="fa fa-tag"></i> kernel</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/08/18/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9ASocket%E5%8E%9F%E7%90%86/" rel="prev" title="网络相关知识：Socket原理">
+      <i class="fa fa-chevron-left"></i> 网络相关知识：Socket原理
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/08/19/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9A%E7%BD%91%E7%BB%9C%E6%8A%93%E5%8C%85%E5%8E%9F%E7%90%86/" rel="next" title="网络相关知识：网络抓包原理">
+      网络相关知识：网络抓包原理 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#Linux-%E5%86%85%E6%A0%B8%E7%AE%80%E8%BF%B0"><span class="nav-number">1.</span> <span class="nav-text">Linux 内核简述</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Linux-%E5%86%85%E6%A0%B8%E6%BA%90%E7%A0%81%E7%9A%84%E7%BB%93%E6%9E%84"><span class="nav-number">2.</span> <span class="nav-text">Linux 内核源码的结构</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BF%9B%E7%A8%8B%E5%92%8C%E7%BA%BF%E7%A8%8B"><span class="nav-number">3.</span> <span class="nav-text">进程和线程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BF%9B%E7%A8%8B%E7%9A%84%E8%B0%83%E5%BA%A6"><span class="nav-number">4.</span> <span class="nav-text">进程的调度</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8"><span class="nav-number">5.</span> <span class="nav-text">系统调用</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="nav-number">6.</span> <span class="nav-text">内核数据结构</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%AD%E6%96%AD%E5%A4%84%E7%90%86"><span class="nav-number">7.</span> <span class="nav-text">中断处理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%86%85%E6%A0%B8%E5%90%8C%E6%AD%A5"><span class="nav-number">8.</span> <span class="nav-text">内核同步</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">137</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">97</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.8m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">27:04</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
