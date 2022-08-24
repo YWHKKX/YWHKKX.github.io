@@ -29,7 +29,7 @@
 <meta property="og:description" content="IO_FILE源码分析：FSOPvtable IO_FILE结构体里面有个很重要的数据结构 —— vtable vtable 采用虚表调用的形式，如果劫持了 vtable ，就可以调用我们需要的任意函数，甚至可以伪造 vtable ，使程序错误使用我们构造的 fake vtable  123456789101112131415161718192021222324252627282930313233">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2022-04-01T07:52:48.000Z">
-<meta property="article:modified_time" content="2022-04-01T07:54:23.058Z">
+<meta property="article:modified_time" content="2022-08-23T01:26:35.530Z">
 <meta property="article:author" content="yhellow">
 <meta property="article:tag" content="FSOP">
 <meta property="article:tag" content="IO_FILE">
@@ -185,10 +185,16 @@
                 <i class="far fa-calendar"></i>
               </span>
               <span class="post-meta-item-text">Posted on</span>
-              
 
-              <time title="Created: 2022-04-01 15:52:48 / Modified: 15:54:23" itemprop="dateCreated datePublished" datetime="2022-04-01T15:52:48+08:00">2022-04-01</time>
+              <time title="Created: 2022-04-01 15:52:48" itemprop="dateCreated datePublished" datetime="2022-04-01T15:52:48+08:00">2022-04-01</time>
             </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-08-23 09:26:35" itemprop="dateModified" datetime="2022-08-23T09:26:35+08:00">2022-08-23</time>
+              </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
                 <i class="far fa-folder"></i>
@@ -211,13 +217,13 @@
               <span class="post-meta-item-icon">
                 <i class="far fa-file-word"></i>
               </span>
-              <span>3.5k</span>
+              <span>5k</span>
             </span>
             <span class="post-meta-item" title="Reading time">
               <span class="post-meta-item-icon">
                 <i class="far fa-clock"></i>
               </span>
-              <span>3 mins.</span>
+              <span>5 mins.</span>
             </span>
 
         </div>
@@ -259,10 +265,30 @@
 </ul>
 <p><strong>FSOP</strong></p>
 <p>终于到今天的主角了，FSOP全称是 <code>File Stream Oriented Programming</code> ，它的核心就在于伪造  <code>_IO_list_all</code> 指针（ <code>_IO_list_all</code> 永远指向当前FILE结构体链的第一个元素）</p>
-<p>在考虑进行 FSOP 攻击时，常常不会有可控的WAA，这时我们利用 unsortedbin attack 在 <code>_IO_list_all</code> 中写入 main_arena + 88 的地址，那么程序就会把 main_arena + 88 当做FILE结构体</p>
-<p>然后 main_arena + 0xc0(88+0x68) 的位置就是FILE结构体的 <code>_chain</code> 条目，同时，main_arena + 0xc0 也会指向对应大小为“0x60”的smallbin，那么大小为“0x60”的smallbin就会被程序当成下一个FILE结构体</p>
-<p>到了这里通常有两种应对方式，一是直接申请大小为“0x60”的chunk，把它放入对应smallbin的头部，然后在其内部进行伪造，二是通过堆溢出等方式，修改unsortedbin的size为“0x61”（注意规避合并机制），再次申请chunk，该unsortedbin就会被放入smallbin</p>
-<p>接下来就是对FILE结构体的伪造，只需要伪造 vtable 的指向地址，然后再该地址处写入 fake vtable 就可以了</p>
+<ul>
+<li>这个技术的核心就是劫持 <code>_IO_list_all</code> 的值来伪造链表和其中的 <code>_IO_FILE</code> 项，但是单纯的伪造只是构造了数据还需要某种方法进行触发</li>
+<li>FSOP 选择的触发方法是调用 <code>_IO_flush_all_lockp</code>，这个函数会刷新 <code>_IO_list_all</code> 链表中所有项的文件流（相当于对每个FILE调用 fflush），也对应着会调用 <code>_IO_FILE_plus.vtable</code> 中的 <code>IO_overflow</code> 函数</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line">_IO_flush_all_lockp (<span class="keyword">int</span> do_lock)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">int</span> result = <span class="number">0</span>;</span><br><span class="line">  FILE *fp;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> _IO_MTSAFE_IO</span></span><br><span class="line">  _IO_cleanup_region_start_noarg (flush_cleanup);</span><br><span class="line">  _IO_lock_lock (list_all_lock);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">  <span class="keyword">for</span> (fp = (FILE *) _IO_list_all; fp != <span class="literal">NULL</span>; fp = fp-&gt;_chain)</span><br><span class="line">    &#123;</span><br><span class="line">      run_fp = fp;</span><br><span class="line">      <span class="keyword">if</span> (do_lock)</span><br><span class="line">        _IO_flockfile (fp);</span><br><span class="line">      <span class="keyword">if</span> (((fp-&gt;_mode &lt;= <span class="number">0</span> &amp;&amp; fp-&gt;_IO_write_ptr &gt; fp-&gt;_IO_write_base)<span class="comment">/*一些检查，需要绕过*/</span></span><br><span class="line">           || (_IO_vtable_offset (fp) == <span class="number">0</span></span><br><span class="line">               &amp;&amp; fp-&gt;_mode &gt; <span class="number">0</span> &amp;&amp; (fp-&gt;_wide_data-&gt;_IO_write_ptr</span><br><span class="line">                                    &gt; fp-&gt;_wide_data-&gt;_IO_write_base))<span class="comment">/*也可以绕过这个*/</span></span><br><span class="line">           )</span><br><span class="line">          &amp;&amp; _IO_OVERFLOW (fp, EOF) == EOF)<span class="comment">/*遍历_IO_list_all ，选出_IO_FILE作为_IO_OVERFLOW的参数，执行函数*/</span></span><br><span class="line">        result = EOF;</span><br><span class="line">      <span class="keyword">if</span> (do_lock)</span><br><span class="line">        _IO_funlockfile (fp);</span><br><span class="line">      run_fp = <span class="literal">NULL</span>;</span><br><span class="line">    &#125;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> _IO_MTSAFE_IO</span></span><br><span class="line">  _IO_lock_unlock (list_all_lock);</span><br><span class="line">  _IO_cleanup_region_end (<span class="number">0</span>);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">  <span class="keyword">return</span> result;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>IO_flush_all_lockp</code> 函数触发条件：</p>
+<ul>
+<li>当 libc 执行 abort 流程时，abort 可以通过触发 malloc_printerr 来触发</li>
+<li>当执行 exit 函数时</li>
+<li>当执行流从 main 函数返回时</li>
+</ul>
+<p>FSOP 攻击的前提条件：</p>
+<ul>
+<li>泄露出 libc 地址，知道 <code>_IO_lsit_all</code> 的地址</li>
+<li>任意地址写的能力，修改 <code>_IO_list_all</code> 为可控的地址</li>
+<li>可以在可控内存中伪造 <code>_IO_FILE_plus</code> 结构</li>
+</ul>
+<p>伪造的 <code>_IO_FILE_plus</code> 结构体要绕过的 check：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1.</span>((fp-&gt;_mode &lt;= <span class="number">0</span> &amp;&amp; fp-&gt;_IO_write_ptr &gt; fp-&gt;_IO_write_base)</span><br><span class="line">或者是</span><br><span class="line"><span class="number">2.</span>_IO_vtable_offset (fp) == <span class="number">0</span> &amp;&amp; fp-&gt;_mode &gt; <span class="number">0</span> &amp;&amp; (fp-&gt;_wide_data-&gt;_IO_write_ptr &gt; fp-&gt;_wide_data-&gt;_IO_write_base)</span><br></pre></td></tr></table></figure>
+<p><strong>FSOP 利用姿势</strong></p>
+<p>在考虑进行 FSOP 攻击时，常常不会有可控的 WAA，这时我们利用 unsortedbin attack 在 <code>_IO_list_all</code> 中写入 main_arena + 88 的地址，那么程序就会把 main_arena + 88 当做FILE结构体</p>
+<p>然后 main_arena + 0xc0(88+0x68) 的位置就是FILE结构体的 <code>_chain</code> 条目，同时，main_arena + 0xc0 也会指向对应大小为“0x60”的 smallbin，那么大小为“0x60”的smallbin就会被程序当成下一个FILE结构体</p>
+<p>到了这里通常有两种应对方式，一是直接申请大小为“0x60”的chunk，把它放入对应 smallbin 的头部，然后在其内部进行伪造，二是通过堆溢出等方式，修改 unsortedbin 的size为“0x61”（注意规避合并机制），再次申请 chunk，该 unsortedbin 就会被放入 smallbin</p>
+<p>接下来就是对 FILE 结构体的伪造，只需要伪造 vtable 的指向地址，然后再该地址处写入 fake vtable 就可以了</p>
 <p>而在对 vtable 的伪造中，主要是伪造 <code>_IO_OVERFLOW</code> 条目（第4个），因为程序对FILE结构的破坏，导致程序会触发报错提示，根据程序调用链发现中途会调用 <code>_IO_OVERFLOW</code> ，正好可以被控制</p>
 <p>这就是 FSOP 的全过程了，可以去学习 house of orange 进行巩固</p>
 <hr>
@@ -368,7 +394,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">139</span>
+          <span class="site-state-item-count">140</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -422,7 +448,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">27:28</span>
+    <span title="Reading time total">27:45</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
