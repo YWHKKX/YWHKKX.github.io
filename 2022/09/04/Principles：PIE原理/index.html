@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="基础对比先对比一下 [只开启PIE] 和 [关闭所有保护] 的程序反汇编     关闭 PIE：多一个名为 dl_relocate_static_pie 的函数 开启 PIE：多了 __cxa_finalize 和 __imp___cxa_finalize  再对比一下 GDB 调试两个文件效果    就是基地址不同（存储在 CS 寄存器中）  PIE 简述PIE（position-indepen">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Principles：PIE原理">
+<meta property="og:url" content="http://example.com/2022/09/04/Principles%EF%BC%9APIE%E5%8E%9F%E7%90%86/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="基础对比先对比一下 [只开启PIE] 和 [关闭所有保护] 的程序反汇编     关闭 PIE：多一个名为 dl_relocate_static_pie 的函数 开启 PIE：多了 __cxa_finalize 和 __imp___cxa_finalize  再对比一下 GDB 调试两个文件效果    就是基地址不同（存储在 CS 寄存器中）  PIE 简述PIE（position-indepen">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2022/09/04/Principles%EF%BC%9APIE%E5%8E%9F%E7%90%86/1662132275958.png">
+<meta property="og:image" content="http://example.com/2022/09/04/Principles%EF%BC%9APIE%E5%8E%9F%E7%90%86/1662126627604.png">
+<meta property="article:published_time" content="2022-09-04T08:43:42.000Z">
+<meta property="article:modified_time" content="2022-09-04T08:47:55.060Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="Principles">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2022/09/04/Principles%EF%BC%9APIE%E5%8E%9F%E7%90%86/1662132275958.png">
+
+<link rel="canonical" href="http://example.com/2022/09/04/Principles%EF%BC%9APIE%E5%8E%9F%E7%90%86/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>Principles：PIE原理 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/09/04/Principles%EF%BC%9APIE%E5%8E%9F%E7%90%86/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Principles：PIE原理
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-09-04 16:43:42 / Modified: 16:47:55" itemprop="dateCreated datePublished" datetime="2022-09-04T16:43:42+08:00">2022-09-04</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Principles/" itemprop="url" rel="index"><span itemprop="name">Principles</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>8.9k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>8 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="基础对比"><a href="#基础对比" class="headerlink" title="基础对比"></a>基础对比</h2><p><strong>先对比一下 [只开启PIE] 和 [关闭所有保护] 的程序反汇编</strong></p>
+<img src="/2022/09/04/Principles%EF%BC%9APIE%E5%8E%9F%E7%90%86/1662132275958.png" class width="1662132275958">  
+<ul>
+<li>关闭 PIE：多一个名为 <code>dl_relocate_static_pie</code> 的函数</li>
+<li>开启 PIE：多了 <code>__cxa_finalize</code> 和 <code>__imp___cxa_finalize</code></li>
+</ul>
+<p><strong>再对比一下 GDB 调试两个文件效果</strong></p>
+<img src="/2022/09/04/Principles%EF%BC%9APIE%E5%8E%9F%E7%90%86/1662126627604.png" class width="1662126627604"> 
+<ul>
+<li>就是基地址不同（存储在 CS 寄存器中）</li>
+</ul>
+<h2 id="PIE-简述"><a href="#PIE-简述" class="headerlink" title="PIE 简述"></a>PIE 简述</h2><p>PIE（position-independent executable）是一种生成地址无关可执行程序的技术，它属于ASLR（Address space layout randomization）的一部分，ASLR 要求执行程序被加载到内存时，它其中的任意部分都是随机的</p>
+<p>作用：</p>
+<ul>
+<li>提高缓冲区溢出攻击的门槛：<ul>
+<li>ASLR 要求执行程序被加载到内存时，它其中的任意部分都是随机的</li>
+<li>包括：Stack，Heap，Libs and mmap，Executable，Linker，VDSO</li>
+</ul>
+</li>
+<li>提高内存使用效率（更多指 PIC）：<ul>
+<li>一个共享库可以同时被多个进程装载，如果不是地址无关代码（代码段中存在绝对地址引用），每个进程必须结合其自生的内存地址调用动态链接库</li>
+<li>导致不得不将共享库整体拷贝到进程中，如果系统中有100个进程调用这个库，就会有100份该库的拷贝在内存中，这会照成极大的空间浪费</li>
+<li>相反如果被加载的共享库是地址无关代码，100个进程调用该库，则该库只需要在内存中加载一次</li>
+<li>这是因为 PIE 将共享库中代码段须要变换的内容分离到数据段，使得代码段加载到内存时能做到地址无关，多个进程调用共享库时只需要在自己的进程中加载共享库的数据段，而代码段则可以共享</li>
+</ul>
+</li>
+</ul>
+<h2 id="PIE-的由来"><a href="#PIE-的由来" class="headerlink" title="PIE 的由来"></a>PIE 的由来</h2><p>PIE 源自于 PIC，因此我们需要先了解一些共享库的知识：</p>
+<p>将共享库(.so)载入程序地址空间时需要特殊的处理，简而言之，在链接器创建共享库时，链接器不能对它们的代码假设一个已知的载入地址（因为每个程序可以使用任意多的共享库，没有一个简单的方法预先知道给定的共享库将被载入虚拟内存的什么位置）</p>
+<p>在 Linux ELF 共享库里解决这个问题有两个主要途径：</p>
+<ul>
+<li>载入时重定位（load-time relocation）</li>
+<li>位置无关代码（PIC）</li>
+</ul>
+<p><strong>载入时重定位</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> myglob = <span class="number">42</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">ml_util_func</span><span class="params">(<span class="keyword">int</span> a)</span></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">ml_func</span><span class="params">(<span class="keyword">int</span> a, <span class="keyword">int</span> b)</span></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> c = b + ml_util_func(a);</span><br><span class="line">    myglob += c;</span><br><span class="line">    <span class="keyword">return</span> b + myglob;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">$ objdump -d -Mintel libmlreloc.so</span><br><span class="line"></span><br><span class="line">libmlreloc.so:     fileformat elf32-i386</span><br><span class="line"></span><br><span class="line">[...] skipping stuff</span><br><span class="line">000004a7 &lt;ml_func&gt;:</span><br><span class="line"> 4a7:   55                      push   ebp</span><br><span class="line"> 4a8:   89 e5                   mov    ebp,esp</span><br><span class="line"> 4aa:   83 ec 14                sub    esp,0x14</span><br><span class="line"> 4ad:   8b 45 08                mov    eax,DWORD PTR [ebp+0x8]</span><br><span class="line"> 4b0:   89 04 24                mov    DWORD PTR [esp],eax</span><br><span class="line"> 4b3:   e8 fc ff ff ff          call   4b4 &lt;ml_func+0xd&gt;</span><br><span class="line"> 4b8:   03 45 0c                add    eax,DWORD PTR [ebp+0xc]</span><br><span class="line"> 4bb:   89 45 fc                mov    DWORD PTR [ebp-0x4],eax</span><br><span class="line"> 4be:   a1 00 00 00 00          mov    eax,ds:0x0</span><br><span class="line"> 4c3:   03 45 fc                add    eax,DWORD PTR [ebp-0x4]</span><br><span class="line"> 4c6:   a3 00 00 00 00          mov    ds:0x0,eax</span><br><span class="line"> 4cb:   a1 00 00 00 00          mov    eax,ds:0x0</span><br><span class="line"> 4d0:   03 45 0c                add    eax,DWORD PTR [ebp+0xc]</span><br><span class="line"> 4d3:   c9                      leave</span><br><span class="line"> 4d4:   c3                      ret</span><br><span class="line">[...] skipping stuff</span><br></pre></td></tr></table></figure>
+<ul>
+<li>可以发现重定位并没有完成：<ul>
+<li><code>mov myglob</code> 处的偏移任然是“0”</li>
+<li><code>call ml_util_func</code> 处的偏移是“0xfffffffc”</li>
+</ul>
+</li>
+</ul>
+<p>创建一个特殊的重定位项指向这个位置：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">$ readelf -r libmlreloc.so</span><br><span class="line"></span><br><span class="line">Relocation section &#x27;.rel.dyn&#x27; at offset 0x2fc contains 7entries:</span><br><span class="line"></span><br><span class="line"> Offset     Info    Type            Sym.Value  Sym. Name</span><br><span class="line">00002008  00000008R_386_RELATIVE</span><br><span class="line">000004b4  00000502  R_386_PC32       0000049c   ml_util_func</span><br><span class="line">000004bf  00000401  R_386_32         0000200c   myglob</span><br><span class="line">000004c7  00000401  R_386_32         0000200c   myglob</span><br><span class="line">000004cc  00000401  R_386_32         0000200c   myglob</span><br><span class="line">[...] skipping stuff</span><br></pre></td></tr></table></figure>
+<ul>
+<li>3处 <code>myglob</code> 的 offset，刚好对应了 <code>ml_func</code> 中空缺 <code>myglob</code> 的地址</li>
+<li>证明链接器并没有重定位所有的符号，这些 <strong>符号都是在载入可执行文件时重定位的</strong></li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">Dump of assembler code <span class="keyword">for</span> function ml_func:</span><br><span class="line">   <span class="number">0x0012e4a7</span>&lt;+<span class="number">0</span>&gt;:    <span class="number">55</span>    		 push  ebp</span><br><span class="line">   <span class="number">0x0012e4a8</span>&lt;+<span class="number">1</span>&gt;:    <span class="number">89</span> e5 		 mov   ebp,esp</span><br><span class="line">   <span class="number">0x0012e4aa</span>&lt;+<span class="number">3</span>&gt;:    <span class="number">83</span> ec <span class="number">14</span>        sub   esp,<span class="number">0x14</span></span><br><span class="line">   <span class="number">0x0012e4ad</span>&lt;+<span class="number">6</span>&gt;:    <span class="number">8b</span> <span class="number">45</span> <span class="number">08</span>        mov   eax,DWORD PTR [ebp+<span class="number">0x8</span>]</span><br><span class="line">   <span class="number">0x0012e4b0</span>&lt;+<span class="number">9</span>&gt;:    <span class="number">89</span> <span class="number">04</span> <span class="number">24</span>        mov   DWORD PTR [esp],eax</span><br><span class="line">   <span class="number">0x0012e4b3</span>&lt;+<span class="number">12</span>&gt;:   e8 e4 ff ff ff  call  <span class="number">0x12e49c</span> &lt;ml_util_func&gt;</span><br><span class="line">   <span class="number">0x0012e4b8</span>&lt;+<span class="number">17</span>&gt;:   <span class="number">03</span> <span class="number">45</span> <span class="number">0</span>c        add   eax,DWORD PTR [ebp+<span class="number">0xc</span>]</span><br><span class="line">   <span class="number">0x0012e4bb</span>&lt;+<span class="number">20</span>&gt;:   <span class="number">89</span> <span class="number">45</span> fc        mov   DWORD PTR [ebp<span class="number">-0x4</span>],eax</span><br><span class="line">   <span class="number">0x0012e4be</span>&lt;+<span class="number">23</span>&gt;:   a1 <span class="number">0</span>c <span class="number">00</span> <span class="number">13</span> <span class="number">00</span>  mov   eax,ds:<span class="number">0x13000c</span></span><br><span class="line">   <span class="number">0x0012e4c3</span>&lt;+<span class="number">28</span>&gt;:   <span class="number">03</span> <span class="number">45</span> fc        add   eax,DWORD PTR [ebp<span class="number">-0x4</span>]</span><br><span class="line">   <span class="number">0x0012e4c6</span>&lt;+<span class="number">31</span>&gt;:   a3 <span class="number">0</span>c <span class="number">00</span> <span class="number">13</span> <span class="number">00</span>  mov   ds:<span class="number">0x13000c</span>,eax</span><br><span class="line">   <span class="number">0x0012e4cb</span>&lt;+<span class="number">36</span>&gt;:   a1 <span class="number">0</span>c <span class="number">00</span> <span class="number">13</span> <span class="number">00</span>  mov   eax,ds:<span class="number">0x13000c</span></span><br><span class="line">   <span class="number">0x0012e4d0</span>&lt;+<span class="number">41</span>&gt;:   <span class="number">03</span> <span class="number">45</span> <span class="number">0</span>c        add   eax,DWORD PTR [ebp+<span class="number">0xc</span>]</span><br><span class="line">   <span class="number">0x0012e4d3</span>&lt;+<span class="number">44</span>&gt;:   c9     		 leave</span><br><span class="line">   <span class="number">0x0012e4d4</span>&lt;+<span class="number">45</span>&gt;:   c3     		 ret</span><br><span class="line">End of assembler dump.</span><br></pre></td></tr></table></figure>
+<p>总结：</p>
+<ul>
+<li>载入时重定位是 Linux（及其他OS）用来解决，在将共享库载入内存时，在共享库里访问内部数据与代码的问题，时至今日，位置无关代码（PIC）是一个更流行的方法</li>
+<li>一些现代系统（比如x86-64）已不再支持载入时重定位 </li>
+</ul>
+<p><strong>位置无关代码-x86</strong></p>
+<p>载入时重定位的问题十分明显：</p>
+<ul>
+<li>在应用程序载入时，需要花费一些时间执行这些重定位</li>
+<li>并且它使得库的代码节不可共享<ul>
+<li>如果共享库的代码节可以只载入内存一次（然后映射到许多进程的虚拟内存），数目可观的 RAM 就可以被节省下来</li>
+<li>但对载入时重定位这是不可能的，因为使用这个技术时，需要在载入时修改代码节来应用重定位（不同的可执行文件在装载同一个动态库的时候，重定位的结果可能不同）</li>
+</ul>
+</li>
+<li>另外，它要求要有一个可写的代码节（它必须保持可写，以允许动态载入器执行重定位），形成了一个安全风险</li>
+</ul>
+<p>PIC 背后的思想是简单的：对代码中访问的所有全局数据与函数添加一层额外的抽象，通过巧妙地利用链接与载入过程中的某些工件，使得共享库的代码节真正位置无关是可能的（不做任何改变而容易地映射到不同的内存地址）</p>
+<p>位置无关代码依靠一个“全局偏移表”或简称 GOT 来完成（这是位于动态库中的 GOT 表）：</p>
+<ul>
+<li>假设在代码节里某条指令想访问一个变量</li>
+<li>指令不是通过绝对地址直接访问它，而是访问 GOT 里的一个项</li>
+<li>因为 GOT 在数据节的一个已知位置，这个访问是相对的且链接器已知，而 GOT 项将包含该变量的绝对地址</li>
+</ul>
+<p>这样，在代码里通过 GOT 重定向变量的访问，不过我们还是要在数据节里创建一个重定位，因为要让上面描述的场景工作，GOT 仍然必须包含变量的绝对地址，这样做的好处如下：</p>
+<ul>
+<li>每次变量访问都要求代码节里的重定位，而在 GOT 里对每个变量我们只需要重定位一次，因此这更高效</li>
+<li>数据节是可写的且不在进程间共享，因此向它添加重定位没有害处，而将重定位移出代码节使得代码节变成只读且在进程间共享</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> myglob = <span class="number">42</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">ml_util_func</span><span class="params">(<span class="keyword">int</span> a)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a +<span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">ml_func</span><span class="params">(<span class="keyword">int</span> a,<span class="keyword">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> c = b + ml_util_func(a);</span><br><span class="line">    myglob += c;</span><br><span class="line">    <span class="keyword">return</span> b + myglob;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">00000477 &lt;ml_func&gt;:</span><br><span class="line"> 477:   55                      push   ebp</span><br><span class="line"> 478:   89 e5                   mov    ebp,esp</span><br><span class="line"> 47a:   53                      push   ebx</span><br><span class="line"> 47b:   83 ec 24                sub    esp,0x24</span><br><span class="line"> 47e:   e8 e4 ff ff ff          call   467 &lt;__i686.get_pc_thunk.bx&gt;</span><br><span class="line"> 483:   81 c3 71 1b 00 00       add    ebx,0x1b71</span><br><span class="line"> 489:   8b 45 08                mov    eax,DWORD PTR [ebp+0x8]</span><br><span class="line"> 48c:   89 04 24                mov    DWORD PTR [esp],eax</span><br><span class="line"> 48f:   e8 0c ff ff ff          call   3a0 &lt;ml_util_func@plt&gt;</span><br><span class="line"> &lt;... snip morecode&gt;</span><br><span class="line"></span><br><span class="line">000003a0 &lt;ml_util_func@plt&gt;:</span><br><span class="line"> 3a0:   ff a3 14 00 00 00       jmp    DWORD PTR [ebx+0x14]</span><br><span class="line"> 3a6:   68 10 00 00 00          push   0x10</span><br><span class="line"> 3ab:   e9 c0 ff ff ff          jmp    370 &lt;_init+0x30&gt;</span><br><span class="line">     </span><br><span class="line">0000045a &lt;__i686.get_pc_thunk.cx&gt;:</span><br><span class="line"> 45a:   8b 0c 24                mov    ecx,DWORD PTR [esp]</span><br><span class="line"> 45d:   c3                      ret</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>call get_pc_thunk.bx</code> 会把其下一条指令压栈，然后就用 <code>mov</code> 把下一条指令的地址放入 <code>ebx</code> 寄存器</li>
+<li>对 <code>ebx</code> 寄存器中的值进行 <code>add</code> 操作，获取 GOT 基地址，然后获取 <code>myglob</code> 的真实地址</li>
+<li>访问函数时，先 <code>call</code> 其在 PLT 表中的地址，然后 <code>jmp [ebx+0x14]</code>（对应 GOT 中 <code>ml_util_func</code> 的地址）</li>
+</ul>
+<p>每个 PLT 项包含三个部分：</p>
+<ul>
+<li>到 GOT 指定地址的一个跳转（这是跳转到 [ebx + 0x14]）</li>
+<li>为解析者准备参数（用于定位该函数）</li>
+<li>调用解析函数</li>
+</ul>
+<p><strong>位置无关代码-x64</strong></p>
+<p>x86设计时没有考虑 PIC，因此实现 PIC 有一点缺陷：</p>
+<ul>
+<li>一个显而易见的代价是 PIC 中所有对数据及代码的外部访问都要求额外的间接性，即对全局变量的每次访问，以及对函数的每次调用，都要一次额外的内存载入</li>
+<li>是 PIC 的实现增加了寄存器的使用，需要一整个寄存器存放 GOT 基地址</li>
+</ul>
+<p>在64位模式里实现了一个新的取址形式，RIP 相对取址（相当于指令指针）：通过向指向下一条指令的64位 RIP 添加位移来构成一个有效的地址</p>
+<ul>
+<li>在x86中数据访问（使用 mov 指令）仅支持绝对地址</li>
+<li>在x64模式也用其他指令，比如 lea </li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">mov ax,table        ;将table内容传送给ax寄存器</span><br><span class="line">lea ax,table        ;将table的地址传送给ax寄存器</span><br><span class="line"></span><br><span class="line">;offset是属性操作符,表示应把其后跟着的符号的地址(而不是内容)作为传送数据</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> myglob = <span class="number">42</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">ml_util_func</span><span class="params">(<span class="keyword">int</span> a)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">ml_func</span><span class="params">(<span class="keyword">int</span> a, <span class="keyword">int</span> b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> c = b + ml_util_func(a);</span><br><span class="line">    myglob += c;</span><br><span class="line">    <span class="keyword">return</span> b + myglob;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">000000000000064b &lt;ml_func&gt;:</span><br><span class="line"> 64b:   55                      push   rbp</span><br><span class="line"> 64c:   48 89 e5                mov    rbp,rsp</span><br><span class="line"> 64f:   48 83 ec 20             sub    rsp,0x20</span><br><span class="line"> 653:   89 7d ec                mov    DWORD PTR [rbp-0x14],edi</span><br><span class="line"> 656:   89 75 e8                mov    DWORD PTR [rbp-0x18],esi</span><br><span class="line"> 659:   8b 45 ec                mov    eax,DWORD PTR [rbp-0x14]</span><br><span class="line"> 65c:   89 c7                   mov    edi,eax</span><br><span class="line"> 65e:   e8 fd fe ff ff          call   560 &lt;ml_util_func@plt&gt;</span><br><span class="line"> [... snip more code ...]</span><br><span class="line"> </span><br><span class="line">0000000000000560 &lt;ml_util_func@plt&gt;:</span><br><span class="line"> 560:   ff 25 a2 0a 20 00       jmp   QWORD PTR [rip+0x200aa2]</span><br><span class="line"> 566:   68 01 00 00 00          push  0x1</span><br><span class="line"> 56b:   e9 d0 ff ff ff          jmp   540 &lt;_init+0x18&gt;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>get_pc_thunk.bx</code> 函数没有了，程序也不会专门用一个寄存器来保存 GOT 表基地址，而是直接用 <code>rip + offset</code> 来定位 GOT 表</li>
+</ul>
+<p>在x86上 GOT 地址以两步被载入到某些基址寄存器：</p>
+<ul>
+<li>首先以一个特殊的函数调用获取指令的地址</li>
+<li>然后加上到 GOT 的偏移</li>
+</ul>
+<p>在x64上这两步都不需要：</p>
+<ul>
+<li>因为到 GOT 的相对偏移对链接器是已知的</li>
+<li>并且可以简单地使用 RIP 相对取址直接获取对应数据</li>
+</ul>
+<h2 id="PIE-的原理"><a href="#PIE-的原理" class="headerlink" title="PIE 的原理"></a>PIE 的原理</h2><p>PIC 实现了位置无关代码，如果把 PIC 的范围扩大到整个二进制文件，就形成了 PIE：地址无关可执行程序</p>
+<p>执行程序时，系统的动态链接器库 ld.so 会首先加载，接着 ld.so 会通过 .dynamic 段中类型为 DT_NEED 的字段查找其他需要加载的共享库，并依次将它们加载到内存中：</p>
+<ul>
+<li>关闭 PIE：程序会在固定的地址开始加载，这些动态链接库每次加载的顺序和位置都一样</li>
+<li>开启 PIE：因为没有绝对地址引用，所以每次加载的地址都不相同<ul>
+<li>不仅动态链接库的加载地址不固定，就连执行程序每次加载的地址也不一样</li>
+<li>这就要求 ld.so 首先被加载后它不仅要负责重定位其他的共享库，同时还要对可执行文件重定位</li>
+</ul>
+</li>
+</ul>
+<p>当 kernel 加载运行一个可执行文件时，会调用 <code>load_elf_binary()</code> 这个函数（这里只写出了和 PIE 有关的片段）：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* linux-4.20.1/fs/binfmt_elf.c */</span></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">int</span> <span class="title">load_elf_binary</span><span class="params">(struct linux_binprm *bprm)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    ......</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (!(current-&gt;personality &amp; ADDR_NO_RANDOMIZE) &amp;&amp; randomize_va_space)</span><br><span class="line">		current-&gt;flags |= PF_RANDOMIZE;</span><br><span class="line">    <span class="comment">/* 当randomize_va_space标志启用时,&#x27;flag-&gt;PF_RANDOMIZE&#x27;会被设置为&#x27;1&#x27;,确保后面的if语句可以通过 */</span></span><br><span class="line"></span><br><span class="line">    ......</span><br><span class="line"></span><br><span class="line">	retval = create_elf_tables(bprm, &amp;loc-&gt;elf_ex,</span><br><span class="line">			  load_addr, interp_load_addr);</span><br><span class="line">	<span class="keyword">if</span> (retval &lt; <span class="number">0</span>)</span><br><span class="line">		<span class="keyword">goto</span> out;</span><br><span class="line">    <span class="comment">/* 设置代码段,数据段的起始/终止地址,设置栈的起始地址 */</span></span><br><span class="line">	current-&gt;mm-&gt;end_code = end_code;</span><br><span class="line">	current-&gt;mm-&gt;start_code = start_code;</span><br><span class="line">	current-&gt;mm-&gt;start_data = start_data;</span><br><span class="line">	current-&gt;mm-&gt;end_data = end_data;</span><br><span class="line">	current-&gt;mm-&gt;start_stack = bprm-&gt;p;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> ((current-&gt;flags &amp; PF_RANDOMIZE) &amp;&amp; (randomize_va_space &gt; <span class="number">1</span>)) &#123;</span><br><span class="line">        <span class="comment">/* 如果&#x27;flag-&gt;PF_RANDOMIZE&#x27;被设置为&#x27;1&#x27;,就执行如下语句 */</span></span><br><span class="line">		current-&gt;mm-&gt;brk = current-&gt;mm-&gt;start_brk =</span><br><span class="line">			arch_randomize_brk(current-&gt;mm); <span class="comment">/* 用于获取随机地址 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> compat_brk_randomized</span></span><br><span class="line">		current-&gt;brk_randomized = <span class="number">1</span>;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">	&#125;</span><br><span class="line">    </span><br><span class="line">    ......</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* linux-4.20.1/arch/kernel/process.c */</span></span><br><span class="line"><span class="function"><span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="title">arch_randomize_brk</span><span class="params">(struct mm_struct *mm)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">return</span> randomize_page(mm-&gt;brk, <span class="number">0x02000000</span>); </span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* linux-4.20.1/drivers/char/random.c */</span></span><br><span class="line"><span class="function"><span class="keyword">unsigned</span> <span class="keyword">long</span></span></span><br><span class="line"><span class="function"><span class="title">randomize_page</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">long</span> start, <span class="keyword">unsigned</span> <span class="keyword">long</span> range)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">if</span> (!PAGE_ALIGNED(start)) &#123;</span><br><span class="line">		range -= PAGE_ALIGN(start) - start;</span><br><span class="line">		start = PAGE_ALIGN(start);</span><br><span class="line">        <span class="comment">/* PAGE_ALIGN(addr):将物理地址addr修整为页边界地址(页的上边界) */</span></span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (start &gt; ULONG_MAX - range)</span><br><span class="line">		range = ULONG_MAX - start;</span><br><span class="line"></span><br><span class="line">	range &gt;&gt;= PAGE_SHIFT;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (range == <span class="number">0</span>)</span><br><span class="line">		<span class="keyword">return</span> start;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> start + (get_random_long() % range &lt;&lt; PAGE_SHIFT); </span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* linux-4.20.1/include/linux/random.h */</span></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="title">get_random_long</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> BITS_PER_LONG == 64</span></span><br><span class="line">	<span class="keyword">return</span> get_random_u64();</span><br><span class="line"><span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line">	<span class="keyword">return</span> get_random_u32();</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* linux-4.20.1/drivers/char/random.c */</span></span><br><span class="line"><span class="function">u64 <span class="title">get_random_u64</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	u64 ret;</span><br><span class="line">	<span class="keyword">bool</span> use_lock;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> flags = <span class="number">0</span>;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">batched_entropy</span> *<span class="title">batch</span>;</span></span><br><span class="line">	<span class="keyword">static</span> <span class="keyword">void</span> *previous;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> BITS_PER_LONG == 64</span></span><br><span class="line">	<span class="keyword">if</span> (arch_get_random_long((<span class="keyword">unsigned</span> <span class="keyword">long</span> *)&amp;ret))</span><br><span class="line">		<span class="keyword">return</span> ret;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line">	<span class="keyword">if</span> (arch_get_random_long((<span class="keyword">unsigned</span> <span class="keyword">long</span> *)&amp;ret) &amp;&amp;</span><br><span class="line">	    arch_get_random_long((<span class="keyword">unsigned</span> <span class="keyword">long</span> *)&amp;ret + <span class="number">1</span>))</span><br><span class="line">	    <span class="keyword">return</span> ret;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line">	warn_unseeded_randomness(&amp;previous);</span><br><span class="line"></span><br><span class="line">	use_lock = READ_ONCE(crng_init) &lt; <span class="number">2</span>;</span><br><span class="line">	batch = &amp;get_cpu_var(batched_entropy_u64); <span class="comment">/* 获取本地cpu的变量 */</span></span><br><span class="line">	<span class="keyword">if</span> (use_lock)</span><br><span class="line">		read_lock_irqsave(&amp;batched_entropy_reset_lock, flags);</span><br><span class="line">	<span class="keyword">if</span> (batch-&gt;position % ARRAY_SIZE(batch-&gt;entropy_u64) == <span class="number">0</span>) &#123;</span><br><span class="line">		extract_crng((u8 *)batch-&gt;entropy_u64);</span><br><span class="line">		batch-&gt;position = <span class="number">0</span>;</span><br><span class="line">	&#125;</span><br><span class="line">	ret = batch-&gt;entropy_u64[batch-&gt;position++];</span><br><span class="line">    <span class="comment">/* 根据当前进程的batched_entropy_u64来计算出随机数 */</span></span><br><span class="line">	<span class="keyword">if</span> (use_lock)</span><br><span class="line">		read_unlock_irqrestore(&amp;batched_entropy_reset_lock, flags);</span><br><span class="line">	put_cpu_var(batched_entropy_u64);</span><br><span class="line">	<span class="keyword">return</span> ret; </span><br><span class="line">&#125;</span><br><span class="line">EXPORT_SYMBOL(get_random_u64);</span><br></pre></td></tr></table></figure>
+<p>因为 PIE 使用了 PIC 中的原理（GOT + RIP 相对取址）使代码与地址无关，所以 kernel 在加载ELF文件时，可以直接使用对应的函数把 <code>current-&gt;mm-&gt;brk</code> 随机化</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/Principles/" rel="tag"><i class="fa fa-tag"></i> Principles</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/09/02/IO_FILE%20%E5%B8%B8%E7%94%A8%E8%B0%83%E7%94%A8%E9%93%BE/" rel="prev" title="IO_FILE 常用调用链（持续更新）">
+      <i class="fa fa-chevron-left"></i> IO_FILE 常用调用链（持续更新）
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9F%BA%E7%A1%80%E5%AF%B9%E6%AF%94"><span class="nav-number">1.</span> <span class="nav-text">基础对比</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PIE-%E7%AE%80%E8%BF%B0"><span class="nav-number">2.</span> <span class="nav-text">PIE 简述</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PIE-%E7%9A%84%E7%94%B1%E6%9D%A5"><span class="nav-number">3.</span> <span class="nav-text">PIE 的由来</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PIE-%E7%9A%84%E5%8E%9F%E7%90%86"><span class="nav-number">4.</span> <span class="nav-text">PIE 的原理</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">146</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">103</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">1.9m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">28:48</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
