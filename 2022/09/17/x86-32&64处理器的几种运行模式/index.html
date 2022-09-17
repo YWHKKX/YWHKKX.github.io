@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="x86-32在32位时代，x86 的 operating mode 有3种：  实模式（Real Mode） 保护模式（Protected Mode） 虚拟8086模式（Virtual 8086 Mode）   实模式（Real Mode） 8086的CPU是16位的，为其可以索引更大的内存地址空间，内核采用了分段机制（shift-and-add segmentation）  即一个逻辑地址由 s">
+<meta property="og:type" content="article">
+<meta property="og:title" content="x86-32&amp;64处理器的几种运行模式">
+<meta property="og:url" content="http://example.com/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="x86-32在32位时代，x86 的 operating mode 有3种：  实模式（Real Mode） 保护模式（Protected Mode） 虚拟8086模式（Virtual 8086 Mode）   实模式（Real Mode） 8086的CPU是16位的，为其可以索引更大的内存地址空间，内核采用了分段机制（shift-and-add segmentation）  即一个逻辑地址由 s">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/1663378590133.png">
+<meta property="og:image" content="http://example.com/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/1663377315062.png">
+<meta property="og:image" content="http://example.com/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/1663424435610.png">
+<meta property="og:image" content="http://example.com/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/1663425389920.png">
+<meta property="article:published_time" content="2022-09-17T14:43:29.000Z">
+<meta property="article:modified_time" content="2022-09-17T14:45:18.186Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="kernel">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/1663378590133.png">
+
+<link rel="canonical" href="http://example.com/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>x86-32&64处理器的几种运行模式 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          x86-32&64处理器的几种运行模式
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-09-17 22:43:29 / Modified: 22:45:18" itemprop="dateCreated datePublished" datetime="2022-09-17T22:43:29+08:00">2022-09-17</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>3.7k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>3 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="x86-32"><a href="#x86-32" class="headerlink" title="x86-32"></a>x86-32</h2><p>在32位时代，x86 的 operating mode 有3种：</p>
+<ul>
+<li>实模式（Real Mode）</li>
+<li>保护模式（Protected Mode）</li>
+<li>虚拟8086模式（Virtual 8086 Mode） </li>
+</ul>
+<p><strong>实模式（Real Mode）</strong></p>
+<p>8086的CPU是16位的，为其可以索引更大的内存地址空间，内核采用了分段机制（shift-and-add segmentation）</p>
+<ul>
+<li>即一个逻辑地址由 segment 加上 offset 组成</li>
+</ul>
+<p>基于分段机制（shift-and-add segmentation）的寻址过程：</p>
+<ul>
+<li>获取对应的段寄存器</li>
+<li>通过公式 <code>linear address = segment &lt;&lt; 4 + offset</code> 计算逻辑地址</li>
+</ul>
+<p><strong>保护模式（Protected Mode）</strong></p>
+<p>80286 的CPU是32位的，它也使用分段机制（table-based segmentation）</p>
+<ul>
+<li>但它的段寄存器 segment register 存的不再是 segment 的起始地址，而是一个段选择子 segment selector</li>
+<li>通过这个 segment selector 查找全局标识符表GDT表获得段描述符 segment descriptor</li>
+<li>segment descriptor 存的才是 segment 的起始地址 </li>
+</ul>
+<p>段寄存器 segment register 中存放的就是16位的数据结构-段选择子</p>
+<p>段选择子 segment selector 的结构如下：</p>
+<img src="/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/1663378590133.png" class width="1663378590133"> 
+<ul>
+<li>Index：CPU 将索引号乘8再加上GDT或者LDT的基地址，就可以找到目标段描述符</li>
+<li>TL：其值为“0”查找 GDT 表，其值为“1”查找 LDT 表</li>
+<li>RPL：请求特权级别（可以用于判断当前代码是否处于内核态）</li>
+</ul>
+<p>在保护模式下，对一个段的描述则包括3方面因素：[Base Address, Limit, Access]，它们加在一起被放在一个64-bit长的数据结构中，被称为段描述符</p>
+<p>段描述符 segment descriptor 的结构如下：</p>
+<img src="/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/1663377315062.png" class width="1663377315062"> 
+<ul>
+<li><strong>G</strong> - Granularity 粒度（byte 或者 page），因为段的最大长度 limit 占20位<ul>
+<li>如果粒度为 byte，则该 segment 的寻址范围是 1MB</li>
+<li>如果粒度为 page-4KB，则该 segment 的寻址范围是 4GB</li>
+<li>一个 segment 的 size 是由 limit 和G位共同确定的</li>
+</ul>
+</li>
+<li><strong>D/B</strong> - Default Size/Bound<ul>
+<li>为“1”表示在32位模式下运行</li>
+<li>为“0”在16位模式下运行</li>
+</ul>
+</li>
+<li><strong>L</strong> - 仅在64位系统中有效<ul>
+<li>为“1”表示在64位长模式下运行（64-Bit Mode）</li>
+<li>为“0”表示在64位兼容模式下运行（Compatibility Mode）</li>
+</ul>
+</li>
+<li><strong>AVL</strong> - Available for software，留给软件用的，但在 linux 里是被忽略的</li>
+<li><strong>P</strong> - Present，用于指明表项对地址转换是否有效<ul>
+<li>P = 1：表示有效</li>
+<li>P = 0：表示无效</li>
+<li>在页转换过程中，如果说涉及的页目录或页表的表项无效，则会导致一个异常</li>
+</ul>
+</li>
+<li><strong>DPL</strong> - Descriptor Privledge Level，表示可以访问 segment 的最低级别<ul>
+<li>x86处理器的特权级别从 <code>ring 0</code> 到 <code>ring 3</code>，数字越小，级别越高</li>
+<li>通常用户空间运行于 <code>ring3</code>，内核空间运行于 <code>ring0</code></li>
+<li>假设 DPL 为“1”，则只有当前特权级别为“0”或者“1”时，才可以访问该 decriptor 指向的 segment</li>
+</ul>
+</li>
+<li><strong>Type</strong> - 目标段拥有的权限<ul>
+<li>对于 task segment 是没有意义的</li>
+<li>对于 code segment 和 data segment 主要是关于 Writable，Executable 的属性</li>
+</ul>
+</li>
+<li><strong>Base Address</strong> - 基地址</li>
+</ul>
+<p>基于分段机制（table-based segmentation）的寻址过程：</p>
+<ul>
+<li>内核提供了一个寄存器GDTR用来存放GDT的入口地址</li>
+<li>通过段选择子 segment selector 找到对应 GDT 条目-段描述符 segment descriptor</li>
+<li>通过段描述符 segment descriptor 找到基地址</li>
+</ul>
+<p>GDT&amp;LDT 的使用条件：</p>
+<ul>
+<li>GDT 能完成被多个任务共享的内存区</li>
+<li>LDT 通常情况下是与任务的数量保持对等（LDT放在GDT中）</li>
+</ul>
+<p><strong>虚拟8086模式（Virtual 8086 Mode） </strong></p>
+<p>利用一种硬件虚拟化技术，在i386的芯片上模拟出多个8086芯片</p>
+<p>当处理器进入保护模式后，基于实模式的应用就不能直接运行了，采用虚拟8086模式，则可以让这些实模式的应用运行在基于保护模式的操作系统上，因此这种模式也被称为 Virtual Real Mode</p>
+<h2 id="x86-64"><a href="#x86-64" class="headerlink" title="x86-64"></a>x86-64</h2><p>进入64位的x64处理器时代后，产生了一种新的运行模式，叫 Long Mode，传统的三种模式则被统称为传统模式（Legacy Mode）</p>
+<p>Long Mode 又分为2种子模式：</p>
+<ul>
+<li>64位长模式（64-Bit Mode）：应用程序必须也得是64位的 </li>
+<li>64位兼容模式（Compatibility Mode）：32位应用程序也可以运行</li>
+</ul>
+<p>置位 EFER 寄存器的 LME 位可以开启 Long Mode</p>
+<ul>
+<li>由于 Long Mode 要求 paging 必须开启，所以在进入 Long Mode 之前，还需要置位CR0寄存器的PG位</li>
+<li>置位 code segment 的L位可在 64-Bit Mode 和 Compatibility Mode 之间切换</li>
+</ul>
+<p><strong>四级分页机制</strong></p>
+<p>前面我们提到 Linux 内核仅使用了较少的分段机制，但是却对分页机制的依赖性很强，其使用一种适合32位和64位结构的通用分页模型，该模型使用四级分页机制：</p>
+<ul>
+<li>页全局目录（Page Global Directory）</li>
+<li>页上级目录（Page Upper Directory）</li>
+<li>页中间目录（Page Middle Directory）</li>
+<li>页表（Page Table）</li>
+</ul>
+<p>因此线性地址因此被分成五个部分，通过各个部分索引到对应的表，而每一部分的大小与具体的计算机体系结构有关</p>
+<img src="/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/1663424435610.png" class width="1663424435610"> 
+<p>相关结构类型：</p>
+<ul>
+<li>Linux 分别采用 <code>pgd_t pmd_t pud_t pte_t</code> 四种数据结构来表示页全局目录项、页上级目录项、页中间目录项和页表项（这四种数据结构本质上都是无符号长整型 unsigned long）</li>
+</ul>
+<p>PAGE - 页表 (Page Table)：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PAGE_SHIFT</td>
+<td>指定Offset字段的位数</td>
+</tr>
+<tr>
+<td>PAGE_SIZE</td>
+<td>页的大小</td>
+</tr>
+<tr>
+<td>PAGE_MASK</td>
+<td>用以屏蔽Offset字段的所有位</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>PMD - 页目录 (Page Middle Directory)：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PMD_SHIFT</td>
+<td>指定线性地址的Offset和Table字段的总位数，换句话说，是页中间目录项可以映射的区域大小的对数</td>
+</tr>
+<tr>
+<td>PMD_SIZE</td>
+<td>用于计算由页中间目录的一个单独表项所映射的区域大小，也就是一个页表的大小</td>
+</tr>
+<tr>
+<td>PMD_MASK</td>
+<td>用于屏蔽Offset字段与Table字段的所有位</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>PUD_SHIFT - 页上级目录 (Page Upper Directory)：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PUD_SHIFT</td>
+<td>确定页上级目录项能映射的区域大小的位数</td>
+</tr>
+<tr>
+<td>PUD_SIZE</td>
+<td>用于计算页全局目录中的一个单独表项所能映射的区域大小</td>
+</tr>
+<tr>
+<td>PUD_MASK</td>
+<td>用于屏蔽Offset字段，Table字段，Middle Air字段和Upper Air字段的所有位</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>PGDIR_SHIFT - 页全局目录 (Page Global Directory)：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PGDIR_SHIFT</td>
+<td>确定页全局页目录项能映射的区域大小的位数</td>
+</tr>
+<tr>
+<td>PGDIR_SIZE</td>
+<td>用于计算页全局目录中一个单独表项所能映射区域的大小</td>
+</tr>
+<tr>
+<td>PGDIR_MASK</td>
+<td>用于屏蔽Offset, Table，Middle Air及Upper Air的所有位</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>基于分页机制（paging）的寻址过程：</p>
+<ul>
+<li>从CR3寄存器中读取页目录所在物理页面的基址（即所谓的页目录基址），从线性地址的第一部分获取页目录项的索引，两者相加得到页目录项的物理地址</li>
+<li>第一次读取内存得到 pgd_t 结构的目录项，从中取出物理页基址取出（具体位数与平台相关，如果是32系统，则为20位），即页上级页目录的物理基地址</li>
+<li>从线性地址的第二部分中取出页上级目录项的索引，与页上级目录基地址相加得到页上级目录项的物理地址</li>
+<li>第二次读取内存得到 pud_t 结构的目录项，从中取出页中间目录的物理基地址</li>
+<li>从线性地址的第三部分中取出页中间目录项的索引，与页中间目录基址相加得到页中间目录项的物理地址</li>
+<li>第三次读取内存得到 pmd_t 结构的目录项，从中取出页表的物理基地址</li>
+<li>从线性地址的第四部分中取出页表项的索引，与页表基址相加得到页表项的物理地址</li>
+<li>第四次读取内存得到 pte_t 结构的目录项，从中取出物理页的基地址</li>
+<li>从线性地址的第五部分中取出物理页内偏移量，与物理页基址相加得到最终的物理地址</li>
+<li>第五次读取内存得到最终要访问的数据</li>
+</ul>
+<img src="/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/1663425389920.png" class width="1663425389920"> 
+<p><strong>其他差异</strong> </p>
+<p>在 Legay Mode 中，用户空间可通过 SYSENTER 指令进入内核空间，内核空间则通过 SYSEXIT 指令返回用户空间，在此过程中，由于发生了 segment 切换，所以需要进行 segmentation 的各种检测，比较影响效率</p>
+<p>在 Long Mode 中，伴随着 segmentation 的弱化和 flat momery model 的使用，这2个指令不再被支持，取而代之的不需要 segmentation 检测的 SYSCALL 和 SYSRET 指令</p>
+<p>此外，Legacy Mode 还提供了一种叫 task-state segment (TSS) 的硬件机制，可以在发生 task switch 时，自动保存 task 的状态信息，可理解为硬件辅助的进程切换，由于主流操作系统很少用到这一机制，在 Long Mode 中已经不再支持 TSS</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/kernel/" rel="tag"><i class="fa fa-tag"></i> kernel</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/09/14/kernel%20protect/" rel="prev" title="kernel protect">
+      <i class="fa fa-chevron-left"></i> kernel protect
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#x86-32"><span class="nav-number">1.</span> <span class="nav-text">x86-32</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#x86-64"><span class="nav-number">2.</span> <span class="nav-text">x86-64</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">152</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">105</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">2m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">29:35</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
