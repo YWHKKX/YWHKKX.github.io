@@ -29,7 +29,7 @@
 <meta property="og:description" content="Pipe 简述 进程用户空间是相互独立的，一般而言是不能相互访问的，但很多情况下进程间需要互相通信，来完成系统的某项功能，进程通过与内核及其它进程之间的互相通信来协调它们的行为，管道就是作为进程间的一种通信方式  内核申请一块缓存区，这个缓存区留有两个接口，分别接在两个不同的进程上 这个缓冲区不需要很大，它被设计成为环形的数据结构，以便可以被循环利用： 当管道中没有信息的话，从管道中读取的进程会等">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2022-09-12T13:36:48.000Z">
-<meta property="article:modified_time" content="2022-09-14T06:57:34.627Z">
+<meta property="article:modified_time" content="2022-09-22T12:30:27.615Z">
 <meta property="article:author" content="yhellow">
 <meta property="article:tag" content="Principles">
 <meta name="twitter:card" content="summary">
@@ -192,7 +192,7 @@
                   <i class="far fa-calendar-check"></i>
                 </span>
                 <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-09-14 14:57:34" itemprop="dateModified" datetime="2022-09-14T14:57:34+08:00">2022-09-14</time>
+                <time title="Modified: 2022-09-22 20:30:27" itemprop="dateModified" datetime="2022-09-22T20:30:27+08:00">2022-09-22</time>
               </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
@@ -216,13 +216,13 @@
               <span class="post-meta-item-icon">
                 <i class="far fa-file-word"></i>
               </span>
-              <span>9.9k</span>
+              <span>12k</span>
             </span>
             <span class="post-meta-item" title="Reading time">
               <span class="post-meta-item-icon">
                 <i class="far fa-clock"></i>
               </span>
-              <span>9 mins.</span>
+              <span>11 mins.</span>
             </span>
 
         </div>
@@ -248,7 +248,7 @@
 <p>管道分为无名管道(pipe)和有名管道(FIFO)两种：</p>
 <ul>
 <li>无名管道：只能用于 <strong>公共祖先</strong> 的两个进程间的通信，原因是自己创建的管道在别的进程中并不可见</li>
-<li>有名管道：可用于同一系统中的任意两个进程间的通信 </li>
+<li>有名管道：可用于同一系统中的任意两个进程间的通信</li>
 </ul>
 <p><strong>Pipe 案例</strong></p>
 <p>父子进程通信（无名管道）：</p>
@@ -337,6 +337,21 @@
 <li>有名管道在底层的实现跟无名管道完全一致，区别只是命名管道会有一个全局可见的文件名以供别人 <code>open()</code> 打开使用</li>
 <li>创建完之后，其他进程就可以使用 <code>open() read() write()</code> 标准文件操作等方法进行使用了 </li>
 <li>无论有名还是无名管道，它的文件描述都没有偏移量的概念，所以不能用 <code>lseek</code> 进行偏移量调整</li>
+<li>不管是 <code>mknod</code> 还是 <code>mkfifo</code>，底层都是这个系统调用：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7ffff7ecd900</span> &lt;__xmknod+<span class="number">32</span>&gt;    syscall  &lt;SYS_mknod&gt;</span><br><span class="line">       path: <span class="number">0x555555556019</span> ◂— <span class="number">0x326f6669662f2e</span></span><br><span class="line">       mode: <span class="number">0x11b4</span></span><br><span class="line">       dev: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>在内核中对应的函数为：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">long</span> <span class="title">ksys_mknod</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> __user *filename, <span class="keyword">umode_t</span> mode,</span></span></span><br><span class="line"><span class="params"><span class="function">			      <span class="keyword">unsigned</span> <span class="keyword">int</span> dev)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">return</span> do_mknodat(AT_FDCWD, filename, mode, dev);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">long</span> <span class="title">do_mknodat</span><span class="params">(<span class="keyword">int</span> dfd, <span class="keyword">const</span> <span class="keyword">char</span> __user *filename, <span class="keyword">umode_t</span> mode,</span></span></span><br><span class="line"><span class="params"><span class="function">		<span class="keyword">unsigned</span> <span class="keyword">int</span> dev)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">dentry</span> *<span class="title">dentry</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">path</span> <span class="title">path</span>;</span></span><br><span class="line">	<span class="keyword">int</span> error;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> lookup_flags = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">	error = may_mknod(mode);</span><br><span class="line">	<span class="keyword">if</span> (error)</span><br><span class="line">		<span class="keyword">return</span> error;</span><br><span class="line">retry:</span><br><span class="line">	dentry = user_path_create(dfd, filename, &amp;path, lookup_flags); <span class="comment">/* 查找路径中的最后一个项的父目录项 */</span></span><br><span class="line">	<span class="keyword">if</span> (IS_ERR(dentry))</span><br><span class="line">		<span class="keyword">return</span> PTR_ERR(dentry);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (!IS_POSIXACL(path.dentry-&gt;d_inode))</span><br><span class="line">		mode &amp;= ~current_umask();</span><br><span class="line">	error = security_path_mknod(&amp;path, dentry, mode, dev);</span><br><span class="line">	<span class="keyword">if</span> (error)</span><br><span class="line">		<span class="keyword">goto</span> out;</span><br><span class="line">	<span class="keyword">switch</span> (mode &amp; S_IFMT) &#123; </span><br><span class="line">		<span class="keyword">case</span> <span class="number">0</span>: <span class="keyword">case</span> S_IFREG: <span class="comment">/* 普通文件(默认) */</span></span><br><span class="line">			error = vfs_create(path.dentry-&gt;d_inode,dentry,mode,<span class="literal">true</span>); <span class="comment">/* 创建普通文件 */</span></span><br><span class="line">			<span class="keyword">if</span> (!error)</span><br><span class="line">				ima_post_path_mknod(dentry);</span><br><span class="line">			<span class="keyword">break</span>;</span><br><span class="line">		<span class="keyword">case</span> S_IFCHR: <span class="keyword">case</span> S_IFBLK: <span class="comment">/* 字符设备文件/块设备文件 */</span></span><br><span class="line">			error = vfs_mknod(path.dentry-&gt;d_inode,dentry,mode,</span><br><span class="line">					new_decode_dev(dev)); <span class="comment">/* 创建特殊文件(FIFO,插口,字符设备文件,块设备文件),new_decode_dev用于创建设备号 */</span></span><br><span class="line">			<span class="keyword">break</span>;</span><br><span class="line">		<span class="keyword">case</span> S_IFIFO: <span class="keyword">case</span> S_IFSOCK: <span class="comment">/* 有名管道FIFO/套接字 */</span></span><br><span class="line">			error = vfs_mknod(path.dentry-&gt;d_inode,dentry,mode,<span class="number">0</span>);</span><br><span class="line">			<span class="keyword">break</span>;</span><br><span class="line">	&#125;</span><br><span class="line">out:</span><br><span class="line">	done_path_create(&amp;path, dentry); <span class="comment">/* 减少path和dentry的计数 */</span></span><br><span class="line">	<span class="keyword">if</span> (retry_estale(error, lookup_flags)) &#123;</span><br><span class="line">		lookup_flags |= LOOKUP_REVAL;</span><br><span class="line">		<span class="keyword">goto</span> retry;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> error;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>我们的目的是创建有名管道 FIFO，所以会调用 <code>vfs_mknod</code>：（创建 <code>inode</code> 的公共流程函数）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">vfs_mknod</span><span class="params">(struct inode *dir, struct dentry *dentry, <span class="keyword">umode_t</span> mode, <span class="keyword">dev_t</span> dev)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> error = may_create(dir, dentry);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (error)</span><br><span class="line">		<span class="keyword">return</span> error;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> ((S_ISCHR(mode) || S_ISBLK(mode)) &amp;&amp; !capable(CAP_MKNOD))</span><br><span class="line">		<span class="keyword">return</span> -EPERM;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (!dir-&gt;i_op-&gt;mknod) <span class="comment">/* 保证&quot;dir-&gt;i_op-&gt;mknod&quot;不为空 */</span></span><br><span class="line">		<span class="keyword">return</span> -EPERM;</span><br><span class="line"></span><br><span class="line">	error = devcgroup_inode_mknod(mode, dev);</span><br><span class="line">	<span class="keyword">if</span> (error)</span><br><span class="line">		<span class="keyword">return</span> error;</span><br><span class="line"></span><br><span class="line">	error = security_inode_mknod(dir, dentry, mode, dev);</span><br><span class="line">	<span class="keyword">if</span> (error)</span><br><span class="line">		<span class="keyword">return</span> error;</span><br><span class="line"></span><br><span class="line">	error = dir-&gt;i_op-&gt;mknod(dir, dentry, mode, dev); <span class="comment">/* 根据文件系统决定 */</span></span><br><span class="line">	<span class="keyword">if</span> (!error)</span><br><span class="line">		fsnotify_create(dir, dentry);</span><br><span class="line">	<span class="keyword">return</span> error;</span><br><span class="line">&#125;</span><br><span class="line">EXPORT_SYMBOL(vfs_mknod);</span><br></pre></td></tr></table></figure>
+<ul>
+<li>对于 Ext4 文件系统来说，<code>dir-&gt;i_op-&gt;mknod</code> 实际上是调用 <code>ext4_mknod</code></li>
+<li>接下来就是一些繁琐的工作了</li>
 </ul>
 <p><strong>Shell Pipe</strong></p>
 <p>最简单的 Shell Pipe：</p>
@@ -447,7 +462,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">154</span>
+          <span class="site-state-item-count">155</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -501,7 +516,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">30:07</span>
+    <span title="Reading time total">30:29</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
