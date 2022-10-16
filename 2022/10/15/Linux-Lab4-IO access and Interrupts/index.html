@@ -28,15 +28,15 @@
 <meta property="og:site_name" content="Pwn进你的心">
 <meta property="og:description" content="IO access and Interrupts 实验目的：  与外围设备通信 实现中断处理程序 将中断与进程上下文同步  外围设备通过 Read&#x2F;Write 其寄存器进行控制：  通常，设备具有多个寄存器，可以在内存地址空间或 I&#x2F;O 地址空间中的连续地址访问这些寄存器 连接到 I&#x2F;O 总线的每个设备都有一组 I&#x2F;O 地址，称为 I&#x2F;O 端口 I&#x2F;O 端口可以映射到物理内存地址，以便处理器可以通">
 <meta property="og:locale" content="en_US">
-<meta property="og:image" content="http://example.com/2022/10/15/Linux-Lab4-IO%20access%20and%20Interrupts/1665767353033.png">
+<meta property="og:image" content="http://example.com/2022/10/15/Linux-Lab4-IO%20access%20and%20Interrupts/1665767353033-1665905122545.png">
 <meta property="article:published_time" content="2022-10-14T17:51:25.000Z">
-<meta property="article:modified_time" content="2022-10-14T17:52:42.858Z">
+<meta property="article:modified_time" content="2022-10-16T07:25:22.847Z">
 <meta property="article:author" content="yhellow">
 <meta property="article:tag" content="labs">
 <meta property="article:tag" content="Kernel">
 <meta property="article:tag" content="Linux">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="http://example.com/2022/10/15/Linux-Lab4-IO%20access%20and%20Interrupts/1665767353033.png">
+<meta name="twitter:image" content="http://example.com/2022/10/15/Linux-Lab4-IO%20access%20and%20Interrupts/1665767353033-1665905122545.png">
 
 <link rel="canonical" href="http://example.com/2022/10/15/Linux-Lab4-IO%20access%20and%20Interrupts/">
 
@@ -188,10 +188,16 @@
                 <i class="far fa-calendar"></i>
               </span>
               <span class="post-meta-item-text">Posted on</span>
-              
 
-              <time title="Created: 2022-10-15 01:51:25 / Modified: 01:52:42" itemprop="dateCreated datePublished" datetime="2022-10-15T01:51:25+08:00">2022-10-15</time>
+              <time title="Created: 2022-10-15 01:51:25" itemprop="dateCreated datePublished" datetime="2022-10-15T01:51:25+08:00">2022-10-15</time>
             </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-10-16 15:25:22" itemprop="dateModified" datetime="2022-10-16T15:25:22+08:00">2022-10-16</time>
+              </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
                 <i class="far fa-folder"></i>
@@ -214,13 +220,13 @@
               <span class="post-meta-item-icon">
                 <i class="far fa-file-word"></i>
               </span>
-              <span>13k</span>
+              <span>14k</span>
             </span>
             <span class="post-meta-item" title="Reading time">
               <span class="post-meta-item-icon">
                 <i class="far fa-clock"></i>
               </span>
-              <span>12 mins.</span>
+              <span>13 mins.</span>
             </span>
 
         </div>
@@ -301,13 +307,19 @@
 <p>由于中断处理程序在中断上下文中运行，因此可以执行的操作受到限制：</p>
 <ul>
 <li>无法访问用户空间内存</li>
-<li>无法调用阻塞函数</li>
-<li>使用自旋锁进行同步也很棘手（如果所使用的自旋锁已被正在运行的处理程序中断的进程获取，则可能导致死锁）</li>
+<li>无法调用阻塞函数，因此不能使用互斥锁（中断发生时，程序会把当前进程的上下文保存到内核栈上，称为中断帧，如果在中断中发生阻塞，<code>schedule</code> 新调用的进程很可能会破坏中断帧），其实这是为了实现中断嵌套所付出的代价 </li>
+<li>使用自旋锁进行同步也很棘手（如果所使用的自旋锁，已被正在运行的处理程序中断的进程获取，则可能导致死锁）</li>
 </ul>
 <p>在某些情况下，设备驱动程序必须使用中断进行同步（例如，当数据在中断处理程序和进程上下文或下半部分处理程序之间共享时），在这些情况下，有必要停用中断并使用自旋锁：</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">spin_lock_irqsave</span> <span class="params">(<span class="keyword">spinlock_t</span> * lock, <span class="keyword">unsigned</span> <span class="keyword">long</span> flags)</span></span>; <span class="comment">/* 保存中断的当前状态,禁止本地中断,获取指定的锁 */</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">spin_unlock_irqrestore</span> <span class="params">(<span class="keyword">spinlock_t</span> * lock, <span class="keyword">unsigned</span> <span class="keyword">long</span> flags)</span></span>; <span class="comment">/* 对指定的锁进行解锁,并恢复到加锁之前的状态 */</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">spin_lock_irq</span> <span class="params">(<span class="keyword">spinlock_t</span> * lock)</span></span>; <span class="comment">/* 禁止本地中断,获取指定的锁 */</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">spin_unlock_irq</span> <span class="params">(<span class="keyword">spinlock_t</span> * lock)</span></span>; <span class="comment">/* 对指定的锁进行解锁,恢复本地中断 */</span></span><br></pre></td></tr></table></figure>
 <p>为了使用在进程上下文和中断处理例程之间共享的资源，将按如下方式使用上述功能：</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">spinlock_t</span> lock;</span><br><span class="line"></span><br><span class="line"><span class="comment">/* IRQ handling routine: interrupt context */</span></span><br><span class="line"><span class="function"><span class="keyword">irqreturn_t</span> <span class="title">kbd_interrupt_handle</span><span class="params">(<span class="keyword">int</span> irq_no, <span class="keyword">void</span> * dev_id)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    ...</span><br><span class="line">    spin_lock(&amp;lock);</span><br><span class="line">    <span class="comment">/* Critical region - access shared resource */</span></span><br><span class="line">    spin_unlock (&amp;lock);</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">/* Process context: Disable interrupts when locking */</span></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">my_access</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> flags;</span><br><span class="line"></span><br><span class="line">    spin_lock_irqsave(&amp;lock, flags);</span><br><span class="line">    <span class="comment">/* Critical region - access shared resource */</span></span><br><span class="line">    spin_unlock_irqrestore(&amp;lock, flags);</span><br><span class="line"></span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">my_init</span> <span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    ...</span><br><span class="line">    spin_lock_init (&amp;lock);</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>因为系统硬中断 <code>kbd_interrupt_handle</code> 在任何时候都可以发生（内核会直接抢占原来的进程，从而执行硬中断）</li>
+<li>如果在 <code>my_access</code> 中拿了自旋锁之后被 <code>kbd_interrupt_handle</code> 抢占，就会发生死锁</li>
+<li>如果不在 <code>kbd_interrupt_handle</code> 中加锁，又可能会破坏共享数据（例如：在引用指针之前置空了指针）</li>
+<li>因此需要使用 <code>spin_lock_irqsave</code> 在加锁的同时禁止硬中断</li>
+</ul>
 <p><strong>Exercises</strong></p>
 <p>要解决练习，您需要执行以下步骤：</p>
 <ul>
@@ -340,10 +352,15 @@
 <li>通过如下命令可以在虚拟机中打开键盘：（用来查看 <code>kbd_interrupt_handler</code> 是否正确）</li>
 </ul>
 <figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">QEMU_DISPLAY=gtk make boot </span><br></pre></td></tr></table></figure>
-<img src="/2022/10/15/Linux-Lab4-IO%20access%20and%20Interrupts/1665767353033.png" class width="1665767353033"> 
+<img src="/2022/10/15/Linux-Lab4-IO%20access%20and%20Interrupts/1665767353033-1665905122545.png" class width="1665767353033"> 
 <ul>
 <li>被这个多线程和锁搞得头痛，有时候莫名其妙陷入死锁，尝试使用 <code>printk</code> 打印时还报错，看了答案以后进行了大刀阔斧的修改才解决了问题</li>
 <li>另外 <code>i8042_read_data</code> 实际上是使用了系统自带的键盘 IO 端口（程序中自己申请的 IO 端口其实就是花架子，不影响程序流程）</li>
+<li>在程序输入输出的地方都需要用锁，但是如果在程序拿到锁的情况下发生中断，中断中也要拿同一个锁的情况下就会发生问题（硬件中断在任何时候都会发生）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">spin_lock_irqsave(&amp;data-&gt;lock,flag);</span><br><span class="line">more = get_char(&amp;ch,data);</span><br><span class="line">spin_unlock_irqrestore(&amp;data-&gt;lock,flag);</span><br></pre></td></tr></table></figure>
+<ul>
+<li>所以使用 <code>spin_lock_irqsave</code> 在加锁的同时禁止中断</li>
 </ul>
 <p>仔细对比了答案以后，又分析了一下之前死锁的原因，感觉问题应该出在 <code>cat</code> 中：</p>
 <ul>
@@ -382,7 +399,10 @@
     <a href="/2022/10/13/Linux%20TLS%E7%BA%BF%E7%A8%8B%E5%B1%80%E9%83%A8%E5%AD%98%E5%82%A8/" rel="prev" title="Linux TLS线程局部存储">
       <i class="fa fa-chevron-left"></i> Linux TLS线程局部存储
     </a></div>
-      <div class="post-nav-item"></div>
+      <div class="post-nav-item">
+    <a href="/2022/10/16/Linux-Lab5-Deferred%20work/" rel="next" title="Linux-Lab5-Deferred work">
+      Linux-Lab5-Deferred work <i class="fa fa-chevron-right"></i>
+    </a></div>
     </div>
       </footer>
     
@@ -456,7 +476,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">168</span>
+          <span class="site-state-item-count">169</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -510,7 +530,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">33:07</span>
+    <span title="Reading time total">33:24</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
