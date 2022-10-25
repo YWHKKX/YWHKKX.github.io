@@ -156,6 +156,193 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/" class="post-title-link" itemprop="url">Ptmalloc算法：UAF</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-01-16 15:51:12" itemprop="dateCreated datePublished" datetime="2022-01-16T15:51:12+08:00">2022-01-16</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-03-18 00:12:50" itemprop="dateModified" datetime="2022-03-18T00:12:50+08:00">2022-03-18</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/SourceCodeAnalysis/" itemprop="url" rel="index"><span itemprop="name">SourceCodeAnalysis</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>6.7k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="Ptmalloc算法：UAF"><a href="#Ptmalloc算法：UAF" class="headerlink" title="Ptmalloc算法：UAF"></a>Ptmalloc算法：UAF</h2><p>堆利用中较为常见的漏洞，利用了“free”函数本身的缺陷，对已经置空的指针进行操作</p>
+<p>UAF一般有以下几种情况：</p>
+<ul>
+<li>内存块被释放后，其对应的指针被设置为 NULL ， 然后再次使用，自然程序会崩溃</li>
+<li>内存块被释放后，其对应的指针没有被设置为 NULL ，然后在它下一次被使用之前，没有代码对这块内存块进行修改，那么<strong>程序很有可能可以正常运转</strong></li>
+<li>内存块被释放后，其对应的指针没有被设置为 NULL，但是在它下一次使用之前，有代码对这块内存进行了修改，那么当程序再次使用这块内存时，<strong>就很有可能会出现奇怪的问题</strong></li>
+</ul>
+<p>UAF漏洞主要是后两种，被置空的指针被称为<strong>“dangling pointer”</strong></p>
+<hr>
+<h2 id="数据结构bins"><a href="#数据结构bins" class="headerlink" title="数据结构bins"></a>数据结构bins</h2><p>简单来说bin就是<strong>free chunk的容器</strong></p>
+<p><strong>ptmalloc</strong> 把大小相似的 chunk，用双向链表连接起来，这样就形成了一个 bin，ptmalloc 一共维护了 128 个这样的 bin，并使用数组来存储这些 bin 如下：（32位）</p>
+<img src="/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/1638959281581-1639312548300-1642849652608-1647533569928.png" class title="1638959281581-1639312548300">
+<p>从第2个到第64个bin是small bin，small bin中的chunk<strong>大小相同</strong>，small bin是一个双向链表</p>
+<p>在某一条bin中(chunk大小相同)按照<strong>「先入先出」</strong>（FIFO 的规则）进行排序，也就是说，刚被释放的放在前面</p>
+<p>bins分类：fast bin，small bin，unsorted bin，large bin</p>
+<img src="/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/1641885199475-1642849652609-1647533569929.png" class width="1641885199475"> 
+<p>bin链都是由当前线程的arena管理的</p>
+<p><strong>Fast bin</strong></p>
+<p>Fast bin可以看着是 small bins 的一小部分 cache ，设计初衷就是进行快速的小内存分配和释放</p>
+<p>概念：chunk 的大小在32字节~128字节（0x20~0x80）的 chunk 称为“fast chunk”（大小不是 malloc 时的大小，而是在内存中 struct malloc_chunk 的大小，包含前2个成员） </p>
+<p>特征：</p>
+<ul>
+<li>Fast bin是 <strong>单向链表</strong> 只有 FD 指针</li>
+<li>Fast chunk 不会对其他 free chunk 进行合并</li>
+<li>系统将属于 Fast bin 的 chunk 的 PREV_INUSE 位总是设置为1 </li>
+<li>Fast bin 中无论是添加还是移除 fast chunk，都是对“链表头”进行操作，而不会对某个中间的 fast chunk 进行操作</li>
+</ul>
+<p>使用次序：后入先出（可以类比一下栈）</p>
+<ul>
+<li>释放时：将此 chunk 插入到该 Fast bin 的“链表头”</li>
+<li>申请时：优先申请 Fast bin “链表头”处的 chunk（从前向后申请）</li>
+</ul>
+<p>通常情况下：</p>
+<ul>
+<li>如果chunk大小 小于“0x40(32位) / 0x80(64位)”，那么该chunk会直接存入Fast bin</li>
+<li>如果内存请求 小于“0x40(32位) / 0x80(64位)”，那么程序会优先在 Fast bin 中查找</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> *p1,*p2,*p3,*p4,*p5,*p6;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> *a,*b,*c;</span><br><span class="line">	</span><br><span class="line">	p1=<span class="built_in">malloc</span>(<span class="number">0x50</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,p1<span class="number">-4</span>);</span><br><span class="line">	p2=<span class="built_in">malloc</span>(<span class="number">0x50</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,p2<span class="number">-4</span>);</span><br><span class="line">	p3=<span class="built_in">malloc</span>(<span class="number">0x50</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,p3<span class="number">-4</span>);</span><br><span class="line">	p4=<span class="built_in">malloc</span>(<span class="number">0x50</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,p4<span class="number">-4</span>);</span><br><span class="line">	p5=<span class="built_in">malloc</span>(<span class="number">0x50</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,p5<span class="number">-4</span>);</span><br><span class="line">	p6=<span class="built_in">malloc</span>(<span class="number">0x50</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,p6<span class="number">-4</span>);</span><br><span class="line">	</span><br><span class="line">	<span class="built_in">free</span>(p1); <span class="comment">// 直接插入表头</span></span><br><span class="line">	<span class="built_in">free</span>(p3);</span><br><span class="line">	<span class="built_in">free</span>(p5);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;--------------\n&quot;</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;fastbin:%p -&gt; %p -&gt; %p\n&quot;</span>,p5<span class="number">-4</span>,p3<span class="number">-4</span>,p1<span class="number">-4</span>);</span><br><span class="line"></span><br><span class="line">	a=<span class="built_in">malloc</span>(<span class="number">0x50</span>); <span class="comment">// 从表头开始申请</span></span><br><span class="line">	b=<span class="built_in">malloc</span>(<span class="number">0x50</span>);</span><br><span class="line">	c=<span class="built_in">malloc</span>(<span class="number">0x50</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;--------------\n&quot;</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,a<span class="number">-4</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,b<span class="number">-4</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,c<span class="number">-4</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;--------------\n&quot;</span>);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">➜  [/home/ywhkkx/桌面] ./test </span><br><span class="line"><span class="number">0x56000683a000</span></span><br><span class="line"><span class="number">0x56000683a470</span></span><br><span class="line"><span class="number">0x56000683a4d0</span></span><br><span class="line"><span class="number">0x56000683a530</span></span><br><span class="line"><span class="number">0x56000683a590</span></span><br><span class="line"><span class="number">0x56000683a5f0</span></span><br><span class="line">--------------</span><br><span class="line">fastbin:<span class="number">0x56000683a590</span> -&gt; <span class="number">0x56000683a4d0</span> -&gt; <span class="number">0x56000683a000</span></span><br><span class="line">--------------</span><br><span class="line"><span class="number">0x56000683a590</span></span><br><span class="line"><span class="number">0x56000683a4d0</span></span><br><span class="line"><span class="number">0x56000683a000</span></span><br><span class="line">--------------</span><br></pre></td></tr></table></figure>
+<p><strong>Small bin</strong></p>
+<p>small bins 中一共有 62 个循环双向链表，每个链表中存储的 chunk 大小都一致</p>
+<p>使用次序：先入先出（可以类比一下食堂排队）</p>
+<ul>
+<li>释放时：将此 chunk 插入到该 Small bin 的“链表头”</li>
+<li>申请时：优先申请 Small bin “链表尾”处的 chunk（从后向前申请）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> *p1,*p2,*p3,*p4;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> a,b,c;</span><br><span class="line">	</span><br><span class="line">	p1=<span class="built_in">malloc</span>(<span class="number">0x80</span>);</span><br><span class="line">	p2=<span class="built_in">malloc</span>(<span class="number">0x100</span>);</span><br><span class="line">	<span class="built_in">free</span>(p1);</span><br><span class="line">	p3=<span class="built_in">malloc</span>(<span class="number">0x40</span>); <span class="comment">// 直接插入表头</span></span><br><span class="line">	p4=<span class="built_in">malloc</span>(<span class="number">0x100</span>); <span class="comment">// 重新分配:把unsortedbin中的chunk转移到smallbin&amp;largebin中</span></span><br><span class="line">	a=p3+<span class="number">0x10</span>; </span><br><span class="line">	</span><br><span class="line">	p1=<span class="built_in">malloc</span>(<span class="number">0x80</span>);</span><br><span class="line">	p2=<span class="built_in">malloc</span>(<span class="number">0x100</span>);</span><br><span class="line">	<span class="built_in">free</span>(p1);</span><br><span class="line">	p3=<span class="built_in">malloc</span>(<span class="number">0x40</span>);</span><br><span class="line">	p4=<span class="built_in">malloc</span>(<span class="number">0x100</span>);</span><br><span class="line">	p1=<span class="built_in">malloc</span>(<span class="number">0x80</span>);</span><br><span class="line">	b=p3+<span class="number">0x10</span>;</span><br><span class="line">	</span><br><span class="line">	p2=<span class="built_in">malloc</span>(<span class="number">0x100</span>);</span><br><span class="line">	<span class="built_in">free</span>(p1);</span><br><span class="line">	p3=<span class="built_in">malloc</span>(<span class="number">0x40</span>);</span><br><span class="line">	p4=<span class="built_in">malloc</span>(<span class="number">0x100</span>);</span><br><span class="line">	c=p3+<span class="number">0x10</span>;</span><br><span class="line"></span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;smallbin:0x5555%x -&gt; 0x5555%x -&gt; 0x5555%x\n&quot;</span>,c,b,a);</span><br><span class="line">	p1=<span class="built_in">malloc</span>(<span class="number">0x30</span>); <span class="comment">// 从表尾开始，向前申请</span></span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;chunk1:%p\n&quot;</span>,p1<span class="number">-4</span>);</span><br><span class="line">	p2=<span class="built_in">malloc</span>(<span class="number">0x30</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;chunk2:%p\n&quot;</span>,p2<span class="number">-4</span>);</span><br><span class="line">	p3=<span class="built_in">malloc</span>(<span class="number">0x30</span>);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;chunk3:%p\n&quot;</span>,p3<span class="number">-4</span>);</span><br><span class="line">	</span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">➜  [/home/ywhkkx/桌面] ./test               </span><br><span class="line">smallbin:<span class="number">0x5555a66515b0</span> -&gt; <span class="number">0x5555a6651300</span> -&gt; <span class="number">0x5555a6651050</span></span><br><span class="line">chunk1:<span class="number">0x5580a6651050</span></span><br><span class="line">chunk2:<span class="number">0x5580a6651300</span></span><br><span class="line">chunk3:<span class="number">0x5580a66515b0</span></span><br></pre></td></tr></table></figure>
+<p><strong>Large bin</strong></p>
+<p>large bins 中一共包括 63 个 bin，每个 bin 中的 chunk 的大小不一致，而是处于一定区间范围内 </p>
+<ul>
+<li>概念：大于等于1024字节（0x400）的chunk称之为large chunk，large bin就是用于管理这些largechunk的</li>
+<li>large bin链表的个数为63个，被分为6组</li>
+<li>largechunk使用 fd_nextsize、bk_nextsize 连接起来的<ul>
+<li>fd_nextsize：指向前一个与当前chunk大小不同的第一个空闲块，不包含 bin 的头指针</li>
+<li>bk_nextsize：指向后一个与当前 chunk 大小不同的第一个空闲块，不包含 bin 的头指针 </li>
+</ul>
+</li>
+<li>合并操作：类似于small bin</li>
+</ul>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><span class="line">#<span class="function">define <span class="title">largebin_index_32</span><span class="params">(sz)</span>                                                  \</span></span><br><span class="line"><span class="function">    <span class="params">(((((unsigned <span class="keyword">long</span>)</span> <span class="params">(sz)</span>) &gt;&gt; 6) &lt;</span>= <span class="number">38</span>)                                     \</span><br><span class="line">         ? <span class="number">56</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">6</span>)                                  \</span><br><span class="line">         : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">9</span>) &lt;= <span class="number">20</span>)                               \</span><br><span class="line">               ? <span class="number">91</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">9</span>)                            \</span><br><span class="line">               : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">12</span>) &lt;= <span class="number">10</span>)                        \</span><br><span class="line">                     ? <span class="number">110</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">12</span>)                    \</span><br><span class="line">                     : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">15</span>) &lt;= <span class="number">4</span>)                   \</span><br><span class="line">                           ? <span class="number">119</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">15</span>)              \</span><br><span class="line">                           : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">18</span>) &lt;= <span class="number">2</span>)             \</span><br><span class="line">                                 ? <span class="number">124</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">18</span>)        \</span><br><span class="line">                                 : <span class="number">126</span>)</span><br><span class="line"></span><br><span class="line">#<span class="function">define <span class="title">largebin_index_32_big</span><span class="params">(sz)</span>                                              \</span></span><br><span class="line"><span class="function">    <span class="params">(((((unsigned <span class="keyword">long</span>)</span> <span class="params">(sz)</span>) &gt;&gt; 6) &lt;</span>= <span class="number">45</span>)                                     \</span><br><span class="line">         ? <span class="number">49</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">6</span>)                                  \</span><br><span class="line">         : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">9</span>) &lt;= <span class="number">20</span>)                               \</span><br><span class="line">               ? <span class="number">91</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">9</span>)                            \</span><br><span class="line">               : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">12</span>) &lt;= <span class="number">10</span>)                        \</span><br><span class="line">                     ? <span class="number">110</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">12</span>)                    \</span><br><span class="line">                     : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">15</span>) &lt;= <span class="number">4</span>)                   \</span><br><span class="line">                           ? <span class="number">119</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">15</span>)              \</span><br><span class="line">                           : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">18</span>) &lt;= <span class="number">2</span>)             \</span><br><span class="line">                                 ? <span class="number">124</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">18</span>)        \</span><br><span class="line">                                 : <span class="number">126</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment">// XXX It remains to be seen whether it is good to keep the widths of</span></span><br><span class="line"><span class="comment">// XXX the buckets the same or whether it should be scaled by a factor</span></span><br><span class="line"><span class="comment">// XXX of two as well.</span></span><br><span class="line">#<span class="function">define <span class="title">largebin_index_64</span><span class="params">(sz)</span>                                                  \</span></span><br><span class="line"><span class="function">    <span class="params">(((((unsigned <span class="keyword">long</span>)</span> <span class="params">(sz)</span>) &gt;&gt; 6) &lt;</span>= <span class="number">48</span>)                                     \</span><br><span class="line">         ? <span class="number">48</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">6</span>)                                  \</span><br><span class="line">         : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">9</span>) &lt;= <span class="number">20</span>)                               \</span><br><span class="line">               ? <span class="number">91</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">9</span>)                            \</span><br><span class="line">               : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">12</span>) &lt;= <span class="number">10</span>)                        \</span><br><span class="line">                     ? <span class="number">110</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">12</span>)                    \</span><br><span class="line">                     : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">15</span>) &lt;= <span class="number">4</span>)                   \</span><br><span class="line">                           ? <span class="number">119</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">15</span>)              \</span><br><span class="line">                           : ((((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">18</span>) &lt;= <span class="number">2</span>)             \</span><br><span class="line">                                 ? <span class="number">124</span> + (((unsigned <span class="keyword">long</span>) (sz)) &gt;&gt; <span class="number">18</span>)        \</span><br><span class="line">                                 : <span class="number">126</span>)</span><br><span class="line"></span><br><span class="line">#<span class="function">define <span class="title">largebin_index</span><span class="params">(sz)</span>                                                     \</span></span><br><span class="line"><span class="function">    <span class="params">(SIZE_SZ == <span class="number">8</span> ? largebin_index_64(sz)</span> : MALLOC_ALIGNMENT </span>== <span class="number">16</span>             \</span><br><span class="line">                                                ? largebin_index_32_big(sz)    \</span><br><span class="line">                                                : largebin_index_32(sz))</span><br></pre></td></tr></table></figure>
+<p><strong>Unsorted bin</strong></p>
+<p><strong>没有来得及</strong>被其他bin收入的chunk，就会被认为在unsorted bin中</p>
+<p>在使用malloc申请内存时，如果在“fastbin”和“smallbin”中都没有找到合适的free chunk，程序就会在unsorted bin中进行遍历，寻找合适的free chunk，不合适的chunk会被 <strong>排序</strong> 并 <strong>重新分配</strong> 到对应的“bins”中</p>
+<h2 id="关于bins的内存分配"><a href="#关于bins的内存分配" class="headerlink" title="关于bins的内存分配"></a>关于bins的内存分配</h2><p>用户释放掉的 chunk 不会马上归还给系统，ptmalloc 会统一管理 heap 和 mmap 映射区域中的空闲的 chunk，当用户再一次请求分配内存时，ptmalloc 分配器会试图在空闲的 chunk 中挑选一块合适的给用户，这样可以避免频繁的系统调用，降低内存分配的开销</p>
+<p>详细过程：</p>
+<ul>
+<li><p>malloc的时候，不论malloc的大小，ptmalloc首先会去检查每个bins链（除去fastbins链）是否有与malloc相等大小的freechunk，如果没有就去检查bins链中是否有 <strong>大的freechunk</strong> 可以切割</p>
+</li>
+<li><p>如果存在，那么就切割大的freechunk，那么切割之后 <strong>剩余 </strong>的chunk成为 <strong>last remainder chunk</strong> ，并且last remainder chunk会被放入到 <strong>unsorted bin</strong> 中</p>
+</li>
+<li><p>如果没有 <strong>大的free chunk</strong> 可以切割，程序就会查询 <strong>top chunk</strong> ，如果top chunk的大小比用户请求的大小要大的话，就将该top chunk分作两部分：1.用户请求的chunk，2.新的top chunk，否则，就需要扩展heap或分配新的heap了——在 <strong>main arena</strong> 中通过 <strong>sbrk</strong> 扩展heap，而在 <strong>thread arena</strong> 中通过 <strong>mmap</strong> 分配新的heap</p>
+</li>
+</ul>
+<p>流程图：</p>
+<img src="/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/1638952496892-1642849652609-1647533569929.png" class width="1638952496892"> 
+<h2 id="UAF的利用姿势"><a href="#UAF的利用姿势" class="headerlink" title="UAF的利用姿势"></a>UAF的利用姿势</h2><p>UAF的利用比较简单，重点看下程序的“free模块”，看下哪些指针没有被置空</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">char</span> *a;</span><br><span class="line">    a = (<span class="keyword">char</span> *) <span class="built_in">malloc</span>(<span class="keyword">sizeof</span>(<span class="keyword">char</span>)*<span class="number">10</span>); <span class="comment">//申请a</span></span><br><span class="line">    <span class="built_in">memcpy</span>(a,<span class="string">&quot;ywhkkx&quot;</span>,<span class="number">10</span>);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;a addr:%x,%s\n&quot;</span>,a,a);</span><br><span class="line">    <span class="built_in">free</span>(a); <span class="comment">//释放a</span></span><br><span class="line">    <span class="keyword">char</span> *b;</span><br><span class="line">    b = (<span class="keyword">char</span> *)<span class="built_in">malloc</span>(<span class="keyword">sizeof</span>(<span class="keyword">char</span>)*<span class="number">10</span>); <span class="comment">//申请相同大小的b</span></span><br><span class="line">    <span class="built_in">memcpy</span>(a,<span class="string">&quot;isacaib&quot;</span>,<span class="number">10</span>);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;b addr:%x,%s\n&quot;</span>,b,b);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;a addr:%x,%s\n&quot;</span>,a,a);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">a addr:<span class="number">6792</span>d2a0,ywhkkx</span><br><span class="line">b addr:<span class="number">6792</span>d2a0,isacaib</span><br><span class="line">a addr:<span class="number">6792</span>d2a0,isacaib</span><br></pre></td></tr></table></figure>
+<p>可以发现，“a”和“b”指向了同一片内存：对“a”进行控制，就相当于控制了“b”</p>
+<h2 id="UAF利用姿势"><a href="#UAF利用姿势" class="headerlink" title="UAF利用姿势"></a>UAF利用姿势</h2><p>利用条件：</p>
+<ul>
+<li>“free模块”没有置空指针</li>
+<li>可以对chunk进行读写</li>
+</ul>
+<p>利用效果：</p>
+<ul>
+<li>WAA</li>
+</ul>
+<p>利用姿势：</p>
+<p>一，申请一个chunk，然后释放：</p>
+<img src="/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/1642849862503-1647533569929.png" class width="1642849862503"> 
+<p>二，修改该chunk的FD指针为“ Malloc_hook - 0x10 ”：</p>
+<img src="/2022/01/16/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUAF/1642849962521-1647533569929.png" class width="1642849962521"> 
+<p>三，再次申请chunk，并进行修改</p>
+<p>原理总述：</p>
+<p>利用UAF的特性（可以申请到相同的chunk），先在某个chunk的FD指针中写入 “目标地址 - 0x10” ，程序会误以为它是某个chunk，于是会把这片区域当成chunk给申请出来，最后就可以直接修改了</p>
+<p>​        // 如果程序没有提供“修改模块”，则使用Double Free</p>
+<hr>
+<p>PS：</p>
+<p>基于UAF，可以实现一种被称为<strong>Alloc to Stack</strong>的技术，和上述操作一致，只不过把“目标地址”换做了栈地址</p>
+<p>Wiki上把它归为Fastbin Attack，但它的利用核心还是UAF</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/10/free_hook+off-by-one/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -2480,129 +2667,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/01/%E8%A7%A3%E6%9E%90pwn%E9%A2%98%E4%B8%AD%E9%99%84%E5%B8%A6%E7%9A%84%E6%96%87%E4%BB%B6/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/01/01/%E8%A7%A3%E6%9E%90pwn%E9%A2%98%E4%B8%AD%E9%99%84%E5%B8%A6%E7%9A%84%E6%96%87%E4%BB%B6/" class="post-title-link" itemprop="url">解析pwn题中附带的文件（持续更新）</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2022-01-01 02:19:14" itemprop="dateCreated datePublished" datetime="2022-01-01T02:19:14+08:00">2022-01-01</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-01-07 21:18:58" itemprop="dateModified" datetime="2022-01-07T21:18:58+08:00">2022-01-07</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>1.8k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>2 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="解析pwn题中附带的文件"><a href="#解析pwn题中附带的文件" class="headerlink" title="解析pwn题中附带的文件"></a>解析pwn题中附带的文件</h2><img src="/2022/01/01/%E8%A7%A3%E6%9E%90pwn%E9%A2%98%E4%B8%AD%E9%99%84%E5%B8%A6%E7%9A%84%E6%96%87%E4%BB%B6/1640939836621.png" class width="1640939836621"> 
-<img src="/2022/01/01/%E8%A7%A3%E6%9E%90pwn%E9%A2%98%E4%B8%AD%E9%99%84%E5%B8%A6%E7%9A%84%E6%96%87%E4%BB%B6/1640939961296.png" class width="1640939961296"> 
-<p>环境对pwn题至关重要，有时候本地打不通但服务器可以打通，有时候却恰恰相反，这些都与pwn题的环境有关</p>
-<p>在一个pwn题中，除了有一个服务器上的样本文件以外，还有一些其他文件</p>
-<p>这些文件就是题目作者交给我们的“题目环境”</p>
-<p>我已经在“题目环境”这一块吃了不少亏了，主要是不知道这些文件是干什么的，又或许不明白这些文件的用法，所以我打算学习一下这些文件的用途，在此记录</p>
-<hr>
-<h2 id="libc-so"><a href="#libc-so" class="headerlink" title="libc.so"></a>libc.so</h2><p><strong>libc.so</strong>是glibc库的软链接，一般为 <strong>libc.so.6</strong> ，一个类似于WINDOWS下的一个快捷指向型的文件</p>
-<p>但是pwn题中给的<strong>libc.so.6</strong>可不是软链接，而是glibc库本身</p>
-<img src="/2022/01/01/%E8%A7%A3%E6%9E%90pwn%E9%A2%98%E4%B8%AD%E9%99%84%E5%B8%A6%E7%9A%84%E6%96%87%E4%BB%B6/1640941622614.png" class width="1640941622614"> 
-<p>软链接 <strong>libc.so.6</strong> 所链接的glibc就是“/lib/i386-linux-gnu”中的 <strong>libc.so.6</strong> </p>
-<p>​        //在本机进行操作时，程序会默认<strong>libc.so.6</strong>为glibc库，但题目文件是不是这个库就不一定了</p>
-<p>如果pwn题给出了glibc库那就简单了，可以直接用ELF模块引入</p>
-<h2 id="ld-linux-so"><a href="#ld-linux-so" class="headerlink" title="ld-linux.so"></a>ld-linux.so</h2><p>当操作系统加载一个动态链接的应用程序时，它必须找到并加载它执行该应用程序所依赖的<strong>动态库</strong>（以so为后缀的文件），而 <strong>ld-linux.so</strong> 是链接器的运行时的组件，是专门负责寻找库文件的库，ld-linux.so将按一定顺序找到libc.so.6库再给cat调用</p>
-<p>​        // ld-linux.so的位置是写死在程序中的，gcc在编译程序时就写死在里面了 </p>
-<img src="/2022/01/01/%E8%A7%A3%E6%9E%90pwn%E9%A2%98%E4%B8%AD%E9%99%84%E5%B8%A6%E7%9A%84%E6%96%87%E4%BB%B6/1640971840935.png" class width="1640971840935"> 
-<p>程序默认的 <strong>ld-linux.so</strong> 就是“/lib/i386-linux-gnu”中的 <strong>ld-linux.so.2</strong></p>
-<p>如果pwn题给出了ld-linux.so，那么它一定在链接器上动了手脚，需要用<strong>patchelf</strong>修改链接器组件为题目给出的ld-linux.so，以保证环境一致</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">$ patchelf --<span class="built_in">set</span>-interpreter /lib/my-ld-linux.so<span class="number">.2</span> my-program</span><br><span class="line"><span class="comment">#&#x27;/lib/my-ld-linux.so.2&#x27;：ld-linux.so文件的路径</span></span><br><span class="line"><span class="comment">#&#x27;my-program&#x27;：pwn题样本文件的名称</span></span><br></pre></td></tr></table></figure>
-<h2 id="libc-A-BC-so"><a href="#libc-A-BC-so" class="headerlink" title="libc-A.BC.so"></a>libc-A.BC.so</h2><p><strong>libc-A.BC.so</strong> 和 <strong>libc.so.6</strong> 是同一个东西（都是glibc共享库）</p>
-<p>只不过<strong>libc-A.BC.so</strong>的命名方式更加规范：</p>
-<p>lib表示库文件，so表示动态链接，A为主版本号，B为次版本号，C为发布版本号</p>
-<p>标准命名可以方便pwn手一下子定位libc版本，但是有些pwn题为了隐藏libc版本，就故意把glibc库文件统一命名为libc.so.6</p>
-<img src="/2022/01/01/%E8%A7%A3%E6%9E%90pwn%E9%A2%98%E4%B8%AD%E9%99%84%E5%B8%A6%E7%9A%84%E6%96%87%E4%BB%B6/1640973216192.png" class width="1640973216192"> 
-<p>如果pwn题给出了libc-A.BC.so，那就连libc版本都不用测了，直接用<strong>patchelf</strong>改</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">$ patchelf ./my-program --replace-needed libc.so<span class="number">.6</span> ./other-libs</span><br><span class="line"><span class="comment">#&#x27;/other-libs&#x27;：设置rpath的路径</span></span><br><span class="line"><span class="comment">#&#x27;my-program&#x27;：pwn题样本文件的名称</span></span><br></pre></td></tr></table></figure>
-<p>程序会优先从rpath中获取程序的glibc库</p>
-<h2 id="ld-A-BC-so"><a href="#ld-A-BC-so" class="headerlink" title="ld-A.BC.so"></a>ld-A.BC.so</h2><p><strong>ld-A.BC.so</strong> 和 <strong>ld-linux.so</strong> 是同一个东西（都是链接器组件）</p>
-<p>ld表示链接器组件，so表示动态链接，A为主版本号，B为次版本号，C为发布版本号</p>
-<img src="/2022/01/01/%E8%A7%A3%E6%9E%90pwn%E9%A2%98%E4%B8%AD%E9%99%84%E5%B8%A6%E7%9A%84%E6%96%87%E4%BB%B6/1640973934926.png" class width="1640973934926"> 
-<p>同样，用<strong>patchelf</strong>修改链接器组件</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ patchelf --<span class="built_in">set</span>-interpreter /lib/my-ld-linux.so<span class="number">.2</span> my-program</span><br></pre></td></tr></table></figure>
-<h2 id="libseccomp-so"><a href="#libseccomp-so" class="headerlink" title="libseccomp.so"></a>libseccomp.so</h2><p>这个就比较高端了，<strong>seccomp</strong> 又被称为沙盒，是一种保护机制</p>
-<p><strong>libseccomp</strong> 是一个 C 语言开发的 Linux 内核系统调用过滤帮助库，很多容器项目都使用到它，比如 containerd、docker、runc </p>
-<p><strong>libseccomp.so</strong> 就是 libseccomp 所使用的动态链接</p>
-<p><strong>libseccomp.so.2</strong> 就是 <strong>libseccomp.so</strong> 的常用版本，如果pwn题中出现了libseccomp.so.2，就说明它开了沙盒的</p>
-<p>如果只是单纯的ROP题目，libseccomp.so.2可有可无，因为有专门的工具用于检查沙盒，但是如果题目设计到 <strong>堆</strong> 就不同了，如果使用了 libseccomp.so.2 来开保护沙盒，那么会在程序中创建各个堆块，这可能会导致远程和本地的堆空间的布局不一致 </p>
-<p>目前没有找到什么解决的办法</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2674,7 +2738,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">175</span>
+          <span class="site-state-item-count">176</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2687,7 +2751,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">111</span>
+        <span class="site-state-item-count">113</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -2728,7 +2792,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">34:54</span>
+    <span title="Reading time total">35:08</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
