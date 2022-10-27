@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="RCU 简述 RCU(Read-Copy Update)，是 Linux 中比较重要的一种同步机制，特点如下：  复制后更新：但更新数据的时候，需要先复制一份副本，在副本上完成修改，再一次性地替换旧数据”（替换数据时需要其他同步机制的保护） 延迟回收内存：在数据被删除后（节点脱链）销毁前（释放空间），需要等待其他读线程停止使用该数据  复制后更新是 Linux 内核实现的一种针对“读多写少”的共享">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Linux RCU机制">
+<meta property="og:url" content="http://example.com/2022/10/27/Linux%20RCU%E6%9C%BA%E5%88%B6/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="RCU 简述 RCU(Read-Copy Update)，是 Linux 中比较重要的一种同步机制，特点如下：  复制后更新：但更新数据的时候，需要先复制一份副本，在副本上完成修改，再一次性地替换旧数据”（替换数据时需要其他同步机制的保护） 延迟回收内存：在数据被删除后（节点脱链）销毁前（释放空间），需要等待其他读线程停止使用该数据  复制后更新是 Linux 内核实现的一种针对“读多写少”的共享">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2022/10/27/Linux%20RCU%E6%9C%BA%E5%88%B6/1666865836143.png">
+<meta property="article:published_time" content="2022-10-27T11:52:42.000Z">
+<meta property="article:modified_time" content="2022-10-27T11:54:01.483Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="kernel">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2022/10/27/Linux%20RCU%E6%9C%BA%E5%88%B6/1666865836143.png">
+
+<link rel="canonical" href="http://example.com/2022/10/27/Linux%20RCU%E6%9C%BA%E5%88%B6/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>Linux RCU机制 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/10/27/Linux%20RCU%E6%9C%BA%E5%88%B6/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Linux RCU机制
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-10-27 19:52:42 / Modified: 19:54:01" itemprop="dateCreated datePublished" datetime="2022-10-27T19:52:42+08:00">2022-10-27</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>4.3k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>4 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>RCU 简述</strong></p>
+<p>RCU(Read-Copy Update)，是 Linux 中比较重要的一种同步机制，特点如下：</p>
+<ul>
+<li>复制后更新：但更新数据的时候，需要先复制一份副本，在副本上完成修改，再一次性地替换旧数据”（替换数据时需要其他同步机制的保护）</li>
+<li>延迟回收内存：在数据被删除后（节点脱链）销毁前（释放空间），需要等待其他读线程停止使用该数据</li>
+</ul>
+<p>复制后更新是 Linux 内核实现的一种针对“读多写少”的共享数据的同步机制：</p>
+<ul>
+<li>不同于其他的同步机制，它允许多个读者同时访问共享数据，而且读者的性能不会受影响</li>
+<li>读者与写者之间也不需要同步机制，但需要“复制后再写”</li>
+<li>但如果存在多个写者时，写者与写者之间需要利用其他同步机制保证同步</li>
+</ul>
+<p>延迟回收内存是为了防止已经被销毁的数据被其他线程使用：</p>
+<ul>
+<li>一个位于临界区的指针被释放之后，另一个线程如果使用该指针就会产生安全问题</li>
+</ul>
+<p><strong>RCU 作用</strong></p>
+<p>RCU 的一个典型的应用场景是链表，主要解决以下问题：</p>
+<ul>
+<li>在读取过程中，另外一个线程删除了一个节点：<ul>
+<li>删除线程可以把这个节点从链表中移除，但它不能直接销毁这个节点，必须等到所有的读取线程读取完成以后，才进行销毁操作</li>
+<li>RCU 中把这个过程称为宽限期（Grace period）</li>
+</ul>
+</li>
+<li>在读取过程中，另外一个线程插入了一个新节点<ul>
+<li>需要保证读到的这个节点是完整的（得到的要么全是旧的数据，要么全是新的数据，反正不会是半新半旧的数据）</li>
+<li>这里涉及到了发布-订阅机制（Publish-Subscribe Mechanism）     </li>
+</ul>
+</li>
+<li>保证读取链表的完整性<ul>
+<li>新增或者删除一个节点，不至于导致其他正在遍历该链表的线程从中间断开</li>
+<li>但是 RCU 并不保证一定能读到新增的节点或者不读到要被删除的节点</li>
+</ul>
+</li>
+</ul>
+<p><strong>RCU API</strong></p>
+<p>添加链表项：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> list_next_rcu(list)	(*((struct list_head __rcu **)(&amp;(list)-&gt;next))) <span class="comment">/* 返回&amp;(list)-&gt;next),但不能直接访问它 */</span></span></span><br><span class="line"></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">void</span> __list_add_rcu(struct list_head *<span class="keyword">new</span>,</span><br><span class="line">		struct list_head *prev, struct list_head *next)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="keyword">if</span> (!__list_add_valid(<span class="keyword">new</span>, prev, next)) <span class="comment">/* 检查一个节点是否可用 */</span></span><br><span class="line">		<span class="keyword">return</span>;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">new</span>-&gt;next = next;</span><br><span class="line">	<span class="keyword">new</span>-&gt;prev = prev;</span><br><span class="line">	rcu_assign_pointer(list_next_rcu(prev), <span class="keyword">new</span>);</span><br><span class="line">	next-&gt;prev = <span class="keyword">new</span>;</span><br><span class="line">&#125; <span class="comment">/* 在prev和next中间插入new,但提供了RCU的保护 */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>除了 <code>rcu_assign_pointer</code> 函数，其他地方和普通的 <code>__list_add</code> 没什么不同，该函数的底层应该是一个内存屏障（防止 CPU 优化执行顺序），以避免在新指针 new 准备好之前，就被引用了</li>
+</ul>
+<p>删除链表项：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">void</span> <span class="title">list_del_rcu</span><span class="params">(struct list_head *entry)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	__list_del_entry(entry);</span><br><span class="line">	entry-&gt;prev = LIST_POISON2;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>和 <code>list_del</code> 相比，<code>list_del_rcu</code> 只对 <code>entry-&gt;prev</code> 进行了处理（目前不知道原因） </li>
+</ul>
+<p>更新链表：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">void</span> <span class="title">list_replace_rcu</span><span class="params">(struct list_head *old,</span></span></span><br><span class="line"><span class="params"><span class="function">				struct list_head *<span class="keyword">new</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">new</span>-&gt;next = old-&gt;next;</span><br><span class="line">	<span class="keyword">new</span>-&gt;prev = old-&gt;prev;</span><br><span class="line">	rcu_assign_pointer(list_next_rcu(<span class="keyword">new</span>-&gt;prev), <span class="keyword">new</span>);</span><br><span class="line">	<span class="keyword">new</span>-&gt;next-&gt;prev = <span class="keyword">new</span>;</span><br><span class="line">	old-&gt;prev = LIST_POISON2;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>同样也是只对 <code>old-&gt;prev</code> 进行了处理</li>
+</ul>
+<p>访问链表：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">rcu_read_lock(); <span class="comment">/* 声明了一个读端的临界区(read-side critical sections) */</span></span><br><span class="line">list_for_each_entry_rcu(pos, head, member) &#123;</span><br><span class="line">    ......</span><br><span class="line">&#125;</span><br><span class="line">rcu_read_unlock();</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>rcu_read_lock</code> 和 <code>rcu_read_unlock</code> 用来标识 RCU read side 临界区（其作用就是帮助检测宽限期是否结束）</li>
+</ul>
+<p><strong>RCU 机制</strong></p>
+<p>宽限期：（Grace period）</p>
+<img src="/2022/10/27/Linux%20RCU%E6%9C%BA%E5%88%B6/1666865836143.png" class width="1666865836143"> 
+<ul>
+<li>宽限期的意义是，在一个删除动作发生后，它必须等待所有在宽限期开始前已经开始的 Reader 线程结束，才可以进行销毁操作（例如：Reader1，Reader2）</li>
+<li>删除之后，Reader 就会读取新数据，从而拿不到旧数据中的指针，因此就不用考虑安全问题</li>
+<li>用于判定宽限期开始的函数如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">synchronize_rcu</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	RCU_LOCKDEP_WARN(lock_is_held(&amp;rcu_bh_lock_map) ||</span><br><span class="line">			 lock_is_held(&amp;rcu_lock_map) ||</span><br><span class="line">			 lock_is_held(&amp;rcu_sched_lock_map),</span><br><span class="line">			 <span class="string">&quot;Illegal synchronize_rcu() in RCU read-side critical section&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line">EXPORT_SYMBOL_GPL(synchronize_rcu);</span><br></pre></td></tr></table></figure>
+<ul>
+<li>检测宽限期是否结束的操作很复杂，需要利用 <code>rcu_read_lock</code> 和 <code>rcu_read_unlock</code> 所标记的区域进行判断</li>
+<li>宽限期是 RCU 实现中最复杂的部分，要求在提高读数据性能的同时，删除数据的性能也不能太差</li>
+</ul>
+<p>发布-订阅机制：（Publish-Subscribe Mechanism）    </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">void</span> __list_add_rcu(struct list_head *<span class="keyword">new</span>,</span><br><span class="line">		struct list_head *prev, struct list_head *next)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="keyword">if</span> (!__list_add_valid(<span class="keyword">new</span>, prev, next)) <span class="comment">/* 检查一个节点是否可用 */</span></span><br><span class="line">		<span class="keyword">return</span>;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">new</span>-&gt;next = next;</span><br><span class="line">	<span class="keyword">new</span>-&gt;prev = prev;</span><br><span class="line">	rcu_assign_pointer(list_next_rcu(prev), <span class="keyword">new</span>);</span><br><span class="line">	next-&gt;prev = <span class="keyword">new</span>;</span><br><span class="line">&#125; <span class="comment">/* 在prev和next中间插入new,但提供了RCU的保护 */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>发布-订阅机制其实就是 <code>rcu_assign_pointer</code> 函数的使用，用于解决优化导致的 CPU 执行顺序问题</li>
+<li>对应宏函数如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> rcu_assign_pointer(p, v)					      \</span></span><br><span class="line"><span class="meta">(&#123;									      \</span></span><br><span class="line"><span class="meta">	uintptr_t _r_a_p__v = (uintptr_t)(v);				      \</span></span><br><span class="line"><span class="meta">									      \</span></span><br><span class="line"><span class="meta">	<span class="meta-keyword">if</span> (__builtin_constant_p(v) &amp;&amp; (_r_a_p__v) == (uintptr_t)NULL)	      \</span></span><br><span class="line"><span class="meta">		WRITE_ONCE((p), (typeof(p))(_r_a_p__v));		      \</span></span><br><span class="line"><span class="meta">	<span class="meta-keyword">else</span>								      \</span></span><br><span class="line"><span class="meta">		smp_store_release(&amp;p, RCU_INITIALIZER((typeof(p))_r_a_p__v)); \</span></span><br><span class="line"><span class="meta">	_r_a_p__v;							      \</span></span><br><span class="line"><span class="meta">&#125;)</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>其实我看不太懂这个函数，但它的功能和内存屏障很像，因此它的底层也极有可能是一个内存屏障</li>
+</ul>
+<p>复制更新机制：（Copy Update）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">p = <span class="comment">/* 将要被替换的对象 */</span></span><br><span class="line">q = kmalloc(<span class="keyword">sizeof</span>(*p), GFP_KERNEL);</span><br><span class="line">*q = *p;</span><br><span class="line">q-&gt;field = new_value;</span><br><span class="line">list_replace_rcu(&amp;p-&gt;<span class="built_in">list</span>, &amp;q-&gt;<span class="built_in">list</span>);</span><br><span class="line">synchronize_rcu();</span><br><span class="line">kfree(p);</span><br></pre></td></tr></table></figure>
+<ul>
+<li>复制更新机制的实现基于宽限期</li>
+<li><code>synchronize_rcu</code> 可以防止在 <code>list_replace_rcu</code> 之后，<code>kfree</code> 之前，有读线程使用了正在进行更新的链表节点</li>
+<li>更新以后的旧节点脱链，拿到旧节点的 Reader 在宽限期中执行完毕，之后的 <code>kfree</code> 就不会引发安全问题了</li>
+<li>PS：申请空间和复制数据的操作需要手动完成，没有专门的 API</li>
+</ul>
+<p><strong>RCU 案例</strong></p>
+<p>Reader 正在遍历查找链表节点：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">search</span><span class="params">(<span class="keyword">long</span> key, <span class="keyword">int</span> *result)</span> </span>&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> *<span class="title">lp</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">el</span> *<span class="title">p</span>;</span></span><br><span class="line">    </span><br><span class="line">    rcu_read_lock();</span><br><span class="line">    list_for_each_entry_rcu(p, head, lp) &#123;</span><br><span class="line">        <span class="keyword">if</span>(p-&gt;key == key) &#123;</span><br><span class="line">            *result = p-&gt;data;</span><br><span class="line">            rcu_read_unlock();</span><br><span class="line">            <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    rcu_read_unlock();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>Writer 正在遍历删除链表节点：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">delete</span><span class="params">(<span class="keyword">long</span> key)</span> </span>&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> *<span class="title">lp</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">el</span> *<span class="title">p</span>;</span></span><br><span class="line">    </span><br><span class="line">    spin_lock(&amp;listmutex);</span><br><span class="line">    list_for_each_entry_rcu(p, head, lp) &#123;</span><br><span class="line">        <span class="keyword">if</span>(p-&gt;key == key) &#123;</span><br><span class="line">            list_del_rcu(&amp;p-&gt;<span class="built_in">list</span>);</span><br><span class="line">            synchronize_rcu(); </span><br><span class="line">            spin_unlock(&amp;listmutex);</span><br><span class="line">            kfree(p);</span><br><span class="line">            <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    spin_unlock(&amp;listmutex);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>假设一个线程执行 Reader，另一个线程执行 Writer：</p>
+<ul>
+<li>如果使用读写锁，那么 Reader 和 Writer 就不能同时进行，影响效率</li>
+<li>如果使用顺序锁，那么在 Reader 和 Writer 同时操作指针时容易出现问题</li>
+<li>这里使用了 RCU 锁，Writer 会在 <code>synchronize_rcu</code> 上等待持有旧指针的 Reader 执行完毕，只是牺牲了 Writer 的效率就避免了安全问题</li>
+</ul>
+<p>参考：</p>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://zhuanlan.zhihu.com/p/113999842">rcu 机制简介 - 知乎</a> </li>
+<li><a target="_blank" rel="noopener" href="https://cloud.tencent.com/developer/article/1006204">深入理解 Linux 的 RCU 机制 - 腾讯云开发者社区</a> </li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/kernel/" rel="tag"><i class="fa fa-tag"></i> kernel</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/10/26/Linux%20%E4%BC%AA%E6%96%87%E4%BB%B6%E7%B3%BB%E7%BB%9F/" rel="prev" title="Linux 伪文件系统">
+      <i class="fa fa-chevron-left"></i> Linux 伪文件系统
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">178</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">113</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">2.3m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">35:15</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
