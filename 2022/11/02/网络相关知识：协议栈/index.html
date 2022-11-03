@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="TCP&#x2F;IP 协议栈简述  TCP&#x2F;IP 协议栈是一系列网络协议的总和，是构成网络通信的核心骨架，采用4层结构，分别是：  应用层： 向用户态程序提供网络接口 例如：域名系统DNS协议、HTTP超文本传送协议、Telnet远程登录协议、SNMP简单网络管理协议   传输层： 位于通信部分的最高层，用户功能的最底层，用于为运行在不同主机上的进程之间提供逻辑通信 例如：传输控制协议TCP - Tran">
+<meta property="og:type" content="article">
+<meta property="og:title" content="网络相关知识：协议栈">
+<meta property="og:url" content="http://example.com/2022/11/02/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9A%E5%8D%8F%E8%AE%AE%E6%A0%88/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="TCP&#x2F;IP 协议栈简述  TCP&#x2F;IP 协议栈是一系列网络协议的总和，是构成网络通信的核心骨架，采用4层结构，分别是：  应用层： 向用户态程序提供网络接口 例如：域名系统DNS协议、HTTP超文本传送协议、Telnet远程登录协议、SNMP简单网络管理协议   传输层： 位于通信部分的最高层，用户功能的最底层，用于为运行在不同主机上的进程之间提供逻辑通信 例如：传输控制协议TCP - Tran">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2022-11-02T10:48:18.000Z">
+<meta property="article:modified_time" content="2022-11-02T10:53:05.925Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="Net Knowledge">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2022/11/02/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9A%E5%8D%8F%E8%AE%AE%E6%A0%88/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>网络相关知识：协议栈 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/11/02/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9A%E5%8D%8F%E8%AE%AE%E6%A0%88/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          网络相关知识：协议栈
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-11-02 18:48:18 / Modified: 18:53:05" itemprop="dateCreated datePublished" datetime="2022-11-02T18:48:18+08:00">2022-11-02</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>8.1k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>7 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>TCP/IP 协议栈简述</strong> </p>
+<p>TCP/IP 协议栈是一系列网络协议的总和，是构成网络通信的核心骨架，采用4层结构，分别是：</p>
+<ul>
+<li>应用层：<ul>
+<li>向用户态程序提供网络接口</li>
+<li>例如：域名系统DNS协议、HTTP超文本传送协议、Telnet远程登录协议、SNMP简单网络管理协议</li>
+</ul>
+</li>
+<li>传输层：<ul>
+<li>位于通信部分的最高层，用户功能的最底层，用于为运行在不同主机上的进程之间提供逻辑通信</li>
+<li>例如：传输控制协议TCP - Transmission Control Protocol，用户数据报协议UDP - User Datagram Protocol</li>
+</ul>
+</li>
+<li>网络层：<ul>
+<li>进一步管理网络中的数据通信，将数据从源端经过若干中间节点传送到目的端</li>
+<li>例如：ARP协议，IP协议，ICMP协议，IGMP协议</li>
+</ul>
+</li>
+<li>链路层：<ul>
+<li>提供透明可靠的数据传送基本服务</li>
+<li>例如：以太网协议</li>
+</ul>
+</li>
+</ul>
+<p>梳理一下每层模型的职责：</p>
+<ul>
+<li>链路层：对“0”和“1”进行分组，定义数据帧，确认主机的物理地址，传输数据</li>
+<li>网络层：定义IP地址，确认主机所在的网络位置，并通过IP进行MAC寻址，对外网数据包进行路由转发</li>
+<li>传输层：定义端口，确认主机上应用程序的身份，并将数据包交给对应的应用程序</li>
+<li>应用层：定义数据格式，并按照对应的格式解读数据</li>
+</ul>
+<p><strong>网络协议的注册/注销</strong></p>
+<p>协议在内核中用 <code>packet_type</code> 来表示，其拥有不同的容器：</p>
+<ul>
+<li>每个协议在系统初始化或者相应模块加载的时候添加到内核中的一个大小为16的哈希表 <code>ptype_base</code> 中，其中哈希表中的每个元素都是一个双向链表：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">ptype_base</span>[<span class="title">PTYPE_HASH_SIZE</span>] __<span class="title">read_mostly</span>;</span> <span class="comment">/* 保存所有支持的3层协议(网际协议)处理函数的地方 */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>另一种协议容器是 <code>ptype_all</code>，它直接就是一个双向链表：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>	<span class="title">ptype_all</span>;</span> <span class="comment">/* 保存所有协议处理回调的地方(设备无关) */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>还有一种协议容器是 <code>struct net_device</code> 中的一个条目，也是一个双向链表：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">net_device</span> &#123;</span></span><br><span class="line">    ......</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>	<span class="title">ptype_all</span>;</span> <span class="comment">/* 保存所有协议处理回调的地方(设备有关) */</span></span><br><span class="line">    ......</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>添加协议的 API 如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">dev_add_pack</span><span class="params">(struct packet_type *pt)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> *<span class="title">head</span> =</span> ptype_head(pt);</span><br><span class="line"></span><br><span class="line">	spin_lock(&amp;ptype_lock);</span><br><span class="line">	list_add_rcu(&amp;pt-&gt;<span class="built_in">list</span>, head); </span><br><span class="line">	spin_unlock(&amp;ptype_lock);</span><br><span class="line">&#125;</span><br><span class="line">EXPORT_SYMBOL(dev_add_pack);</span><br></pre></td></tr></table></figure>
+<p>其中需要传入的 <code>packet_type</code> 结构体用于描述一个协议：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">packet_type</span> &#123;</span></span><br><span class="line">	__be16			type;	<span class="comment">/* This is really htons(ether_type). */</span></span><br><span class="line">	<span class="keyword">bool</span>			ignore_outgoing;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">net_device</span>	*<span class="title">dev</span>;</span>	<span class="comment">/* NULL is wildcarded here */</span></span><br><span class="line">	<span class="keyword">int</span>			(*func) (struct sk_buff *,</span><br><span class="line">					 struct net_device *,</span><br><span class="line">					 struct packet_type *,</span><br><span class="line">					 struct net_device *);</span><br><span class="line">	<span class="keyword">void</span>			(*list_func) (struct list_head *,</span><br><span class="line">					      struct packet_type *,</span><br><span class="line">					      struct net_device *);</span><br><span class="line">	<span class="keyword">bool</span>			(*id_match)(struct packet_type *ptype,</span><br><span class="line">					    struct sock *sk);</span><br><span class="line">	<span class="keyword">void</span>			*af_packet_priv;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>	<span class="title">list</span>;</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>type</code>：协议代码，表明了协议类型 </li>
+<li><code>dev</code>：设备，指明了在哪个设备上使能该协议（<code>dev</code> 将 NULL 视为通配符，表示任意设备）</li>
+<li><code>func</code>：对应协议的 Handler（处理程序，例如：在网卡收到数据后，<code>netif_receive_skb</code> 将会根据 <code>skb-&gt;protocol</code> 来调用相应的 func 来处理 skb）</li>
+<li><code>af_packet_priv</code>：为 PF_PACKET 类型的 socket 使用，指向该 <code>packet_type</code> 的创建者相关的 sock 数据结构 </li>
+<li><code>list</code>：协议链表头</li>
+</ul>
+<p>因此，协议的注册由两步完成：</p>
+<ul>
+<li>对 <code>packet_type</code> 进行初始化</li>
+<li>调用 <code>dev_add_pack</code> 把目标协议加入到 <code>ptype_base</code></li>
+</ul>
+<p>相应的，协议的注销需要调用如下 API：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">dev_remove_pack</span><span class="params">(struct packet_type *pt)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	__dev_remove_pack(pt);</span><br><span class="line"></span><br><span class="line">	synchronize_net(); <span class="comment">/* 保证在dev_remove_pack返回的时候,这个移除了的packet_type没有在内核中使用 */</span></span><br><span class="line">&#125;</span><br><span class="line">EXPORT_SYMBOL(dev_remove_pack);</span><br></pre></td></tr></table></figure>
+<p><strong>数据包的处理流程</strong></p>
+<p>对于 <code>ptype_base</code> 和 <code>ptype_all</code> 两个类型的协议 Container(容器)，协议 Handler 的调用方法是相似的：</p>
+<ul>
+<li>遍历其中的双向链表，直到找到了符合条件的 <code>packet_type</code></li>
+<li>可以使用 <code>deliver_skb</code> 间接调用 <code>packet_type-&gt;func</code></li>
+<li>或者直接调用 <code>packet_type-&gt;func</code></li>
+</ul>
+<p><code>ptype_base</code> 和 <code>ptype_all</code> 的不同之处在于：</p>
+<ul>
+<li><code>ptype_all</code> 本身就是一个双向链表，可以直接遍历</li>
+<li><code>ptype_base</code> 则是一个包含了双向链表的哈希表， 在遍历之前需要根据 <code>skb-&gt;protocol</code> 来计算找到待遍历的双向链表</li>
+</ul>
+<p>当网卡收到数据包后，它会将数据包从网卡硬件缓存转移到服务器内存中（具体为 <code>sk_buffer</code>），然后触发一个中断来通知内核进行处理</p>
+<p>内核会执行如下函数来处理 <code>sk_buffer</code> 中的数据包：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">netif_receive_skb</span><span class="params">(struct sk_buff *skb)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	trace_netif_receive_skb_entry(skb);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> netif_receive_skb_internal(skb);</span><br><span class="line">&#125;</span><br><span class="line">EXPORT_SYMBOL(netif_receive_skb);</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">int</span> <span class="title">netif_receive_skb_internal</span><span class="params">(struct sk_buff *skb)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> ret;</span><br><span class="line"></span><br><span class="line">	net_timestamp_check(netdev_tstamp_prequeue, skb); <span class="comment">/* 检查timestamp */</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (skb_defer_rx_timestamp(skb))</span><br><span class="line">		<span class="keyword">return</span> NET_RX_SUCCESS;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (static_branch_unlikely(&amp;generic_xdp_needed_key)) &#123;</span><br><span class="line">		<span class="keyword">int</span> ret;</span><br><span class="line"></span><br><span class="line">		preempt_disable();</span><br><span class="line">		rcu_read_lock();</span><br><span class="line">		ret = do_xdp_generic(rcu_dereference(skb-&gt;dev-&gt;xdp_prog), skb);</span><br><span class="line">		rcu_read_unlock();</span><br><span class="line">		preempt_enable();</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> (ret != XDP_PASS)</span><br><span class="line">			<span class="keyword">return</span> NET_RX_DROP;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	rcu_read_lock(); <span class="comment">/* RCU读锁(读者不受限制,写者阻塞) */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_RPS</span></span><br><span class="line">	<span class="keyword">if</span> (static_key_false(&amp;rps_needed)) &#123;</span><br><span class="line">		<span class="class"><span class="keyword">struct</span> <span class="title">rps_dev_flow</span> <span class="title">voidflow</span>, *<span class="title">rflow</span> =</span> &amp;voidflow;</span><br><span class="line">		<span class="keyword">int</span> cpu = get_rps_cpu(skb-&gt;dev, skb, &amp;rflow);</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> (cpu &gt;= <span class="number">0</span>) &#123;</span><br><span class="line">			ret = enqueue_to_backlog(skb, cpu, &amp;rflow-&gt;last_qtail);</span><br><span class="line">			rcu_read_unlock();</span><br><span class="line">			<span class="keyword">return</span> ret;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">	ret = __netif_receive_skb(skb);</span><br><span class="line">	rcu_read_unlock();</span><br><span class="line">	<span class="keyword">return</span> ret;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>netif_receive_skb_internal</code> 只是对数据包进行了 RPS（增加服务器的负载均衡，优化吞吐率）的处理，然后调用 <code>__netif_receive_skb</code></li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">int</span> __netif_receive_skb(struct sk_buff *skb)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="keyword">int</span> ret;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (sk_memalloc_socks() &amp;&amp; skb_pfmemalloc(skb)) &#123;</span><br><span class="line">		<span class="keyword">unsigned</span> <span class="keyword">int</span> noreclaim_flag;</span><br><span class="line">		noreclaim_flag = memalloc_noreclaim_save();</span><br><span class="line">		ret = __netif_receive_skb_one_core(skb, <span class="literal">true</span>);</span><br><span class="line">		memalloc_noreclaim_restore(noreclaim_flag);</span><br><span class="line">	&#125; <span class="keyword">else</span></span><br><span class="line">		ret = __netif_receive_skb_one_core(skb, <span class="literal">false</span>);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> ret;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>进行简单检查后就调用了 <code>__netif_receive_skb_one_core</code>：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">int</span> __netif_receive_skb_one_core(struct sk_buff *skb, <span class="keyword">bool</span> pfmemalloc)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">net_device</span> *<span class="title">orig_dev</span> =</span> skb-&gt;dev;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">packet_type</span> *<span class="title">pt_prev</span> =</span> <span class="literal">NULL</span>;</span><br><span class="line">	<span class="keyword">int</span> ret;</span><br><span class="line"></span><br><span class="line">	ret = __netif_receive_skb_core(skb, pfmemalloc, &amp;pt_prev);</span><br><span class="line">	<span class="keyword">if</span> (pt_prev)</span><br><span class="line">		ret = pt_prev-&gt;func(skb, skb-&gt;dev, pt_prev, orig_dev); <span class="comment">/* 调用协议处理 */</span></span><br><span class="line">	<span class="keyword">return</span> ret;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>然后调用核心函数 <code>__netif_receive_skb_core</code>，返回对应的 <code>packet_type</code> 并调用 <code>packet_type-&gt;func</code></li>
+<li>核心函数 <code>__netif_receive_skb_core</code> 的源码如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br><span class="line">142</span><br><span class="line">143</span><br><span class="line">144</span><br><span class="line">145</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">int</span> __netif_receive_skb_core(struct sk_buff *skb, <span class="keyword">bool</span> pfmemalloc,</span><br><span class="line">				    struct packet_type **ppt_prev)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">packet_type</span> *<span class="title">ptype</span>, *<span class="title">pt_prev</span>;</span></span><br><span class="line">	<span class="keyword">rx_handler_func_t</span> *rx_handler;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">net_device</span> *<span class="title">orig_dev</span>;</span></span><br><span class="line">	<span class="keyword">bool</span> deliver_exact = <span class="literal">false</span>;</span><br><span class="line">	<span class="keyword">int</span> ret = NET_RX_DROP;</span><br><span class="line">	__be16 type;</span><br><span class="line"></span><br><span class="line">	net_timestamp_check(!netdev_tstamp_prequeue, skb);</span><br><span class="line"></span><br><span class="line">	trace_netif_receive_skb(skb);</span><br><span class="line"></span><br><span class="line">	orig_dev = skb-&gt;dev;</span><br><span class="line"></span><br><span class="line">	skb_reset_network_header(skb); </span><br><span class="line">	<span class="keyword">if</span> (!skb_transport_header_was_set(skb))</span><br><span class="line">		skb_reset_transport_header(skb);</span><br><span class="line">	skb_reset_mac_len(skb);</span><br><span class="line"></span><br><span class="line">	pt_prev = <span class="literal">NULL</span>;</span><br><span class="line"></span><br><span class="line">another_round:</span><br><span class="line">	skb-&gt;skb_iif = skb-&gt;dev-&gt;ifindex;</span><br><span class="line"></span><br><span class="line">	__this_cpu_inc(softnet_data.processed);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (skb-&gt;protocol == cpu_to_be16(ETH_P_8021Q) ||</span><br><span class="line">	    skb-&gt;protocol == cpu_to_be16(ETH_P_8021AD)) &#123;</span><br><span class="line">		skb = skb_vlan_untag(skb);</span><br><span class="line">		<span class="keyword">if</span> (unlikely(!skb))</span><br><span class="line">			<span class="keyword">goto</span> out;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (skb_skip_tc_classify(skb))</span><br><span class="line">		<span class="keyword">goto</span> skip_classify;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (pfmemalloc)</span><br><span class="line">		<span class="keyword">goto</span> skip_taps;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">/* ptype_all容器中协议处理(tcpdump抓包就在这里) */</span></span><br><span class="line">	list_for_each_entry_rcu(ptype, &amp;ptype_all, <span class="built_in">list</span>) &#123;</span><br><span class="line">		<span class="keyword">if</span> (pt_prev)</span><br><span class="line">			ret = deliver_skb(skb, pt_prev, orig_dev);</span><br><span class="line">		pt_prev = ptype;</span><br><span class="line">	&#125;</span><br><span class="line">    </span><br><span class="line">	<span class="comment">/* dev-&gt;ptype_all容器中协议处理(和设备有关) */</span></span><br><span class="line">	list_for_each_entry_rcu(ptype, &amp;skb-&gt;dev-&gt;ptype_all, <span class="built_in">list</span>) &#123;</span><br><span class="line">		<span class="keyword">if</span> (pt_prev)</span><br><span class="line">			ret = deliver_skb(skb, pt_prev, orig_dev);</span><br><span class="line">		pt_prev = ptype;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">skip_taps:</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_NET_INGRESS</span></span><br><span class="line">	<span class="keyword">if</span> (static_branch_unlikely(&amp;ingress_needed_key)) &#123;</span><br><span class="line">		skb = sch_handle_ingress(skb, &amp;pt_prev, &amp;ret, orig_dev);</span><br><span class="line">		<span class="keyword">if</span> (!skb)</span><br><span class="line">			<span class="keyword">goto</span> out;</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> (nf_ingress(skb, &amp;pt_prev, &amp;ret, orig_dev) &lt; <span class="number">0</span>)</span><br><span class="line">			<span class="keyword">goto</span> out;</span><br><span class="line">	&#125;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">	skb_reset_tc(skb);</span><br><span class="line">skip_classify:</span><br><span class="line">	<span class="keyword">if</span> (pfmemalloc &amp;&amp; !skb_pfmemalloc_protocol(skb))</span><br><span class="line">		<span class="keyword">goto</span> drop;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 对vlan报文的处理 */</span></span><br><span class="line">	<span class="keyword">if</span> (skb_vlan_tag_present(skb)) &#123;</span><br><span class="line">		<span class="keyword">if</span> (pt_prev) &#123;</span><br><span class="line">			ret = deliver_skb(skb, pt_prev, orig_dev);</span><br><span class="line">			pt_prev = <span class="literal">NULL</span>;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">if</span> (vlan_do_receive(&amp;skb))</span><br><span class="line">			<span class="keyword">goto</span> another_round;</span><br><span class="line">		<span class="keyword">else</span> <span class="keyword">if</span> (unlikely(!skb))</span><br><span class="line">			<span class="keyword">goto</span> out;</span><br><span class="line">	&#125;</span><br><span class="line">    </span><br><span class="line">	<span class="comment">/* 调用接收设备的rx_handler */</span></span><br><span class="line">	rx_handler = rcu_dereference(skb-&gt;dev-&gt;rx_handler);</span><br><span class="line">	<span class="keyword">if</span> (rx_handler) &#123;</span><br><span class="line">		<span class="keyword">if</span> (pt_prev) &#123;</span><br><span class="line">			ret = deliver_skb(skb, pt_prev, orig_dev);</span><br><span class="line">			pt_prev = <span class="literal">NULL</span>;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">switch</span> (rx_handler(&amp;skb)) &#123;</span><br><span class="line">		<span class="keyword">case</span> RX_HANDLER_CONSUMED:</span><br><span class="line">			ret = NET_RX_SUCCESS;</span><br><span class="line">			<span class="keyword">goto</span> out;</span><br><span class="line">		<span class="keyword">case</span> RX_HANDLER_ANOTHER:</span><br><span class="line">			<span class="keyword">goto</span> another_round;</span><br><span class="line">		<span class="keyword">case</span> RX_HANDLER_EXACT:</span><br><span class="line">			deliver_exact = <span class="literal">true</span>;</span><br><span class="line">		<span class="keyword">case</span> RX_HANDLER_PASS:</span><br><span class="line">			<span class="keyword">break</span>;</span><br><span class="line">		<span class="keyword">default</span>:</span><br><span class="line">			BUG();</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (unlikely(skb_vlan_tag_present(skb))) &#123;</span><br><span class="line">		<span class="keyword">if</span> (skb_vlan_tag_get_id(skb))</span><br><span class="line">			skb-&gt;pkt_type = PACKET_OTHERHOST;</span><br><span class="line">		skb-&gt;vlan_tci = <span class="number">0</span>;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">    <span class="comment">/* 根据skb-&gt;protocol传递给上层协议(其实这就是&quot;sk_buff=&gt;packet_type&quot;的过程) */</span></span><br><span class="line">	type = skb-&gt;protocol;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (likely(!deliver_exact)) &#123; <span class="comment">/* 根据全局定义的协议处理报文 */</span></span><br><span class="line">		deliver_ptype_list_skb(skb, &amp;pt_prev, orig_dev, type,</span><br><span class="line">				       &amp;ptype_base[ntohs(type) &amp;</span><br><span class="line">						   PTYPE_HASH_MASK]); <span class="comment">/* 利用skb-&gt;protocol在ptype_base中选择对应的双向链表 */</span></span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	deliver_ptype_list_skb(skb, &amp;pt_prev, orig_dev, type,</span><br><span class="line">			       &amp;orig_dev-&gt;ptype_specific); <span class="comment">/* 根据设备上注册的协议进行处理 */</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (unlikely(skb-&gt;dev != orig_dev)) &#123; <span class="comment">/* 如果设备发生变化,那么还需要针对新设备的注册协议进行处理 */</span></span><br><span class="line">		deliver_ptype_list_skb(skb, &amp;pt_prev, orig_dev, type,</span><br><span class="line">				       &amp;skb-&gt;dev-&gt;ptype_specific); </span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (pt_prev) &#123; </span><br><span class="line">		<span class="keyword">if</span> (unlikely(skb_orphan_frags_rx(skb, GFP_ATOMIC)))</span><br><span class="line">			<span class="keyword">goto</span> drop;</span><br><span class="line">		*ppt_prev = pt_prev; <span class="comment">/* 把查找到的packet_type传出 */</span></span><br><span class="line">	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">drop:</span><br><span class="line">		<span class="keyword">if</span> (!deliver_exact)</span><br><span class="line">			atomic_long_inc(&amp;skb-&gt;dev-&gt;rx_dropped);</span><br><span class="line">		<span class="keyword">else</span></span><br><span class="line">			atomic_long_inc(&amp;skb-&gt;dev-&gt;rx_nohandler);</span><br><span class="line">		kfree_skb(skb);</span><br><span class="line">		ret = NET_RX_DROP;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">out:</span><br><span class="line">	<span class="keyword">return</span> ret;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>__netif_receive_skb_core</code> 函数主要有几个处理：</p>
+<ul>
+<li>vlan 报文的处理，主要是循环把 vlan 头剥掉（Virtual Local Area Network 虚拟局域网）</li>
+<li>交给 rx_handler 处理（例如：OVS，linux bridge 等）</li>
+<li><code>ptype_all</code> 处理（例如：抓包程序，raw socket 等）</li>
+<li><code>ptype_base</code> 处理，并交给协议栈（例如：ip、arp，rarp 等）</li>
+</ul>
+<p>其中我们只需要关注与有关 <code>ptype_base</code> 的部分，这里才是对网络协议的处理：</p>
+<ul>
+<li>程序会通过 <code>skb-&gt;protocol</code> 找到 <code>ptype_base</code> 中对应的双向链表</li>
+<li>遍历这个双向链表，直到 <code>packet_type-&gt;type == sk_buff-&gt;protocol</code></li>
+<li>然后调用 <code>packet_type-&gt;func</code> 完成对数据包的处理</li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/Net-Knowledge/" rel="tag"><i class="fa fa-tag"></i> Net Knowledge</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/11/01/Linux%20ptrace-%E5%8E%9F%E7%90%86%E5%92%8C%E8%BF%90%E7%94%A8/" rel="prev" title="Linux ptrace-原理和运用">
+      <i class="fa fa-chevron-left"></i> Linux ptrace-原理和运用
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/11/03/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E6%95%A3%E5%88%97%E8%A1%A8&XArray/" rel="next" title="数据结构：散列表&XArray">
+      数据结构：散列表&XArray <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">182</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">2.4m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">35:51</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

