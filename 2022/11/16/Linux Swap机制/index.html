@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="Linux Swap机制 在 Linux 下，当物理内存不足时，拿出部分硬盘空间当 Swap 分区（也被称为“虚拟内存”，从硬盘中划分出的一个分区），从而解决内存容量不足的情况  Swap 意思是交换， 当物理内存不够用的时候，内核就会释放缓存区（buffers&#x2F;cache）里一些长时间不用的程序，然后将这些程序临时放到 Swap 中  Swap Out：当某进程向OS请求内存发现不足时，OS会把">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Linux Swap机制">
+<meta property="og:url" content="http://example.com/2022/11/16/Linux%20Swap%E6%9C%BA%E5%88%B6/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="Linux Swap机制 在 Linux 下，当物理内存不足时，拿出部分硬盘空间当 Swap 分区（也被称为“虚拟内存”，从硬盘中划分出的一个分区），从而解决内存容量不足的情况  Swap 意思是交换， 当物理内存不够用的时候，内核就会释放缓存区（buffers&#x2F;cache）里一些长时间不用的程序，然后将这些程序临时放到 Swap 中  Swap Out：当某进程向OS请求内存发现不足时，OS会把">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2022-11-16T14:49:11.000Z">
+<meta property="article:modified_time" content="2022-11-16T14:53:44.360Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="kernel">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2022/11/16/Linux%20Swap%E6%9C%BA%E5%88%B6/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>Linux Swap机制 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/11/16/Linux%20Swap%E6%9C%BA%E5%88%B6/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Linux Swap机制
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-11-16 22:49:11 / Modified: 22:53:44" itemprop="dateCreated datePublished" datetime="2022-11-16T22:49:11+08:00">2022-11-16</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>2.7k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>2 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>Linux Swap机制</strong></p>
+<p>在 Linux 下，当物理内存不足时，拿出部分硬盘空间当 Swap 分区（也被称为“虚拟内存”，从硬盘中划分出的一个分区），从而解决内存容量不足的情况</p>
+<ul>
+<li>Swap 意思是交换， 当物理内存不够用的时候，内核就会释放缓存区（buffers/cache）里一些长时间不用的程序，然后将这些程序临时放到 Swap 中 </li>
+<li>Swap Out：当某进程向OS请求内存发现不足时，OS会把内存中暂时不用的数据交换出去，放在 SWAP 分区中</li>
+<li>Swap In：当某进程又需要这些数据且OS发现还有空闲物理内存时，又会把 Swap 分区中的数据交换回物理内存中</li>
+</ul>
+<p>Linux 操作系统使用如下这几种机制来检查系统内存是否需要进行页面回收：</p>
+<ul>
+<li>周期回收：<ul>
+<li>这是由后台运行的守护进程 kswapd 完成的</li>
+<li>该进程定期检查当前系统的内存使用情况，当发现系统内空闲的物理页面数目少于特定的阈值时，该进程就会发起页面回收的操作</li>
+</ul>
+</li>
+<li>内存紧缺回收：<ul>
+<li>操作系统忽然需要通过伙伴系统为用户进程分配一大块内存，或者需要创建一个很大的缓冲区，而当时系统中的内存没有办法提供足够多的物理内存以满足这种内存请求</li>
+<li>这时候，操作系统就必须尽快进行页面回收操作，以便释放出一些内存空间从而满足上述的内存请求</li>
+<li>这种页面回收方式也被称作“直接页面回收”</li>
+</ul>
+</li>
+<li>睡眠回收：<ul>
+<li>在进程进入 <code>suspend-to-disk</code>（休眠）状态时，内核必须释放内存</li>
+</ul>
+</li>
+</ul>
+<p>如果 Linux 在进行了内存回收操作之后仍然无法回收到足够多的页面以满足上述内存要求，那么操作系统只有最后一个选择，那就是使用 OOM(out of memory) killer，它从系统中挑选一个最合适的进程杀死它，并释放该进程所占用的所有页面</p>
+<p>Linux 内核的页面回收算法为 PFRA</p>
+<ul>
+<li>PFRA 采取从用户态进程和内核高速缓存“窃取”页框的办法补充伙伴系统的空闲块列表</li>
+<li>PFRA 的目标之一就是保存最少的空闲页到磁盘，以便内核可以安全地从“内存紧缺”的情形中恢复过来</li>
+</ul>
+<p>PFRA 需要做的第一件事情就是明确：哪些页面可以被 Swap，哪些又不能</p>
+<p>于是 PFRA 按照页框所含内容，以不同的方式处理页框：</p>
+<ul>
+<li>不可回收页：不允许也无需回收<ul>
+<li>空闲页（包含在子伙伴系统表列中）</li>
+<li>保留页（PG_reserved 标志置位）</li>
+<li>内核动态分配页</li>
+<li>进程内核态堆栈页</li>
+<li>临时锁定页（PG_locked 标志置位）</li>
+<li>内存锁定页（VM_LOCKED 标志置位，并且在先行区中）</li>
+</ul>
+</li>
+<li>可回收页：可以将该页的内存保存在 Swap 交换区（作为 “虚拟内存” 的磁盘区域）<ul>
+<li>用户态地址空间的匿名页</li>
+<li>tmpfs 文件系统的映射页（例如：POSIX 接口中 IPC 共享内存的页）</li>
+</ul>
+</li>
+<li>可同步页：必要时，与磁盘镜像同步这些页<ul>
+<li>用户态地址空间的映射页</li>
+<li>存有磁盘文件数据，并且在页高速缓存中的页</li>
+<li>块设备缓冲区页</li>
+<li>某些磁盘的高速缓存页（例如：索引节点高速缓存）</li>
+</ul>
+</li>
+<li>可丢弃页：无需操作<ul>
+<li>内存高速缓存中的未使用页（例如：Slab 分配器高速缓存）</li>
+<li>目录中高速缓存的未使用页</li>
+</ul>
+</li>
+</ul>
+<p><strong>Linux 回收平衡</strong></p>
+<p>Linux 页面回收，并不是回收得越多越好，而是力求达到一种平衡（内存 Swap 是需要代价的）</p>
+<p>物理内存在 Kernel 中主要有这么几个层次的划分：</p>
+<ul>
+<li>全体内存</li>
+<li>一个 NUMA 节点的内存</li>
+<li>一个 NUMA 节点中的一个 zone 的内存 </li>
+</ul>
+<p>维护空闲页面的伙伴系统和维护可回收页面的 LRU 都工作在 zone 这一层，所以具体的内存回收操作也是在 zone 层进行的</p>
+<p>Kernel 中追求的平衡并不针对全体内存，而是针对每一个 NUMA 节点的内存而言的：</p>
+<ul>
+<li>NUMA 系统中的每一个节点都是并列的，统一考虑整体的平衡其实没什么意义</li>
+<li>所以对应于系统中的每个 NUMA 节点都会有一个 kswapd 线程来进行平衡</li>
+</ul>
+<p>单个 NUMA 节点的内存的平衡由 <code>pgdat_balanced</code> 函数来判断</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">bool</span> <span class="title">pgdat_balanced</span><span class="params">(<span class="keyword">pg_data_t</span> *pgdat, <span class="keyword">int</span> order, <span class="keyword">int</span> classzone_idx)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> i;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> mark = <span class="number">-1</span>;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">zone</span> *<span class="title">zone</span>;</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span> (i = <span class="number">0</span>; i &lt;= classzone_idx; i++) &#123;</span><br><span class="line">		zone = pgdat-&gt;node_zones + i;</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> (!managed_zone(zone))</span><br><span class="line">			<span class="keyword">continue</span>;</span><br><span class="line"></span><br><span class="line">		mark = high_wmark_pages(zone);</span><br><span class="line">		<span class="keyword">if</span> (zone_watermark_ok_safe(zone, order, mark, classzone_idx))</span><br><span class="line">			<span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (mark == <span class="number">-1</span>)</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>函数 <code>pgdat_balanced</code> 需要两个重要的指标：<ul>
+<li><code>classzone_idx</code>：用于确定一种类型的 zone</li>
+<li><code>order</code>：用于确定一对伙伴页的大小</li>
+</ul>
+</li>
+</ul>
+<p><code>classzone_idx</code>：</p>
+<p>在 Kernel 中，一个 NUMA 节点的内存被分成若干个 zone（区分依据为簇到处理器的“距离”），一个 zone 用于表示内存中的某个范围，在 Linux 中由下标 <code>classzone_idx</code> 来进行索引：</p>
+<ul>
+<li>这些 zone 下标越大，zone 里的内存使用范围就越小</li>
+<li>小下标 zone 的内存用途总是包含大下标 zone 的</li>
+<li>因此大下标的 zone 显得更加“不通用”</li>
+</ul>
+<p>于是在进行内存分配的时候，总是会优先尝试在 <code>classzone_idx</code> 最大的 zone 里面的去分配，不行再尝试 <code>classzone_idx</code> 更小的 zone</p>
+<p><code>order</code>：</p>
+<p>zone 里面的内存是用伙伴系统来管理的，伙伴系统里面有很多个 <code>freelist</code>，分别是 2^n 个连续页面的空闲链表</p>
+<ul>
+<li><code>order</code> 就代表这里的 n，<code>order</code> 越大，意味着需要越多的连续页面</li>
+<li>大 <code>order</code> 对小 <code>order</code> 也是有包含关系的</li>
+<li>大 <code>order</code> 的连续内存其实并不是那么容易就回收到的</li>
+</ul>
+<p>于是伙伴系统会尽量避免分裂大 <code>order</code> 的连续内存，碎片化的小 <code>order</code> 内存会成为优先分配的目标</p>
+<p><strong>kswapd 线程</strong></p>
+<p>kswapd 是 Linux 中用于页面回收的内核线程，拥有如下特性：</p>
+<ul>
+<li>kswapd 线程每100毫秒起来工作一次，或者由于别的进程分配内存失败，而被唤醒</li>
+<li>kswapd 每次工作都有一个 <code>order</code> 和 <code>classzone_idx</code> 作为目标</li>
+<li>kswapd 如果主动工作，<code>order</code> 总是“0”，<code>classzone_idx</code> 总是最大的 zone </li>
+</ul>
+<p>其实 kswapd 的任务就是让每一个 zone 的空闲内存都超过高水位，至于页面在各个 order 间的平衡分布就不用管</p>
+<p>对于 kswapd 拿到的 <code>order</code>，所以如果达不到平衡分布，就还得继续回收以及尝试小 <code>order</code> 向大 <code>order</code> 的组装</p>
+<p>参考：<a target="_blank" rel="noopener" href="https://blog.csdn.net/prike/article/details/78905753">linux kswapd浅析</a> </p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/kernel/" rel="tag"><i class="fa fa-tag"></i> kernel</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/11/15/%E6%B7%B1%E4%BF%A1%E6%9C%8D%E6%9D%AFCTF2022/" rel="prev" title="深信服杯CTF2022">
+      <i class="fa fa-chevron-left"></i> 深信服杯CTF2022
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">189</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">116</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">2.5m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">37:14</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
