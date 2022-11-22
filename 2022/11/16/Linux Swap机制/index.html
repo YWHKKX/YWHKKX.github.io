@@ -29,7 +29,7 @@
 <meta property="og:description" content="Linux Swap机制 在 Linux 下，当物理内存不足时，拿出部分硬盘空间当 Swap 分区（也被称为“虚拟内存”，从硬盘中划分出的一个分区），从而解决内存容量不足的情况  Swap 意思是交换， 当物理内存不够用的时候，内核就会释放缓存区（buffers&#x2F;cache）里一些长时间不用的程序，然后将这些程序临时放到 Swap 中  Swap Out：当某进程向OS请求内存发现不足时，OS会把">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2022-11-16T14:49:11.000Z">
-<meta property="article:modified_time" content="2022-11-16T14:53:44.360Z">
+<meta property="article:modified_time" content="2022-11-21T17:22:45.587Z">
 <meta property="article:author" content="yhellow">
 <meta property="article:tag" content="kernel">
 <meta name="twitter:card" content="summary">
@@ -184,10 +184,16 @@
                 <i class="far fa-calendar"></i>
               </span>
               <span class="post-meta-item-text">Posted on</span>
-              
 
-              <time title="Created: 2022-11-16 22:49:11 / Modified: 22:53:44" itemprop="dateCreated datePublished" datetime="2022-11-16T22:49:11+08:00">2022-11-16</time>
+              <time title="Created: 2022-11-16 22:49:11" itemprop="dateCreated datePublished" datetime="2022-11-16T22:49:11+08:00">2022-11-16</time>
             </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-11-22 01:22:45" itemprop="dateModified" datetime="2022-11-22T01:22:45+08:00">2022-11-22</time>
+              </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
                 <i class="far fa-folder"></i>
@@ -210,13 +216,13 @@
               <span class="post-meta-item-icon">
                 <i class="far fa-file-word"></i>
               </span>
-              <span>2.7k</span>
+              <span>5.6k</span>
             </span>
             <span class="post-meta-item" title="Reading time">
               <span class="post-meta-item-icon">
                 <i class="far fa-clock"></i>
               </span>
-              <span>2 mins.</span>
+              <span>5 mins.</span>
             </span>
 
         </div>
@@ -289,6 +295,30 @@
 </ul>
 </li>
 </ul>
+<p><strong>Swap 基础结构</strong></p>
+<p>每一个活动的交换区都会由一个 <code>swap_info_struct</code> 结构体进行描述：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">swap_info_struct</span> &#123;</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span>	flags;		<span class="comment">/* SWP_USED etc: see above */</span></span><br><span class="line">	<span class="keyword">signed</span> <span class="keyword">short</span>	prio;		<span class="comment">/* swap priority of this type */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">plist_node</span> <span class="title">list</span>;</span>		<span class="comment">/* entry in swap_active_head */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">plist_node</span> <span class="title">avail_lists</span>[<span class="title">MAX_NUMNODES</span>];</span><span class="comment">/* entry in swap_avail_heads */</span></span><br><span class="line">	<span class="keyword">signed</span> <span class="keyword">char</span>	type;		<span class="comment">/* strange name for an index */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span>	max;		<span class="comment">/* extent of the swap_map */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span> *swap_map;	<span class="comment">/* 一个非常大的数组,其中的每项都对应了一个交换区的一个槽(交换项)的引用计数 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">swap_cluster_info</span> *<span class="title">cluster_info</span>;</span> <span class="comment">/* cluster info. Only for SSD */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">swap_cluster_list</span> <span class="title">free_clusters</span>;</span> <span class="comment">/* free clusters list */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> lowest_bit;	<span class="comment">/* index of first free in swap_map */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> highest_bit;	<span class="comment">/* index of last free in swap_map */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> pages;		<span class="comment">/* total of usable pages of swap */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> inuse_pages;	<span class="comment">/* number of those currently in use */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> cluster_next;	<span class="comment">/* 交换文件当前的偏移量 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> cluster_nr;	<span class="comment">/* 交换区中已经分配的页面数 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">percpu_cluster</span> __<span class="title">percpu</span> *<span class="title">percpu_cluster</span>;</span> <span class="comment">/* per cpu&#x27;s swap location */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">swap_extent</span> *<span class="title">curr_swap_extent</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">swap_extent</span> <span class="title">first_swap_extent</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">block_device</span> *<span class="title">bdev</span>;</span>	<span class="comment">/* swap device or bdev of swap file */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">file</span> *<span class="title">swap_file</span>;</span>		<span class="comment">/* seldom referenced */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> old_block_size;	<span class="comment">/* seldom referenced */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_FRONTSWAP</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> *frontswap_map;	<span class="comment">/* frontswap in-use, one bit per page */</span></span><br><span class="line">	<span class="keyword">atomic_t</span> frontswap_pages;	<span class="comment">/* frontswap pages in-use counter */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">	<span class="keyword">spinlock_t</span> lock;		<span class="comment">/*</span></span><br><span class="line"><span class="comment">					 * protect map scan related fields like</span></span><br><span class="line"><span class="comment">					 * swap_map, lowest_bit, highest_bit,</span></span><br><span class="line"><span class="comment">					 * inuse_pages, cluster_next,</span></span><br><span class="line"><span class="comment">					 * cluster_nr, lowest_alloc,</span></span><br><span class="line"><span class="comment">					 * highest_alloc, free/discard cluster</span></span><br><span class="line"><span class="comment">					 * list. other fields are only changed</span></span><br><span class="line"><span class="comment">					 * at swapon/swapoff, so are protected</span></span><br><span class="line"><span class="comment">					 * by swap_lock. changing flags need</span></span><br><span class="line"><span class="comment">					 * hold this lock and swap_lock. If</span></span><br><span class="line"><span class="comment">					 * both locks need hold, hold swap_lock</span></span><br><span class="line"><span class="comment">					 * first.</span></span><br><span class="line"><span class="comment">					 */</span></span><br><span class="line">	<span class="keyword">spinlock_t</span> cont_lock;		<span class="comment">/*</span></span><br><span class="line"><span class="comment">					 * protect swap count continuation page</span></span><br><span class="line"><span class="comment">					 * list.</span></span><br><span class="line"><span class="comment">					 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">work_struct</span> <span class="title">discard_work</span>;</span> <span class="comment">/* discard worker */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">swap_cluster_list</span> <span class="title">discard_clusters</span>;</span> <span class="comment">/* discard clusters list */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>系统会把这些 <code>swap_info_struct</code> 存放在一个 <code>swap_info</code> 数组中：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">swap_info_struct</span> *<span class="title">swap_info</span>[<span class="title">MAX_SWAPFILES</span>];</span></span><br></pre></td></tr></table></figure>
+<p>每个交换区在磁盘上都划分出大量一页大小的槽，第一个槽存放有交换区的基本信息，在内核中由一个 <code>swap_header</code> 联合体进行表示：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">union</span> <span class="title">swap_header</span> &#123;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">		<span class="keyword">char</span> reserved[PAGE_SIZE - <span class="number">10</span>];</span><br><span class="line">		<span class="keyword">char</span> magic[<span class="number">10</span>];			<span class="comment">/* SWAP-SPACE or SWAPSPACE2 */</span></span><br><span class="line">	&#125; magic;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">		<span class="keyword">char</span>		bootbits[<span class="number">1024</span>];	<span class="comment">/* Space for disklabel etc. */</span></span><br><span class="line">		__u32		version;</span><br><span class="line">		__u32		last_page;</span><br><span class="line">		__u32		nr_badpages;</span><br><span class="line">		<span class="keyword">unsigned</span> <span class="keyword">char</span>	sws_uuid[<span class="number">16</span>];</span><br><span class="line">		<span class="keyword">unsigned</span> <span class="keyword">char</span>	sws_volume[<span class="number">16</span>];</span><br><span class="line">		__u32		padding[<span class="number">117</span>];</span><br><span class="line">		__u32		badpages[<span class="number">1</span>];</span><br><span class="line">	&#125; info;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>Linux 将磁盘中的 SWAPFILE_CLUSTER 个页分配到一个簇中</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_THP_SWAP</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SWAPFILE_CLUSTER	HPAGE_PMD_NR</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> swap_entry_size(size)	(size)</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SWAPFILE_CLUSTER	256</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>在 <code>swap_info_struct-&gt;cluster_nr</code> 中记录“交换区中已经分配的页面数”</li>
+<li>在 <code>swap_info_struct-&gt;cluster_next</code> 中记录“交换文件当前的偏移量”</li>
+</ul>
+<p><strong>映射页表项到交换区</strong></p>
+<p>当一个页面被交换出时，Linux 使用相应的页表项 PTE 来存放用于再次从磁盘上定位该页的信息：</p>
+<ul>
+<li>PTE 本身不能直接精准保存交换页面的位置信息</li>
+<li>PTE 只需要存放交换槽在 <code>swap_info</code> 数组的下标，以及在 <code>swap_map</code> 中的偏移量</li>
+</ul>
+<p>通过如下两个函数进行转换：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">swp_entry_t</span> <span class="title">pte_to_swp_entry</span><span class="params">(<span class="keyword">pte_t</span> pte)</span></span></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">pte_t</span> <span class="title">swp_entry_to_pte</span><span class="params">(<span class="keyword">swp_entry_t</span> entry)</span></span></span><br></pre></td></tr></table></figure>
+<p><strong>交换区高速缓存 Swap Tcache</strong></p>
+<p>Linux 无法快速完成从 PTE 引用到页面结构的转化，因此，多线程共享页面不能简单地取出</p>
+<p>为了解决这个问题，共享页会在内存中保留一个槽，作为高速缓存的一部分</p>
 <p><strong>Linux 回收平衡</strong></p>
 <p>Linux 页面回收，并不是回收得越多越好，而是力求达到一种平衡（内存 Swap 是需要代价的）</p>
 <p>物理内存在 Kernel 中主要有这么几个层次的划分：</p>
@@ -360,7 +390,10 @@
     <a href="/2022/11/15/%E6%B7%B1%E4%BF%A1%E6%9C%8D%E6%9D%AFCTF2022/" rel="prev" title="深信服杯CTF2022">
       <i class="fa fa-chevron-left"></i> 深信服杯CTF2022
     </a></div>
-      <div class="post-nav-item"></div>
+      <div class="post-nav-item">
+    <a href="/2022/11/22/Kernel%20%E7%8E%B0%E5%AE%9E%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0%EF%BC%9ADirty%20Cow/" rel="next" title="Kernel 现实漏洞复现：Dirty Cow">
+      Kernel 现实漏洞复现：Dirty Cow <i class="fa fa-chevron-right"></i>
+    </a></div>
     </div>
       </footer>
     
@@ -434,14 +467,14 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">189</span>
+          <span class="site-state-item-count">190</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
       <div class="site-state-item site-state-categories">
             <a href="/categories/">
           
-        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-count">11</span>
         <span class="site-state-item-name">categories</span></a>
       </div>
       <div class="site-state-item site-state-tags">
@@ -488,7 +521,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">37:14</span>
+    <span title="Reading time total">37:34</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
