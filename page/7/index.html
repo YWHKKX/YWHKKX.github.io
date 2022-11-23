@@ -156,6 +156,241 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/15/Fuzz%20Lab2-libexif/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/08/15/Fuzz%20Lab2-libexif/" class="post-title-link" itemprop="url">Fuzz Lab2-libexif</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-08-15 15:31:10" itemprop="dateCreated datePublished" datetime="2022-08-15T15:31:10+08:00">2022-08-15</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-10-10 00:09:16" itemprop="dateModified" datetime="2022-10-10T00:09:16+08:00">2022-10-10</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>13k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>12 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="Fuzz-Lab2：libexif"><a href="#Fuzz-Lab2：libexif" class="headerlink" title="Fuzz-Lab2：libexif"></a>Fuzz-Lab2：libexif</h2><p>这次我们将 fuzz <strong>libexif</strong> EXIF 解析库（EXIF 信息，是可交换图像文件的缩写，专门为数码相机的照片设定，可以记录数码照片的属性信息和拍摄数据），目标是在 libexif 0.6.14 中找到 [<strong>CVE-2009-3895</strong>] 的 crash/PoC 和 [<strong>CVE-2012-2836</strong>] 的另一个 crash</p>
+<ul>
+<li><strong>CVE-2009-3895</strong> 是一种基于堆的缓冲区溢出，可以使用无效的 EXIF 图像触发<ul>
+<li>基于堆的缓冲区溢出是一种发生在堆数据区域的缓冲区溢出，通常与显式动态内存管理（使用 malloc() 和 free() 函数的分配/释放）有关</li>
+<li>因此，远程攻击者可以利用此问题，在使用受影响库的应用程序上下文中执行任意代码</li>
+</ul>
+</li>
+<li><strong>CVE-2012-2836</strong> 是一个越界读取漏洞，可以通过带有精心制作的 EXIF 标签的图像触发<ul>
+<li>越界读取是当程序读取超出预期缓冲区末尾或开头之前的数据时发生的漏洞</li>
+<li>因此，它允许远程攻击者导致拒绝服务或可能从进程内存中获取潜在的敏感信息</li>
+</ul>
+</li>
+</ul>
+<p>学习的目标：</p>
+<ul>
+<li>使用外部应用程序对库进行模糊测试</li>
+<li>使用 <strong>afl-clang-lto</strong>，一种比 <strong>afl-clang-fast</strong> 更快且提供更好结果的无碰撞仪器</li>
+<li>使用 Eclipse IDE 作为 GDB 控制台的简单替代品进行分类</li>
+</ul>
+<h2 id="Do-it-yourself"><a href="#Do-it-yourself" class="headerlink" title="Do it yourself!"></a>Do it yourself!</h2><ul>
+<li>找到一个使用 libexif 库的接口应用程序</li>
+<li>创建 exif 样本的种子语料库</li>
+<li>使用 afl-clang-lto 编译 libexif 和选择的应用程序进行模糊测试</li>
+<li>Fuzz libexif，直到你有一些独特的崩溃</li>
+<li>对崩溃进行分类以找到每个漏洞的 PoC</li>
+<li>修复问题</li>
+</ul>
+<h2 id="CVE-2009-3895"><a href="#CVE-2009-3895" class="headerlink" title="CVE-2009-3895"></a>CVE-2009-3895</h2><h2 id="Download-and-build-your-target"><a href="#Download-and-build-your-target" class="headerlink" title="Download and build your target"></a>Download and build your target</h2><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">cd $HOME # 创建目录</span><br><span class="line">mkdir fuzzing_libexif &amp;&amp; cd fuzzing_libexif/</span><br><span class="line">sudo apt install build-essential</span><br><span class="line"></span><br><span class="line">cd ..</span><br><span class="line">wget https://sourceforge.net/projects/libexif/files/libexif/0.6.18/libexif-0.6.18.tar.gz # 获取libexif</span><br><span class="line">tar -zxvf libexif-0.6.18.tar.gz</span><br><span class="line"></span><br><span class="line">wget https://github.com/libexif/exif/archive/refs/tags/exif-0_6_15-release.tar.gz # 下载使用库接口的应用程序</span><br><span class="line">tar -xzvf exif-0_6_15-release.tar.gz</span><br><span class="line"></span><br><span class="line">cd libexif-0.6.18 # 编译libexif</span><br><span class="line">sudo apt-get install autopoint libtool gettext libpopt-dev</span><br><span class="line">autoreconf -fvi</span><br><span class="line">./configure --enable-shared=no --prefix=&quot;/home/yhellow/fuzzing_libexif/install/&quot;</span><br><span class="line">make</span><br><span class="line">make install</span><br><span class="line"></span><br><span class="line">cd ..</span><br><span class="line">cd exif-exif-0_6_15-release/</span><br><span class="line">autoreconf -fvi</span><br><span class="line">./configure --enable-shared=no --prefix=&quot;/home/yhellow/fuzzing_libexif/tool/&quot; PKG_CONFIG_PATH=$HOME/fuzzing_libexif/install/lib/pkgconfig</span><br><span class="line">make</span><br><span class="line">make install</span><br></pre></td></tr></table></figure>
+<p>测试 exif 能否运行只需要输入： </p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span><span class="bash">HOME/fuzzing_libexif/tool/bin/exif</span> </span><br></pre></td></tr></table></figure>
+<ul>
+<li>效果如下：</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">➜  exif-exif-0_6_15-release $HOME/fuzzing_libexif/tool/bin/exif </span><br><span class="line">用法: exif [OPTION...] file</span><br><span class="line">  -v, --version                   Display software version</span><br><span class="line">  -i, --ids                       Show IDs instead of tag names</span><br><span class="line">  -t, --tag=tag                   Select tag</span><br><span class="line">      --ifd=IFD                   Select IFD</span><br><span class="line">  -l, --list-tags                 List all EXIF tags</span><br><span class="line">  -|, --show-mnote                Show contents of tag MakerNote</span><br><span class="line">      --remove                    Remove tag or ifd</span><br><span class="line">  -s, --show-description          Show description of tag</span><br><span class="line">  -e, --extract-thumbnail         Extract thumbnail</span><br><span class="line">  -r, --remove-thumbnail          Remove thumbnail</span><br><span class="line">  -n, --insert-thumbnail=FILE     Insert FILE as thumbnail</span><br><span class="line">  -o, --output=FILE               Write data to FILE</span><br><span class="line">      --set-value=STRING          Value</span><br><span class="line">  -m, --machine-readable          Output in a machine-readable (tab delimited)</span><br><span class="line">                                  format</span><br><span class="line">  -x, --xml-output                Output in a XML format</span><br><span class="line">  -d, --debug                     Show debugging messages</span><br><span class="line"></span><br><span class="line">帮助选项:</span><br><span class="line">  -?, --help                      显示这个帮助信息</span><br><span class="line">      --usage                     显示简短的使用说明</span><br></pre></td></tr></table></figure>
+<h2 id="Fuzz-exif"><a href="#Fuzz-exif" class="headerlink" title="Fuzz exif"></a>Fuzz exif</h2><p>在进行 fuzz 前，我们需要先了解 Exif 是什么：</p>
+<ul>
+<li>Exif 是一种文件格式，可交换图像文件格式（Exchangeable image file format，官方简称Exif），是专门为数码相机的照片设定的，可以记录数码照片的属性信息和拍摄数据</li>
+<li>示例如下：</li>
+</ul>
+<img src="/2022/08/15/Fuzz%20Lab2-libexif/1660455820884.png" class width="1660455820884"> 
+<ul>
+<li>那么就需要找到这样的文件样本，好在万能的 GitHub 啥都有，可以直接下载： </li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git clone https://github.com/ianare/exif-samples.git</span><br></pre></td></tr></table></figure>
+<ul>
+<li>使用<code>exif</code>命令随便查看一张图片的信息：</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">cd exif-samples/jpg</span><br><span class="line"><span class="meta">$</span><span class="bash">HOME/fuzzing_libexif/tool/bin/exif Nikon_D70.jpg</span> </span><br></pre></td></tr></table></figure>
+<ul>
+<li>结果如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><span class="line">EXIF tags in <span class="string">&#x27;Nikon_D70.jpg&#x27;</span> (<span class="string">&#x27;英特尔&#x27;</span> byte order):</span><br><span class="line">--------------------+----------------------------------------------------------</span><br><span class="line">Tag                 |Value                                                     </span><br><span class="line">--------------------+----------------------------------------------------------</span><br><span class="line">Manufacturer        |NIKON CORPORATION                                         </span><br><span class="line">Model               |NIKON D70                                                 </span><br><span class="line">Orientation         |top - left                                                </span><br><span class="line">x-Resolution        |<span class="number">240.00</span>                                                    </span><br><span class="line">y-Resolution        |<span class="number">240.00</span>                                                    </span><br><span class="line">Resolution Unit     |英寸                                                    </span><br><span class="line">Software            |GIMP <span class="number">2.4</span><span class="number">.5</span>                                                </span><br><span class="line">Date <span class="keyword">and</span> Time       |<span class="number">2008</span>:<span class="number">07</span>:<span class="number">31</span> <span class="number">10</span>:<span class="number">03</span>:<span class="number">44</span>                                       </span><br><span class="line">Compression         |JPEG 压缩                                               </span><br><span class="line">x-Resolution        |<span class="number">72.00</span>                                                     </span><br><span class="line">y-Resolution        |<span class="number">72.00</span>                                                     </span><br><span class="line">Resolution Unit     |英寸                                                    </span><br><span class="line">Exposure Time       |<span class="number">1</span>/<span class="number">200</span> sec.                                                </span><br><span class="line">FNumber             |f/<span class="number">9.0</span>                                                     </span><br><span class="line">Exposure Program    |手动                                                    </span><br><span class="line">ISO Speed Ratings   |<span class="number">200</span>                                                       </span><br><span class="line"><span class="function">Date <span class="keyword">and</span> <span class="title">Time</span> <span class="params">(origi|<span class="number">2008</span>:<span class="number">03</span>:<span class="number">15</span> <span class="number">09</span>:<span class="number">52</span>:<span class="number">01</span>                                       </span></span></span><br><span class="line"><span class="params"><span class="function">Shutter speed       |<span class="number">7.64</span> EV (<span class="number">1</span>/<span class="number">199</span> sec.)                                      </span></span></span><br><span class="line"><span class="params"><span class="function">光圈              |<span class="number">6.34</span> EV (f/<span class="number">9.0</span>)                                           </span></span></span><br><span class="line"><span class="params"><span class="function">曝光偏差        |<span class="number">-1.00</span> EV                                                  </span></span></span><br><span class="line"><span class="params"><span class="function">Maximum Aperture Val|<span class="number">3.30</span> EV (f/<span class="number">3.1</span>)                                           </span></span></span><br><span class="line"><span class="params"><span class="function">测距模式        |Center-Weighted Average                                   </span></span></span><br><span class="line"><span class="params"><span class="function">闪光灯           |未闪光                                                 </span></span></span><br><span class="line"><span class="params"><span class="function">焦距              |<span class="number">100.0</span> mm                                                  </span></span></span><br><span class="line"><span class="params"><span class="function">色彩空间        |sRGB                                                      </span></span></span><br><span class="line"><span class="params"><span class="function">PixelXDimension     |<span class="number">100</span>                                                       </span></span></span><br><span class="line"><span class="params"><span class="function">PixelYDimension     |<span class="number">66</span>                                                        </span></span></span><br><span class="line"><span class="params"><span class="function">Focal Length In <span class="number">35</span>mm|<span class="number">150</span>                                                       </span></span></span><br><span class="line"><span class="params"><span class="function">Exif Version        |Exif版本<span class="number">2.1</span>                                             </span></span></span><br><span class="line"><span class="params"><span class="function">FlashPixVersion     |FlashPix版本 <span class="number">1.0</span>                                        </span></span></span><br><span class="line"><span class="params"><span class="function">--------------------+----------------------------------------------------------</span></span></span><br><span class="line"><span class="params"><span class="function">EXIF data contains a thumbnail (<span class="number">1700</span> bytes).</span></span></span><br></pre></td></tr></table></figure>
+<p>接下来使用 afl 编译器重新编译程序来执行 Fuzz</p>
+<p>这次使用 afl-clang-lto 作为编译器来构建程序，afl-clang-lto 相比于 afl-clang-fast 是更好的选择，因为它是一种无碰撞检测，而且比 afl-clang-fast 快</p>
+<ul>
+<li>使用编译器重新构建程序： </li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">rm -r $HOME/fuzzing_libexif/install</span><br><span class="line">cd $HOME/libexif-0.6.18 # 使用afl-clang-lto编译器构建libexif</span><br><span class="line">make clean</span><br><span class="line">export LLVM_CONFIG=&quot;llvm-config-11&quot;</span><br><span class="line">CC=afl-clang-lto ./configure --enable-shared=no --prefix=&quot;$HOME/fuzzing_libexif/install/&quot;</span><br><span class="line">make</span><br><span class="line">make install</span><br><span class="line"></span><br><span class="line">rm -r $HOME/fuzzing_libexif/tool</span><br><span class="line">cd $HOME/exif-exif-0_6_15-release  # 使用afl-clang-lto编译器构建exif</span><br><span class="line">make clean</span><br><span class="line">export LLVM_CONFIG=&quot;llvm-config-11&quot;</span><br><span class="line">CC=afl-clang-lto ./configure --enable-shared=no --prefix=&quot;$HOME/fuzzing_libexif/tool/&quot; PKG_CONFIG_PATH=$HOME/fuzzing_libexif/install/lib/pkgconfig</span><br><span class="line">make</span><br><span class="line">make install</span><br></pre></td></tr></table></figure>
+<p>开始 fuzz：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">afl-fuzz -i /home/yhellow/fuzzing_libexif/exif-samples/jpg/ -o /home/yhellow/fuzzing_libexif/out -s 123 -- /home/yhellow/fuzzing_libexif/tool/bin/exif @@</span><br></pre></td></tr></table></figure>
+<p>结果：</p>
+<img src="/2022/08/15/Fuzz%20Lab2-libexif/1660457762859.png" class width="1660457762859"> 
+<h2 id="Reproduce-the-crash"><a href="#Reproduce-the-crash" class="headerlink" title="Reproduce the crash"></a>Reproduce the crash</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">➜  bin ./exif test.<span class="function">jpg                                                                                                                          </span></span><br><span class="line"><span class="function"><span class="title">realloc</span><span class="params">()</span>: invalid next size</span></span><br><span class="line"><span class="function">[1]    2564 <span class="built_in">abort</span>      ./exif test.jpg</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>发生错误，看起来像是堆溢出（victim chunk 的 next chunk-&gt;size 被破坏）</li>
+<li>使用 GDB <code>bt</code> 命令查看栈回溯</li>
+</ul>
+<img src="/2022/08/15/Fuzz%20Lab2-libexif/1660525309142.png" class width="1660525309142"> 
+<ul>
+<li>函数 <code>exif_content_fix</code> 中发生了堆溢出（最好不要直接根据函数名来找源码，可以通过后面的 <code>文件名+偏移</code> 来找）</li>
+<li>在 <code>exif_content_fix</code> 上打断点，结合源码进行调试，发现 <code>exif_content_fix</code> 执行两次以后发生错误，于是在 <code>realloc</code> 上打断点，用 <code>bt</code> 回溯栈：</li>
+</ul>
+<img src="/2022/08/15/Fuzz%20Lab2-libexif/1660526920225.png" class width="1660526920225"> 
+<ul>
+<li>定位到的代码如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> *</span></span><br><span class="line"><span class="function"><span class="title">exif_mem_realloc</span> <span class="params">(ExifMem *mem, <span class="keyword">void</span> *d, ExifLong ds)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">return</span> (mem &amp;&amp; mem-&gt;realloc_func) ? mem-&gt;realloc_func (d, ds) : <span class="literal">NULL</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"> ► <span class="number">0x238994</span> &lt;exif_content_fix+<span class="number">6756</span>&gt;    call   rcx                           &lt;exif_mem_realloc_func&gt;</span><br><span class="line">        rdi: <span class="number">0x46fe40</span> ◂— <span class="number">0x100000001000100</span></span><br><span class="line">        rsi: <span class="number">0x600</span></span><br><span class="line"></span><br><span class="line">pwndbg&gt; telescope <span class="number">0x0000000000238996</span><span class="number">-0x2</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x238994</span> (exif_content_fix+<span class="number">6756</span>) ◂— call   rcx</span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x23899c</span> (exif_content_fix+<span class="number">6764</span>) ◂— add    byte ptr [rax], al</span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x2389a4</span> (exif_content_fix+<span class="number">6772</span>) ◂— add    al, byte ptr [rax]</span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x2389ac</span> (exif_content_fix+<span class="number">6780</span>) ◂— add    dl, <span class="number">1</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>继续打断点调试：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x238994</span> &lt;exif_content_fix+<span class="number">6756</span>&gt;    call   rcx                           &lt;exif_mem_realloc_func&gt;</span><br><span class="line">       rdi: <span class="number">0x46fe40</span> ◂— <span class="number">0x100000001000100</span></span><br><span class="line">       rsi: <span class="number">0x600</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>找到目标堆：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x46fe40</span><span class="number">-0x10</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│     <span class="number">0x46fe30</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│     <span class="number">0x46fe38</span> ◂— <span class="number">0x311</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│ rdi <span class="number">0x46fe40</span> ◂— <span class="number">0x100000001000100</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│     <span class="number">0x46fe48</span> ◂— <span class="number">0x100000000000000</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│     <span class="number">0x46fe50</span> ◂— <span class="number">0x0</span></span><br><span class="line">    </span><br><span class="line">pwndbg&gt; telescope <span class="number">0x46fe30</span>+<span class="number">0x310</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x470140</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>发现 <code>0x470140</code> 处的 chunk 已经被破坏，可能是从 <code>0x46fe30</code> 中溢出的数据破坏了该 chunk，接下来的思路就是寻找往 <code>0x46fe30</code> 中写入数据的函数</li>
+<li>本来想同样的方法，在 <code>malloc</code> 上打断点，然后回溯栈 ，结果发现 <code>0x46fe30</code> 已经被申请了，但是还没有写入，所以就直接单步硬找目标函数，最后找到了 <code>exif_entry_fix</code> 函数</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span></span></span><br><span class="line"><span class="function"><span class="title">exif_entry_fix</span> <span class="params">(ExifEntry *e)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> i;</span><br><span class="line">	ExifByteOrder o;</span><br><span class="line">	ExifRational r;</span><br><span class="line">	ExifSRational sr;</span><br><span class="line">    </span><br><span class="line">    ......</span><br><span class="line"></span><br><span class="line">			memmove (e-&gt;data + <span class="number">8</span>, e-&gt;data, e-&gt;size);</span><br><span class="line">			<span class="built_in">memcpy</span> (e-&gt;data, <span class="string">&quot;ASCII\0\0\0&quot;</span>, <span class="number">8</span>);</span><br><span class="line">			e-&gt;size += <span class="number">8</span>;</span><br><span class="line">			e-&gt;components += <span class="number">8</span>;</span><br><span class="line">			exif_entry_log (e, EXIF_LOG_CODE_DEBUG,</span><br><span class="line">				_(<span class="string">&quot;Tag &#x27;UserComment&#x27; has been expanded to at &quot;</span></span><br><span class="line">				<span class="string">&quot;least 8 bytes in order to follow the &quot;</span></span><br><span class="line">				<span class="string">&quot;specification.&quot;</span>));</span><br><span class="line">    </span><br><span class="line">    ......</span><br><span class="line">        </span><br><span class="line">		<span class="keyword">if</span> (<span class="built_in">memcmp</span> (e-&gt;data, <span class="string">&quot;ASCII\0\0\0&quot;</span>     , <span class="number">8</span>) &amp;&amp;</span><br><span class="line">		    <span class="built_in">memcmp</span> (e-&gt;data, <span class="string">&quot;UNICODE\0&quot;</span>       , <span class="number">8</span>) &amp;&amp;</span><br><span class="line">		    <span class="built_in">memcmp</span> (e-&gt;data, <span class="string">&quot;JIS\0\0\0\0\0&quot;</span>   , <span class="number">8</span>) &amp;&amp;</span><br><span class="line">		    <span class="built_in">memcmp</span> (e-&gt;data, <span class="string">&quot;\0\0\0\0\0\0\0\0&quot;</span>, <span class="number">8</span>)) &#123;</span><br><span class="line">			e-&gt;data = exif_entry_realloc (e, e-&gt;data, <span class="number">8</span> + e-&gt;size); <span class="comment">/* 调用realloc */</span></span><br><span class="line">			<span class="keyword">if</span> (!e-&gt;data) &#123;</span><br><span class="line">				e-&gt;size = <span class="number">0</span>;</span><br><span class="line">				e-&gt;components = <span class="number">0</span>;</span><br><span class="line">				<span class="keyword">break</span>;</span><br><span class="line">			&#125;</span><br><span class="line">            </span><br><span class="line">    ...... </span><br><span class="line">        </span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>其函数有大量的 <code>memmove</code> <code>memcpy</code> 等函数，极有可能就是它们导致了堆溢出（<code>exif_mem_realloc</code> 也是在这里调用的），于是在 <code>memcpy</code> 上打断点，进行调试</li>
+<li>发现执行 54 次 <code>memcpy</code> 后程序崩溃，于是对比第 54 次 <code>memcpy</code> 执行前后的 heap 空间变化，发现 <code>0x46fe30</code> 中并没有写入数据，只能单步继续跟进了</li>
+<li>由于 <code>exif_entry_realloc</code> 无法下断点，最后还是没有找到溢出点</li>
+</ul>
+<h2 id="CVE-2012-2836"><a href="#CVE-2012-2836" class="headerlink" title="CVE-2012-2836"></a>CVE-2012-2836</h2><h2 id="Download-and-build-your-target-1"><a href="#Download-and-build-your-target-1" class="headerlink" title="Download and build your target"></a>Download and build your target</h2><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">wget https://sourceforge.net/projects/libexif/files/libexif/0.6.14/libexif-0.6.14.tar.gz # 获取libexif</span><br><span class="line">tar -zxvf libexif-0.6.14.tar.gz</span><br><span class="line"></span><br><span class="line">cd $HOME/libexif-0.6.14 # 使用afl-clang-lto编译器构建libexif</span><br><span class="line">export LLVM_CONFIG=&quot;llvm-config-11&quot;</span><br><span class="line">CC=afl-clang-lto ./configure --enable-shared=no --prefix=&quot;$HOME/fuzzing_libexif/install2/&quot;</span><br><span class="line">make</span><br><span class="line">make install</span><br><span class="line"></span><br><span class="line">cd $HOME/exif-exif-0_6_15-release  # 使用afl-clang-lto编译器构建exif</span><br><span class="line">make clean</span><br><span class="line">export LLVM_CONFIG=&quot;llvm-config-11&quot;</span><br><span class="line">CC=afl-clang-lto ./configure --enable-shared=no --prefix=&quot;$HOME/fuzzing_libexif/tool2/&quot; PKG_CONFIG_PATH=$HOME/fuzzing_libexif/install2/lib/pkgconfig</span><br><span class="line">make</span><br><span class="line">make install</span><br></pre></td></tr></table></figure>
+<h2 id="Fuzz-exif-1"><a href="#Fuzz-exif-1" class="headerlink" title="Fuzz exif"></a>Fuzz exif</h2><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">afl-fuzz -i /home/yhellow/fuzzing_libexif/exif-samples/jpg -o /home/yhellow/fuzzing_libexif/out2 -s 123 -- /home/yhellow/fuzzing_libexif/tool2/bin/exif @@</span><br></pre></td></tr></table></figure>
+<p>结果如下：</p>
+<img src="/2022/08/15/Fuzz%20Lab2-libexif/1660539954254.png" class width="1660539954254"> 
+<h2 id="Reproduce-the-crash-1"><a href="#Reproduce-the-crash-1" class="headerlink" title="Reproduce the crash"></a>Reproduce the crash</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">➜  bin ./exif test.jpg </span><br><span class="line">[<span class="number">1</span>]    <span class="number">1101259</span> segmentation fault  ./exif test.jpg</span><br></pre></td></tr></table></figure>
+<ul>
+<li>发生段错误，在 GDB 中使用 <code>bt</code> 命令：</li>
+</ul>
+<img src="/2022/08/15/Fuzz%20Lab2-libexif/1660540799028.png" class width="1660540799028">  
+<ul>
+<li>段错误发生在 <code>exif_data_load_data</code> 调用的 <code>exif_get_sshort</code> 函数中，源码如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">ExifSShort</span></span><br><span class="line"><span class="function"><span class="title">exif_get_sshort</span> <span class="params">(<span class="keyword">const</span> <span class="keyword">unsigned</span> <span class="keyword">char</span> *buf, ExifByteOrder order)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">if</span> (!buf) <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">        <span class="keyword">switch</span> (order) &#123;</span><br><span class="line">        <span class="keyword">case</span> EXIF_BYTE_ORDER_MOTOROLA:</span><br><span class="line">                <span class="keyword">return</span> ((buf[<span class="number">0</span>] &lt;&lt; <span class="number">8</span>) | buf[<span class="number">1</span>]); <span class="comment">/* target */</span></span><br><span class="line">        <span class="keyword">case</span> EXIF_BYTE_ORDER_INTEL:</span><br><span class="line">                <span class="keyword">return</span> ((buf[<span class="number">1</span>] &lt;&lt; <span class="number">8</span>) | buf[<span class="number">0</span>]);</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">	<span class="comment">/* Won&#x27;t be reached */</span></span><br><span class="line">	<span class="keyword">return</span> (<span class="number">0</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">enum</span> &#123;</span></span><br><span class="line">	EXIF_BYTE_ORDER_MOTOROLA,	<span class="comment">/* &#x27;0&#x27; */</span></span><br><span class="line">	EXIF_BYTE_ORDER_INTEL		<span class="comment">/* &#x27;1&#x27; */</span></span><br><span class="line">&#125; ExifByteOrder;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>单步调试，发现程序执行到以下代码时就停止了：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x22bc6f</span> &lt;exif_data_load_data+<span class="number">1407</span>&gt;    movzx  esi, word ptr [rcx]</span><br></pre></td></tr></table></figure>
+<ul>
+<li>[rcx] 显然不合法，猜测传入 <code>exif_get_sshort</code> 的参数有误</li>
+<li>在 <code>exif_data_load_data</code> 中单步调试，寻找调用 <code>exif_get_sshort</code> 并引发段错误的地方：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span></span></span><br><span class="line"><span class="function"><span class="title">exif_data_load_data</span> <span class="params">(ExifData *data, <span class="keyword">const</span> <span class="keyword">unsigned</span> <span class="keyword">char</span> *d_orig,</span></span></span><br><span class="line"><span class="params"><span class="function">		     <span class="keyword">unsigned</span> <span class="keyword">int</span> ds_orig)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    </span><br><span class="line">    ......</span><br><span class="line">        </span><br><span class="line">	<span class="comment">/* Fixed value */</span> </span><br><span class="line">	<span class="keyword">if</span> (exif_get_short (d + <span class="number">8</span>, data-&gt;priv-&gt;order) != <span class="number">0x002a</span>)</span><br><span class="line">		<span class="keyword">return</span>;</span><br><span class="line"></span><br><span class="line">	<span class="comment">/* IFD 0 offset */</span></span><br><span class="line">	offset = exif_get_long (d + <span class="number">10</span>, data-&gt;priv-&gt;order);</span><br><span class="line">	exif_log (data-&gt;priv-&gt;<span class="built_in">log</span>, EXIF_LOG_CODE_DEBUG, <span class="string">&quot;ExifData&quot;</span>, </span><br><span class="line">		  <span class="string">&quot;IFD 0 at %i.&quot;</span>, (<span class="keyword">int</span>) offset);</span><br><span class="line"></span><br><span class="line">	<span class="comment">/* Parse the actual exif data (usually offset 14 from start) */</span></span><br><span class="line">	exif_data_load_data_content (data, EXIF_IFD_0, d + <span class="number">6</span>, ds - <span class="number">6</span>, offset, <span class="number">0</span>);</span><br><span class="line"></span><br><span class="line">	<span class="comment">/* IFD 1 offset */</span></span><br><span class="line">	<span class="keyword">if</span> (offset + <span class="number">6</span> + <span class="number">2</span> &gt; ds) &#123;</span><br><span class="line">		<span class="keyword">return</span>;</span><br><span class="line">	&#125;</span><br><span class="line">	n = exif_get_short (d + <span class="number">6</span> + offset, data-&gt;priv-&gt;order); <span class="comment">/* targrt */</span></span><br><span class="line">	<span class="keyword">if</span> (offset + <span class="number">6</span> + <span class="number">2</span> + <span class="number">12</span> * n + <span class="number">4</span> &gt; ds) &#123;</span><br><span class="line">		<span class="keyword">return</span>;</span><br><span class="line">	&#125;</span><br><span class="line">    </span><br><span class="line">    ......</span><br><span class="line">    </span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>PS：程序通过 <code>exif_get_short</code> 来调用 <code>exif_get_sshort</code>：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">ExifShort</span></span><br><span class="line"><span class="function"><span class="title">exif_get_short</span> <span class="params">(<span class="keyword">const</span> <span class="keyword">unsigned</span> <span class="keyword">char</span> *buf, ExifByteOrder order)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">return</span> (exif_get_sshort (buf, order) &amp; <span class="number">0xffff</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在 GDB 中定位到对应的位置：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><span class="line">──────────────────────────────────────────────────────────────────────────────────</span><br><span class="line"> RAX  <span class="number">0x7</span></span><br><span class="line"> RBX  <span class="number">0x453</span></span><br><span class="line"> RCX  <span class="number">0x100452c45</span></span><br><span class="line"> RDX  <span class="number">0x452c46</span> ◂— <span class="number">0xffffffff2a004d4d</span> <span class="comment">/* &#x27;MM&#x27; */</span></span><br><span class="line">*RDI  <span class="number">0x453120</span> ◂— <span class="number">0x0</span> <span class="comment">/* buf */</span></span><br><span class="line"> RSI  <span class="number">0x0</span> <span class="comment">/* order */</span></span><br><span class="line"> R8   <span class="number">0xffffffff</span></span><br><span class="line"> R9   <span class="number">0x0</span></span><br><span class="line"> R10  <span class="number">0x224ab0</span> (log_func_exit) ◂— push   rbp</span><br><span class="line"> R11  <span class="number">0x7ffff7e4ebe0</span> (main_arena+<span class="number">96</span>) —▸ <span class="number">0x454700</span> ◂— <span class="number">0x0</span></span><br><span class="line"> R12  <span class="number">0x452c46</span> ◂— <span class="number">0xffffffff2a004d4d</span> <span class="comment">/* &#x27;MM&#x27; */</span></span><br><span class="line"> R13  <span class="number">0x453108</span> —▸ <span class="number">0x453120</span> ◂— <span class="number">0x0</span></span><br><span class="line"> R14  <span class="number">0x4530d0</span> —▸ <span class="number">0x453160</span> ◂— <span class="number">0x0</span></span><br><span class="line"> R15  <span class="number">0x452c40</span> ◂— <span class="number">0x4d4d000066697845</span> <span class="comment">/* &#x27;Exif&#x27; */</span></span><br><span class="line"> RBP  <span class="number">0xffffffff</span> <span class="comment">/* 异常 */</span></span><br><span class="line"> RSP  <span class="number">0x7fffffffc5d0</span> ◂— <span class="number">0x5b0000006e</span> <span class="comment">/* &#x27;n&#x27; */</span></span><br><span class="line">*RIP  <span class="number">0x22bc13</span> (exif_data_load_data+<span class="number">1315</span>) ◂— mov    edx, dword ptr [rdi]</span><br><span class="line">──────────────────────────────────────────────────────────────────────────────────</span><br><span class="line">   <span class="number">0x22bbca</span> &lt;exif_data_load_data+<span class="number">1242</span>&gt;    cmp    eax, ebx</span><br><span class="line">   <span class="number">0x22bbcc</span> &lt;exif_data_load_data+<span class="number">1244</span>&gt;    jbe    exif_data_load_data+<span class="number">1306</span>                      &lt;exif_data_load_data+<span class="number">1306</span>&gt;</span><br><span class="line">    ↓</span><br><span class="line">   <span class="number">0x22bc0a</span> &lt;exif_data_load_data+<span class="number">1306</span>&gt;    mov    ecx, ebp</span><br><span class="line">   <span class="number">0x22bc0c</span> &lt;exif_data_load_data+<span class="number">1308</span>&gt;    add    rcx, r12</span><br><span class="line">   <span class="number">0x22bc0f</span> &lt;exif_data_load_data+<span class="number">1311</span>&gt;    mov    rdi, qword ptr [r13]</span><br><span class="line"> ► <span class="number">0x22bc13</span> &lt;exif_data_load_data+<span class="number">1315</span>&gt;    mov    edx, dword ptr [rdi]</span><br><span class="line">   <span class="number">0x22bc15</span> &lt;exif_data_load_data+<span class="number">1317</span>&gt;    test   edx, edx</span><br><span class="line">   <span class="number">0x22bc17</span> &lt;exif_data_load_data+<span class="number">1319</span>&gt;    je     exif_data_load_data+<span class="number">1384</span>                      &lt;exif_data_load_data+<span class="number">1384</span>&gt; <span class="comment">/* if (!buf) return 0; */</span></span><br><span class="line">    ↓</span><br><span class="line">   <span class="number">0x22bc58</span> &lt;exif_data_load_data+<span class="number">1384</span>&gt;    mov    rsi, qword ptr [rip + <span class="number">0x1f7a9</span>] &lt;<span class="number">0x24b408</span>&gt;</span><br><span class="line">   <span class="number">0x22bc5f</span> &lt;exif_data_load_data+<span class="number">1391</span>&gt;    mov    al, byte ptr [rsi + <span class="number">0x48b</span>]</span><br><span class="line">   <span class="number">0x22bc65</span> &lt;exif_data_load_data+<span class="number">1397</span>&gt;    add    al, <span class="number">1</span></span><br><span class="line">──────────────────────────────────────────────────────────────────────────────────</span><br><span class="line">pwndbg&gt; telescope <span class="number">0x453120</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│ rdi <span class="number">0x453120</span> ◂— <span class="number">0x0</span> <span class="comment">/* buf[0] */</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│     <span class="number">0x453128</span> ◂— <span class="number">0x0</span> <span class="comment">/* buf[1] */</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│     <span class="number">0x453130</span> —▸ <span class="number">0x452b90</span> ◂— <span class="number">0x8</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│     <span class="number">0x453138</span> —▸ <span class="number">0x452bc0</span> ◂— <span class="number">0x7</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│     <span class="number">0x453140</span> ◂— <span class="number">0x1</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│     <span class="number">0x453148</span> ◂— <span class="number">0x400000003</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│     <span class="number">0x453150</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│     <span class="number">0x453158</span> ◂— <span class="number">0x31</span> <span class="comment">/* &#x27;1&#x27; */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>调试后发现一些信息：<ul>
+<li><code>exif_get_sshort</code> 的两个参数 <code>buf</code> <code>order</code>（已经标出）</li>
+<li><code>RBP</code> 的值异常</li>
+</ul>
+</li>
+<li>后来发现 <code>[rcx]</code> 不合法是由 <code>RBP</code> 异常导致的</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">*RCX  <span class="number">0xffffffff</span></span><br><span class="line"> RBP  <span class="number">0xffffffff</span></span><br><span class="line">──────────────────────────────────────────────────────────────────────────────────</span><br><span class="line">   <span class="number">0x22bc0a</span> &lt;exif_data_load_data+<span class="number">1306</span>&gt;    mov    ecx, ebp <span class="comment">/* ecx == RBP */</span></span><br><span class="line"> ► <span class="number">0x22bc0c</span> &lt;exif_data_load_data+<span class="number">1308</span>&gt;    add    rcx, r12</span><br></pre></td></tr></table></figure>
+<p>现在的问题就很明了了：</p>
+<ul>
+<li>因为 <code>[rcx]</code> 不合法导致了段错误</li>
+<li>因为 <code>RBP</code> 异常导致了 <code>[rcx]</code> 不合法</li>
+</ul>
+<p>现在只要找到导致 <code>RBP</code> 异常的代码就可以了：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">  <span class="number">0x22b864</span> &lt;exif_data_load_data+<span class="number">372</span>&gt;    mov    rbp, qword ptr [rcx + <span class="number">0x10</span>]</span><br><span class="line">► <span class="number">0x22b868</span> &lt;exif_data_load_data+<span class="number">376</span>&gt;    test   eax, eax</span><br><span class="line">      </span><br><span class="line">  <span class="number">0x22bb8a</span> &lt;exif_data_load_data+<span class="number">1178</span>&gt;    mov    ebp, dword ptr [r15 + <span class="number">0xa</span>]</span><br><span class="line">► <span class="number">0x22bb8e</span> &lt;exif_data_load_data+<span class="number">1182</span>&gt;    bswap  ebp</span><br></pre></td></tr></table></figure>
+<ul>
+<li>程序直接控制了 <code>RBP</code>，对应源码如下：（第二处）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line">─────────────────────────────────[ REGISTERS ]──────────────────────────────────</span><br><span class="line">*RAX  <span class="number">0x4502a0</span> ◂— <span class="number">0x0</span></span><br><span class="line">*RBX  <span class="number">0x453</span></span><br><span class="line">*RCX  <span class="number">0x453120</span> ◂— <span class="number">0x0</span></span><br><span class="line">*RDX  <span class="number">0x1</span></span><br><span class="line">*RDI  <span class="number">0x452c46</span> ◂— <span class="number">0xffffffff2a004d4d</span> <span class="comment">/* &#x27;MM&#x27; */</span></span><br><span class="line">*RSI  <span class="number">0x20c394</span> ◂— <span class="number">0x6873616c46004d4d</span> <span class="comment">/* &#x27;MM&#x27; */</span></span><br><span class="line">*R15  <span class="number">0x452c40</span> ◂— <span class="number">0x4d4d000066697845</span> <span class="comment">/* &#x27;Exif&#x27; */</span></span><br><span class="line">*RBP  <span class="number">0x452b90</span> ◂— <span class="number">0x8</span></span><br><span class="line">*RSP  <span class="number">0x7fffffffc5d0</span> ◂— <span class="number">0x5b0000006e</span> <span class="comment">/* &#x27;n&#x27; */</span></span><br><span class="line">*RIP  <span class="number">0x22bb8a</span> (exif_data_load_data+<span class="number">1178</span>) ◂— mov    ebp, dword ptr [r15 + <span class="number">0xa</span>]</span><br><span class="line">───────────────────────────────────[ DISASM ]───────────────────────────────────</span><br><span class="line"> ► <span class="number">0x22bb8a</span> &lt;exif_data_load_data+<span class="number">1178</span>&gt;    mov    ebp, dword ptr [r15 + <span class="number">0xa</span>]</span><br><span class="line">   <span class="number">0x22bb8e</span> &lt;exif_data_load_data+<span class="number">1182</span>&gt;    bswap  ebp</span><br><span class="line">───────────────────────────────[ SOURCE (CODE) ]────────────────────────────────</span><br><span class="line">In file: /home/yhellow/libexif<span class="number">-0.6</span><span class="number">.14</span>/libexif/exif-utils.c</span><br><span class="line">   <span class="number">130</span> exif_get_slong (<span class="keyword">const</span> <span class="keyword">unsigned</span> <span class="keyword">char</span> *b, ExifByteOrder order)</span><br><span class="line">   <span class="number">131</span> &#123;</span><br><span class="line">   <span class="number">132</span> 	<span class="keyword">if</span> (!b) <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">   <span class="number">133</span>         <span class="keyword">switch</span> (order) &#123;</span><br><span class="line">   <span class="number">134</span>         <span class="keyword">case</span> EXIF_BYTE_ORDER_MOTOROLA:</span><br><span class="line"> ► <span class="number">135</span>                 <span class="keyword">return</span> ((b[<span class="number">0</span>] &lt;&lt; <span class="number">24</span>) | (b[<span class="number">1</span>] &lt;&lt; <span class="number">16</span>) | (b[<span class="number">2</span>] &lt;&lt; <span class="number">8</span>) | b[<span class="number">3</span>]);</span><br><span class="line">   <span class="number">136</span>         <span class="keyword">case</span> EXIF_BYTE_ORDER_INTEL:</span><br><span class="line">   <span class="number">137</span>                 <span class="keyword">return</span> ((b[<span class="number">3</span>] &lt;&lt; <span class="number">24</span>) | (b[<span class="number">2</span>] &lt;&lt; <span class="number">16</span>) | (b[<span class="number">1</span>] &lt;&lt; <span class="number">8</span>) | b[<span class="number">0</span>]);</span><br><span class="line">   <span class="number">138</span>         &#125;</span><br><span class="line">   <span class="number">139</span> </span><br><span class="line">────────────────────────────────────────────────────────────────────────────────</span><br><span class="line">pwndbg&gt; telescope <span class="number">0x452c40</span>+<span class="number">0xa</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x452c4a</span> ◂— <span class="number">0xffffffffffffffff</span></span><br><span class="line">... ↓     <span class="number">2</span> skipped</span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x452c62</span> ◂— <span class="number">0xffffffffff</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│  <span class="number">0x452c6a</span> ◂— <span class="number">0x2000f010c0008</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│  <span class="number">0x452c72</span> ◂— <span class="number">0x19e000000090000</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│  <span class="number">0x452c7a</span> ◂— <span class="number">0x10000000020010</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│  <span class="number">0x452c82</span> ◂— <span class="number">0x3001201a80000</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>应该是程序的逻辑出错了，<code>0x452c40</code> 这里应该是一个结构体</li>
+<li>感觉离漏洞点已经很接近了，但就是说不出来具体哪里有问题</li>
+</ul>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/14/Fuzz%20Lab1-Xpdf/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1759,162 +1994,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/07/26/fuzz%E5%85%A5%E9%97%A8+AFL%E7%9A%84%E4%BD%BF%E7%94%A8/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/07/26/fuzz%E5%85%A5%E9%97%A8+AFL%E7%9A%84%E4%BD%BF%E7%94%A8/" class="post-title-link" itemprop="url">fuzz入门+AFL的使用</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2022-07-26 11:05:59 / Modified: 11:08:52" itemprop="dateCreated datePublished" datetime="2022-07-26T11:05:59+08:00">2022-07-26</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>3.1k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>3 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>Fuzz 简述</strong></p>
-<p>模糊测试（Fuzzing）是一种基于黑盒的自动化软件模糊测试技术，简单的说一种懒惰且暴力的技术融合了常见的以及精心构建的数据文本进行网站、软件安全性测试</p>
-<p>好用的工具：AFL、LibFuzzer、honggfuzz</p>
-<p><strong>AFL 简述</strong></p>
-<p>AFL（American Fuzzy Lop）是由安全研究员 Michał Zalewski 开发的一款基于覆盖引导（Coverage-guided）的模糊测试工具</p>
-<p>其工作流程大致如下： </p>
-<ul>
-<li>从源码编译程序时进行插桩，以记录代码覆盖率（Code Coverage）</li>
-<li>选择一些输入文件，作为初始测试集加入输入队列（queue）</li>
-<li>将队列中的文件按一定的策略进行“突变”</li>
-<li>如果经过变异文件更新了覆盖范围，则将其保留添加到队列中</li>
-<li>上述过程会一直循环进行，期间触发了 crash 的文件会被记录下来</li>
-</ul>
-<p><img src="/2022/07/26/fuzz%E5%85%A5%E9%97%A8+AFL%E7%9A%84%E4%BD%BF%E7%94%A8/1658796625409.png" alt="1658796625409">  </p>
-<p>参考：<a target="_blank" rel="noopener" href="https://www.freebuf.com/articles/system/191536.html">AFL漏洞挖掘技术漫谈（一）</a> </p>
-<p><strong>AFL 安装</strong></p>
-<p>AFL 是一种面向安全的模糊器，它采用新型的编译时检测和遗传算法来自动发现有趣的测试用例，这些用例会触发目标二进制文件中的新内部状态</p>
-<p>安装 llvm 环境：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">sudo apt-get install clang llvm-dev llvm</span><br><span class="line">sudo apt-get install clang-3.4</span><br></pre></td></tr></table></figure>
-<p>使用如下命令下载 AFL 安装包：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wget https://lcamtuf.coredump.cx/afl/releases/afl-latest.tgz</span><br></pre></td></tr></table></figure>
-<p>在解压后的文件中执行 <code>make</code> 进行编译，输入 <code>afl-fuzz</code> 以验证是否安装成功：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">➜  afl-2.52b afl-fuzz</span><br><span class="line">afl-fuzz 2.52b by &lt;lcamtuf@google.com&gt;</span><br></pre></td></tr></table></figure>
-<p>安装好的目录中应该有如下的文件：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">➜  afl-2.52b ls</span><br><span class="line">afl-analyze    afl-fuzz      afl-showmap    debug.h        Makefile</span><br><span class="line">afl-analyze.c  afl-fuzz.c    afl-showmap.c  dictionaries   qemu_mode</span><br><span class="line">afl-as         afl-g++       afl-tmin       docs           QuickStartGuide.txt</span><br><span class="line">afl-as.c       afl-gcc       afl-tmin.c     experimental   README</span><br><span class="line">afl-as.h       afl-gcc.c     afl-whatsup    hash.h         testcases</span><br><span class="line">afl-clang      afl-gotcpu    alloc-inl.h    libdislocator  test-instr.c</span><br><span class="line">afl-clang++    afl-gotcpu.c  as             libtokencap    types.h</span><br><span class="line">afl-cmin       afl-plot      config.h       llvm_mode</span><br></pre></td></tr></table></figure>
-<ul>
-<li>afl-gcc 和 afl-g++ 分别对应的是 gcc 和 g++ 的封装</li>
-<li>afl-clang 和 afl-clang++ 分别对应 clang 的 c 和 c++ 编译器封装À</li>
-<li>afl-fuzz 是 AFL 的主体，用于对目标程序进行 fuzz</li>
-<li>afl-analyze 可以对用例进行分析，通过分析给定的用例，看能否发现用例中有意义的字段</li>
-<li>afl-qemu-trace 用于 qemu-mode，默认不安装，需要手工执行 qemu-mode 的编译脚本进行编译，后面会介绍</li>
-<li>afl-plot 生成测试任务的状态图</li>
-<li>afl-tmin 和 afl-cmin 对用例进行简化</li>
-<li>afl-whatsup 用于查看 fuzz 任务的状态</li>
-<li>afl-gotcpu 用于查看当前 CPU 状态</li>
-<li>afl-showmap 用于对单个用例进行执行路径跟踪</li>
-</ul>
-<p><strong>AFL 使用</strong></p>
-<p>AFL 需要一些初始输入数据（也叫种子文件）作为 Fuzzing 的起点，这些输入甚至可以是毫无意义的数据，AFL 可以通过启发式算法自动确定文件格式结构</p>
-<p>AFL 源码中自带了一个语料库：testcases</p>
-<p>测试代码如下：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span> </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span> </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span> </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span> </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;signal.h&gt;</span> </span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">vuln</span><span class="params">(<span class="keyword">char</span> *str)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> len = <span class="built_in">strlen</span>(str);</span><br><span class="line">    <span class="keyword">if</span>(str[<span class="number">0</span>] == <span class="string">&#x27;A&#x27;</span> &amp;&amp; len == <span class="number">66</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        raise(SIGSEGV);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span> <span class="keyword">if</span>(str[<span class="number">0</span>] == <span class="string">&#x27;F&#x27;</span> &amp;&amp; len == <span class="number">6</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        raise(SIGSEGV);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;it is good!\n&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> *argv[])</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">char</span> buf[<span class="number">100</span>]=&#123;<span class="number">0</span>&#125;;</span><br><span class="line">    gets(buf);</span><br><span class="line">    <span class="built_in">printf</span>(buf);</span><br><span class="line">    vuln(buf);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>使用 afl-gcc 进行插桩编译：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">➜  test afl-gcc test.c -o test_afl</span><br><span class="line">➜  test gcc test.c -o test_gcc</span><br></pre></td></tr></table></figure>
-<ul>
-<li>afl-gcc 插桩编译后，fuzz 的速度会快一些</li>
-</ul>
-<p>接下来就可以进行 fuzz 了：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">➜  test afl-fuzz -i ./fuzz_in -o ./fuzz_out ./test_afl -f</span><br></pre></td></tr></table></figure>
-<ul>
-<li>fuzz_in 为语料库，我这里直接使用 AFL 自带的 testcases</li>
-<li>fuzz_out 就是输出的内容</li>
-</ul>
-<p>AFL 状态窗口如下：</p>
-<p><img src="/2022/07/26/fuzz%E5%85%A5%E9%97%A8+AFL%E7%9A%84%E4%BD%BF%E7%94%A8/1658801946787.png" alt="1658801946787"> </p>
-<p>详细介绍如下：</p>
-<p><img src="/2022/07/26/fuzz%E5%85%A5%E9%97%A8+AFL%E7%9A%84%E4%BD%BF%E7%94%A8/1658802035629.png" alt="1658802035629"> </p>
-<ul>
-<li>Process timing：Fuzzer 运行时长、以及距离最近发现的路径、崩溃和挂起经过了多长时间</li>
-<li>Overall results：Fuzzer 当前状态的概述（尤其注意 uniq crashes）</li>
-<li>Cycle progress：我们输入队列的距离</li>
-<li>Map coverage：目标二进制文件中的插桩代码所观察到覆盖范围的细节</li>
-<li>Stage progress：Fuzzer 现在正在执行的文件变异策略、执行次数和执行速度</li>
-<li>Findings in depth：有关我们找到的执行路径，异常和挂起数量的信息</li>
-<li>Fuzzing strategy yields：关于突变策略产生的最新行为和结果的详细信息</li>
-<li>Path geometry：有关 Fuzzer 找到的执行路径的信息</li>
-<li>CPU load：CPU利用率</li>
-</ul>
-<p><strong>Crashes 分析</strong></p>
-<p>在 <code>fuzz_out-&gt;crashes</code> 中有许多 crashes 信息，在 AFL 源码的 experimental/crash_triage 目录中有一个名为 triage_crashes.sh 的脚本，可以帮助我们触发收集到的 crashes </p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">➜  test ./triage_crashes.sh ./fuzz_out ./test_afl 2&gt;&amp;1 | grep SIGNAL</span><br><span class="line">+++ ID 000000, SIGNAL 11 +++</span><br><span class="line">+++ ID 000001, SIGNAL 06 +++</span><br><span class="line">+++ ID 000002, SIGNAL 06 +++</span><br><span class="line">+++ ID 000003, SIGNAL 06 +++</span><br><span class="line">+++ ID 000004, SIGNAL 06 +++</span><br><span class="line">+++ ID 000005, SIGNAL 11 +++</span><br></pre></td></tr></table></figure>
-<ul>
-<li>“11”代表了 SIGSEGV 信号，有可能是因为缓冲区溢出导致进程引用了无效的内存</li>
-<li>“6”代表了 SIGABRT 信号，通常由 libc 和其他库在出现严重错误时中止程序（也有可能是触发 canary 产生的错误）</li>
-</ul>
-<p><strong>AFL 练习</strong></p>
-<p>项目地址：<a target="_blank" rel="noopener" href="https://github.com/mykter/afl-training">Exercises to learn how to fuzz with American Fuzzy Lop</a></p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -1986,7 +2065,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">191</span>
+          <span class="site-state-item-count">192</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2040,7 +2119,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">37:39</span>
+    <span title="Reading time total">37:46</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>

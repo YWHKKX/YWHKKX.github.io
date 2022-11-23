@@ -29,7 +29,7 @@
 <meta property="og:description" content="Dirty Cow 漏洞成因 Dirty COW 漏洞是一种发生在写时复制 Copy-On-Write 的条件竞争漏洞  自2007年9月 linux kernel-2.6.22 被引入，直到2018年 linux kernel 4.8.3, 4.7.9, 4.4.26 之后才被彻底修复  写时复制：  使用 fork 系统调用创建子进程，那么这个子进程通过使页表条目指向相同的物理内存来共享父进程">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2022-11-22T11:05:20.000Z">
-<meta property="article:modified_time" content="2022-11-22T11:08:50.388Z">
+<meta property="article:modified_time" content="2022-11-23T13:52:07.246Z">
 <meta property="article:author" content="yhellow">
 <meta property="article:tag" content="Kernel">
 <meta name="twitter:card" content="summary">
@@ -184,10 +184,16 @@
                 <i class="far fa-calendar"></i>
               </span>
               <span class="post-meta-item-text">Posted on</span>
-              
 
-              <time title="Created: 2022-11-22 19:05:20 / Modified: 19:08:50" itemprop="dateCreated datePublished" datetime="2022-11-22T19:05:20+08:00">2022-11-22</time>
+              <time title="Created: 2022-11-22 19:05:20" itemprop="dateCreated datePublished" datetime="2022-11-22T19:05:20+08:00">2022-11-22</time>
             </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-11-23 21:52:07" itemprop="dateModified" datetime="2022-11-23T21:52:07+08:00">2022-11-23</time>
+              </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
                 <i class="far fa-folder"></i>
@@ -367,12 +373,13 @@
 <ul>
 <li>如果我们在第二次 <code>faultin_page</code> 函数去掉 <code>flags</code> 里的 <code>FOLL_WRITE</code> 标志之后，通过竞争条件，执行 <code>madvice</code> 函数清空页表项（在 <code>get_user_page</code> 里有一步 <code>cond_resched</code> 线程调度操作，提供了条件竞争的机会）</li>
 <li>线程调度结束，返回 <code>write</code> 线程，又会重新进入 <code>follow_page_mask</code> 然后因为 <code>pte</code> 被清空导致缺页，函数返回 NULL，再次进入 <code>faultin_page</code>，然后会一直运行到 <code>do_fault</code>，此时不再要求写入权限，因此程序就会认为触发页中断的原因是“读缺页”，所以会执行 <code>do_read_fault</code> 函数，建立文件映射页的页表项</li>
+<li>注意：此时的可写页为 COW 页，但是该 COW 页的页表项却索引到了文件映射页所在的物理内存地址，操纵该 COW 页其实就相当于直接控制文件映射页</li>
 <li>接着从 <code>do_fault</code> 返回到 <code>handle_pte_fault</code> 中，检查到页面可写，从而给页面标记 <code>dirty</code> </li>
 <li>随后回到 <code>retry</code></li>
 </ul>
 <p>第四次处理 <code>page_fault</code> 的流程如下：</p>
 <ul>
-<li>第四次进入 <code>follow_page_mask</code>，不要求写权限，从而成功返回文件的映射内存页（已经标记为 <code>dirty</code>，表示该页可以写入磁盘）</li>
+<li>第四次进入 <code>follow_page_mask</code>，不要求写权限，从而成功返回映射到文件的 COW 页（已经标记为 <code>dirty</code>，表示该页可以写入磁盘）</li>
 <li>在文件映射页上执行 <code>write</code> 的剩余工作（此时虽然该映射页只读，但是内核还是可以强制写入，完成越权写操作）</li>
 </ul>
 <p>参考：<a target="_blank" rel="noopener" href="https://blog.csdn.net/qq_52196579/article/details/126608926?app_version=5.8.1&amp;code=app_1562916241&amp;csdn_share_tail={&quot;type&quot;%3A&quot;blog&quot;%2C&quot;rType&quot;%3A&quot;article&quot;%2C&quot;rId&quot;%3A&quot;126608926&quot;%2C&quot;source&quot;%3A&quot;m0_67072125&quot;}&amp;uLinkId=usr1mkqgl919blen&amp;utm_source=app">脏牛（Dirty COW）漏洞攻击实验(SEED-Lab：Dirty-COW Attack Lab)</a> </p>
@@ -492,7 +499,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">191</span>
+          <span class="site-state-item-count">192</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -546,7 +553,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">37:39</span>
+    <span title="Reading time total">37:46</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
