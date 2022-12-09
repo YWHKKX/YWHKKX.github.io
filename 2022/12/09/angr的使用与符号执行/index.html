@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="Angr 介绍 angr 是一个二进制代码分析工具（基于 python），能够自动化完成二进制文件的分析，并找出漏洞  它将以前多种分析技术集成进来，­­­能够进行动态的符号执行分析（类似于 KLEE 和 Mayhem），也能够进行多种静态分析 PS：使用符号执行分析一个程序时，该程序会使用符号值作为输入（并非使用具体值），在达到目标代码时，分析器可以得到相应的路径约束，然后通过约束求解器来得到可">
+<meta property="og:type" content="article">
+<meta property="og:title" content="angr的使用与符号执行">
+<meta property="og:url" content="http://example.com/2022/12/09/angr%E7%9A%84%E4%BD%BF%E7%94%A8%E4%B8%8E%E7%AC%A6%E5%8F%B7%E6%89%A7%E8%A1%8C/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="Angr 介绍 angr 是一个二进制代码分析工具（基于 python），能够自动化完成二进制文件的分析，并找出漏洞  它将以前多种分析技术集成进来，­­­能够进行动态的符号执行分析（类似于 KLEE 和 Mayhem），也能够进行多种静态分析 PS：使用符号执行分析一个程序时，该程序会使用符号值作为输入（并非使用具体值），在达到目标代码时，分析器可以得到相应的路径约束，然后通过约束求解器来得到可">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2022/12/09/angr%E7%9A%84%E4%BD%BF%E7%94%A8%E4%B8%8E%E7%AC%A6%E5%8F%B7%E6%89%A7%E8%A1%8C/1670505794268.png">
+<meta property="og:image" content="http://example.com/2022/12/09/angr%E7%9A%84%E4%BD%BF%E7%94%A8%E4%B8%8E%E7%AC%A6%E5%8F%B7%E6%89%A7%E8%A1%8C/1670578268195.png">
+<meta property="article:published_time" content="2022-12-09T10:27:15.000Z">
+<meta property="article:modified_time" content="2022-12-09T10:30:33.876Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="angr">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2022/12/09/angr%E7%9A%84%E4%BD%BF%E7%94%A8%E4%B8%8E%E7%AC%A6%E5%8F%B7%E6%89%A7%E8%A1%8C/1670505794268.png">
+
+<link rel="canonical" href="http://example.com/2022/12/09/angr%E7%9A%84%E4%BD%BF%E7%94%A8%E4%B8%8E%E7%AC%A6%E5%8F%B7%E6%89%A7%E8%A1%8C/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>angr的使用与符号执行 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/12/09/angr%E7%9A%84%E4%BD%BF%E7%94%A8%E4%B8%8E%E7%AC%A6%E5%8F%B7%E6%89%A7%E8%A1%8C/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          angr的使用与符号执行
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-12-09 18:27:15 / Modified: 18:30:33" itemprop="dateCreated datePublished" datetime="2022-12-09T18:27:15+08:00">2022-12-09</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Technology/" itemprop="url" rel="index"><span itemprop="name">Technology</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>3.2k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>3 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>Angr 介绍</strong></p>
+<p>angr 是一个二进制代码分析工具（基于 python），能够自动化完成二进制文件的分析，并找出漏洞</p>
+<ul>
+<li>它将以前多种分析技术集成进来，­­­能够进行动态的符号执行分析（类似于 KLEE 和 Mayhem），也能够进行多种静态分析</li>
+<li>PS：使用符号执行分析一个程序时，该程序会使用符号值作为输入（并非使用具体值），在达到目标代码时，分析器可以得到相应的路径约束，然后通过约束求解器来得到可以触发目标代码的具体值</li>
+</ul>
+<p><strong>传统符号执行</strong></p>
+<p>传统符号执行是一种静态分析技术</p>
+<ul>
+<li>通过使用抽象的符号（静态或者全局变量的名称）代替具体值来模拟程序的执行</li>
+<li>当遇到分支语句时，它会探索每一个分支，将分支条件加入到相应的路径约束中</li>
+<li>若约束可解，则说明该路径是可达的</li>
+</ul>
+<p>接下来就通过以下的伪代码案例来推演这个过程：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">twice</span><span class="params">(<span class="keyword">int</span> v)</span></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">2</span>*v;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">testme</span><span class="params">(<span class="keyword">int</span> x,<span class="keyword">int</span> y)</span></span>&#123;</span><br><span class="line">    z = twice(y);</span><br><span class="line">    <span class="keyword">if</span>(z == x)&#123;</span><br><span class="line">        <span class="keyword">if</span>(x&gt;y+<span class="number">10</span>)&#123;</span><br><span class="line">            ERROR;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span>&#123;</span><br><span class="line">    x = sym_input();</span><br><span class="line">    y = sym_input();</span><br><span class="line">    testme(x,y);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>程序不会直接输入具体值，而是输入一个符号值</li>
+<li>接着尽可能探索每一个分支，把程序的所有执行路径表示成一棵执行树</li>
+</ul>
+<img src="/2022/12/09/angr%E7%9A%84%E4%BD%BF%E7%94%A8%E4%B8%8E%E7%AC%A6%E5%8F%B7%E6%89%A7%E8%A1%8C/1670505794268.png" class width="1670505794268"> 
+<p>符号执行维护了：</p>
+<ul>
+<li>符号状态 σ (symbolic state)：变量到符号表达式的映射 </li>
+<li>符号路径约束 PC (path constraint)：表示当前路径的约束条件</li>
+</ul>
+<p>在对程序的某一路径分支进行符号执行的终点，把 PC 输入约束求解器 (constraint solver) 以获得求解，生成实际的输入值</p>
+<ul>
+<li>PS：如果程序把生成的具体值作为输入执行，它将会和符号执行运行在同一路径，即此时 PC 的公式所表示的路径，并且以同一种方式结束</li>
+</ul>
+<p>经典的符号执行有一个关键的缺点，若符合执行路径的符号路径约束无法使用约束求解器进行有效的求解，则无法生成输入</p>
+<p><strong>动态符号执行</strong></p>
+<p>混合“实际执行”和“符号执行” (concolic execution)，是真正意义上的动态符号执行 </p>
+<ul>
+<li>经典的符号执行，过度的依赖了符号执行的约束求解能力，限制了传统符号执行的能力发挥</li>
+<li>如果能加入具体值进行分析，将大大简化分析过程，降低分析的难度和提升效率</li>
+<li>但分析过程中，仍不可避免的还是需要将各种条件表达式，进行符号化抽象后变成约束条件参与执行</li>
+</ul>
+<p>将程序语句转换为符号约束的精度，对符号执行所达到的覆盖率以及约束求解的可伸缩性会产生重大影响，所以如何做好 “混合具体(Concrete)执行” 和 “符号(Symbolic)执行” 的能力的平衡，就成为现代符号执行的关键点</p>
+<p><strong>选择性符号执行</strong></p>
+<p>受路径爆炸和约束求解问题的制约，符号执行不适用于程序规模较大或逻辑复杂的情况，并且对于与外部执行环境交互较多的程序尚无很好的解决方法</p>
+<p>选择性符号执行有助于解决这类问题，也是具体执行和符号执行混合的一种分析技术，依据特定的分析，决定符号执行和具体执行的切换使用</p>
+<ul>
+<li>用户可以指定一个完整系统中的任意部分进行符号执行分析（可以是应用程序、库文件、系统内核和设备驱动程序等）</li>
+<li>选择性符号执行在符号执行和具体执行间转换，并透明地转换符号状态和具体状态</li>
+<li>选择性符号执行极大地提高了符号执行在实际应用中对大型软件分析测试的可用性，且不再需要对这些环境进行模拟建模</li>
+</ul>
+<p>选择性符号执行在指定区域内的符号化搜索，就是完全的符号执行，在该区域之外均使用具体执行完成，选择性符号执行的主要任务就是在分析前将大程序区分为 “具体执行区域” 和 “符号执行区域”</p>
+<p>参考：<a target="_blank" rel="noopener" href="https://www.cnblogs.com/lqerio/p/15980670.html">符号执行（symbolic executio）技术综述</a> </p>
+<p><strong>Angr 安装</strong></p>
+<p>为了不与 pwntools 库引起冲突，可以采用拉取 docker 镜像的方式进行使用（当然也可以直接 <code>pip install angr</code> 也可以）</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">docker pull angr/angr</span><br></pre></td></tr></table></figure>
+<p>以下脚本可以方便我们运行 docker angr：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash">! /bin/zsh</span></span><br><span class="line">pwd=`pwd`</span><br><span class="line">script=$1</span><br><span class="line">docker run -it -u angr --rm -v $pwd:/mnt -w /mnt angr/angr &quot;/home/angr/.virtualenvs/angr/bin/python&quot; &quot;/mnt/$script&quot; $2 $3</span><br></pre></td></tr></table></figure>
+<p>使用该脚本：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">./angr script.py</span><br></pre></td></tr></table></figure>
+<p><strong>Angr 使用</strong></p>
+<p>Github 上有一个针对 angr 的练习集：</p>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://github.com/jakespringer/angr_ctf">jakespringer/angr_ctf (github.com)</a> </li>
+</ul>
+<p>这里先通过 <code>00_angr_find</code> 来了解 angr 的基础用法</p>
+<p>IDA 分析出来的代码如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> __cdecl <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">const</span> <span class="keyword">char</span> **argv, <span class="keyword">const</span> <span class="keyword">char</span> **envp)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">int</span> i; <span class="comment">// [esp+1Ch] [ebp-1Ch]</span></span><br><span class="line">  <span class="keyword">char</span> s1[<span class="number">9</span>]; <span class="comment">// [esp+23h] [ebp-15h] BYREF</span></span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">int</span> v6; <span class="comment">// [esp+2Ch] [ebp-Ch]</span></span><br><span class="line"></span><br><span class="line">  v6 = __readgsdword(<span class="number">0x14</span>u);</span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;Enter the password: &quot;</span>);</span><br><span class="line">  __isoc99_scanf(<span class="string">&quot;%8s&quot;</span>, s1);</span><br><span class="line">  <span class="keyword">for</span> ( i = <span class="number">0</span>; i &lt;= <span class="number">7</span>; ++i )</span><br><span class="line">    s1[i] = complex_function(s1[i], i);</span><br><span class="line">  <span class="keyword">if</span> ( !<span class="built_in">strcmp</span>(s1, <span class="string">&quot;JACEJGCS&quot;</span>) )</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;Good Job.&quot;</span>);</span><br><span class="line">  <span class="keyword">else</span></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;Try again.&quot;</span>);</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>其中的 <code>complex_function</code> 是一个加密的过程</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> __cdecl <span class="title">complex_function</span><span class="params">(<span class="keyword">int</span> a1, <span class="keyword">int</span> a2)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">if</span> ( a1 &lt;= <span class="number">64</span> || a1 &gt; <span class="number">90</span> )</span><br><span class="line">  &#123;</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;Try again.&quot;</span>);</span><br><span class="line">    <span class="built_in">exit</span>(<span class="number">1</span>);</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> (<span class="number">3</span> * a2 + a1 - <span class="number">65</span>) % <span class="number">26</span> + <span class="number">65</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>如果采用常规的解题思维，那就要对 <code>complex_function</code> 进行逆向，分析出输入值，但 angr 采用了不同的做法</p>
+<p>先新建一个 angr 工程：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">p = angr.Project(<span class="string">&quot;./00_angr_find&quot;</span>)</span><br></pre></td></tr></table></figure>
+<p>告诉 angr 一个初始化状态：（Unicorn 框架允许执行任意一段二进制代码）</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">init_state = p.factory.entry_state() <span class="comment"># 程序入口点</span></span><br></pre></td></tr></table></figure>
+<p>生成一个 SimulationManagers 对象，用于管理“模拟执行”：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sm = p.factory.simulation_manager(init_state)</span><br></pre></td></tr></table></figure>
+<p>告诉 SimulationManagers 对象需要查找的路径地址，并开始“模拟执行”：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sm.explore(find=<span class="number">0x08048678</span>)</span><br></pre></td></tr></table></figure>
+<ul>
+<li>angr 会把输入值 <code>s1</code> 转化为一个符号向量（用于决定“模拟执行”的路径）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">__isoc99_scanf(<span class="string">&quot;%8s&quot;</span>, s1);</span><br></pre></td></tr></table></figure>
+<ul>
+<li>然后遍历所有的程序路径，找到进入各个路径的约束条件：</li>
+</ul>
+<img src="/2022/12/09/angr%E7%9A%84%E4%BD%BF%E7%94%A8%E4%B8%8E%E7%AC%A6%E5%8F%B7%E6%89%A7%E8%A1%8C/1670578268195.png" class width="1670578268195"> 
+<ul>
+<li>最后把目标路径的约束输入约束求解器 (constraint solver) 以获得求解，生成实际的输入值</li>
+</ul>
+<p>最终的结果存放在 <code>found</code> 中，我们可以打印出来：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">found_state = sm.found[<span class="number">0</span>]</span><br><span class="line"><span class="built_in">print</span>(found_state.posix.dumps(<span class="number">1</span>))</span><br><span class="line"><span class="built_in">print</span>(found_state.posix.dumps(<span class="number">0</span>))</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">b<span class="number">&#x27;</span>Enter the password: &#x27;</span><br><span class="line">b<span class="number">&#x27;</span>JXWVXRKX<span class="number">&#x27;</span></span><br></pre></td></tr></table></figure>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/angr/" rel="tag"><i class="fa fa-tag"></i> angr</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/12/08/Strtok%20off-by-null+%E4%BE%A7%E4%BF%A1%E9%81%93%E6%94%BB%E5%87%BB/" rel="prev" title="Strtok off-by-null+侧信道攻击">
+      <i class="fa fa-chevron-left"></i> Strtok off-by-null+侧信道攻击
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">198</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">11</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">120</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">2.6m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">39:32</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
