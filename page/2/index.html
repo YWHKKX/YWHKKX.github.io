@@ -156,6 +156,139 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/11/23/Linux%20%E5%90%84%E7%A7%8D%E5%86%85%E5%AD%98%E5%85%B1%E4%BA%AB/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/11/23/Linux%20%E5%90%84%E7%A7%8D%E5%86%85%E5%AD%98%E5%85%B1%E4%BA%AB/" class="post-title-link" itemprop="url">Linux 各种内存共享</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-11-23 23:22:17 / Modified: 23:23:28" itemprop="dateCreated datePublished" datetime="2022-11-23T23:22:17+08:00">2022-11-23</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>7.4k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>7 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>SYStemV 共享内存</strong></p>
+<p>传统的 SYStemV 共享内存是指 <code>shm</code> 那一伙 API：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">shmget</span><span class="params">(<span class="keyword">key_t</span> key, <span class="keyword">size_t</span> size, <span class="keyword">int</span> shmflg)</span></span>; <span class="comment">/* 获取一个新的共享内存段 */</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> *<span class="title">shmat</span><span class="params">(<span class="keyword">int</span> shmid, <span class="keyword">const</span> <span class="keyword">void</span> *shmaddr, <span class="keyword">int</span> shmflg)</span></span>; <span class="comment">/* 进行内存映射 */</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">shmdt</span><span class="params">(<span class="keyword">const</span> <span class="keyword">void</span> *shmaddr)</span></span>; <span class="comment">/* 删除内存映射 */</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">shmctl</span><span class="params">(<span class="keyword">int</span> shmid, <span class="keyword">int</span> cmd, struct shmid_ds *buf)</span></span>; <span class="comment">/* 对共享内存段进行操作 */</span></span><br></pre></td></tr></table></figure>
+<p>在早期版本的内核中，“共享内存”，“信号量”，“消息队列” 都使用通用的 <code>ipcget</code> 函数完成创建，只是 <code>ipc_ops</code> 结构体的初始化不同</p>
+<p>其实 <code>do_shmat</code> 底层申请内存的部分和 <code>mmap</code> 一样，都是调用 <code>do_mmap_pgoff</code>，效果就是映射一片由 VMA 组织起来的共享内存段</p>
+<p>之后的 <code>shmget</code> 通过相同的 <code>key</code>，就可以获取同一片共享内存区域</p>
+<p><strong>POSIX 共享内存</strong></p>
+<p>传统的 SYStemV shm 共享内存有个升级版的 POSIX API：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">shm_open</span><span class="params">(struct vm_area_struct *vma)</span></span>; <span class="comment">/* 在/dev/shm/下建立一个文件,作为该进程的共享内存 */</span></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">shm_close</span><span class="params">(struct vm_area_struct *vma)</span></span>; <span class="comment">/* 释放目标共享内存 */</span></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">shm_destroy</span><span class="params">(struct ipc_namespace *ns, struct shmid_kernel *shp)</span></span>; <span class="comment">/* 销毁/dev/shm/中对应的文件 */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>/dev/shm/</code> 是一个使用就是 tmpfs 文件系统的设备，可以理解为只存在于内存上的文件</li>
+</ul>
+<p>还有个更经典的 POSIX API 就是 mmap：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> *<span class="title">mmap</span><span class="params">(<span class="keyword">void</span> *addr, <span class="keyword">size_t</span> len, <span class="keyword">int</span> prot, <span class="keyword">int</span> flags, <span class="keyword">int</span> fd, <span class="keyword">off_t</span> offset)</span></span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>mmap 需要和磁盘进行交互（非匿名映射），导致效率没有 shm 好，但它能够存储的空间更大</li>
+</ul>
+<p><strong>memfd_create 共享内存</strong></p>
+<p>函数 <code>memfd_create</code> 可以创建一个“虚拟文件”，它映射到一片物理内存而不是磁盘</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">memfd_create</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> *name, <span class="keyword">unsigned</span> <span class="keyword">int</span> flags)</span></span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>创建基于 <code>tmpfs</code> 的匿名文件（返回文件描述符）</li>
+</ul>
+<p>函数 <code>memfd_create</code> 本身并没有共享内存的能力，但是通过之前的 FD 转移技术可以实现共享内存（把 <code>memfd_create</code> 生成的 FD 转移到其他进程中，就实现共享内存了）</p>
+<p>使用案例如下：</p>
+<ul>
+<li>发送共享内存句柄：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;time.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/un.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/wait.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/socket.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/mman.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;linux/memfd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/syscall.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> handle_error(msg) do &#123; perror(msg); exit(EXIT_FAILURE); &#125; while(0)</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">send_fd</span><span class="params">(<span class="keyword">int</span> socket, <span class="keyword">int</span> *fd, <span class="keyword">int</span> n)</span>  </span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">msghdr</span> <span class="title">msg</span> =</span> &#123;<span class="number">0</span>&#125;;</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">cmsghdr</span> *<span class="title">cmsg</span>;</span></span><br><span class="line">        <span class="keyword">char</span> buf[CMSG_SPACE(n * <span class="keyword">sizeof</span>(<span class="keyword">int</span>))], dup[<span class="number">256</span>];</span><br><span class="line">        <span class="built_in">memset</span>(buf, <span class="string">&#x27;\0&#x27;</span>, <span class="keyword">sizeof</span>(buf));</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">iovec</span> <span class="title">io</span> =</span> &#123; .iov_base = &amp;dup, .iov_len = <span class="keyword">sizeof</span>(dup) &#125;;</span><br><span class="line"></span><br><span class="line">        msg.msg_iov = &amp;io;</span><br><span class="line">        msg.msg_iovlen = <span class="number">1</span>;</span><br><span class="line">        msg.msg_control = buf;</span><br><span class="line">        msg.msg_controllen = <span class="keyword">sizeof</span>(buf);</span><br><span class="line"></span><br><span class="line">        cmsg = CMSG_FIRSTHDR(&amp;msg);</span><br><span class="line">        cmsg-&gt;cmsg_level = SOL_SOCKET;</span><br><span class="line">        cmsg-&gt;cmsg_type = SCM_RIGHTS;</span><br><span class="line">        cmsg-&gt;cmsg_len = CMSG_LEN(n * <span class="keyword">sizeof</span>(<span class="keyword">int</span>));</span><br><span class="line"></span><br><span class="line">        <span class="built_in">memcpy</span> ((<span class="keyword">int</span> *) CMSG_DATA(cmsg), fd, n * <span class="keyword">sizeof</span> (<span class="keyword">int</span>));</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (sendmsg (socket, &amp;msg, <span class="number">0</span>) &lt; <span class="number">0</span>)</span><br><span class="line">                handle_error (<span class="string">&quot;Failed to send message&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> *argv[])</span> </span>&#123;</span><br><span class="line">        <span class="keyword">int</span> sfd, fd;</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">sockaddr_un</span> <span class="title">addr</span>;</span></span><br><span class="line">        <span class="keyword">char</span> *buffer;</span><br><span class="line"></span><br><span class="line">        srand((<span class="keyword">unsigned</span> <span class="keyword">int</span>)time(<span class="literal">NULL</span>));</span><br><span class="line"></span><br><span class="line">        sfd = socket(AF_UNIX, SOCK_STREAM, <span class="number">0</span>);</span><br><span class="line">        <span class="keyword">if</span> (sfd == <span class="number">-1</span>)</span><br><span class="line">                handle_error (<span class="string">&quot;Failed to create socket&quot;</span>);</span><br><span class="line"></span><br><span class="line">        <span class="built_in">memset</span>(&amp;addr, <span class="number">0</span>, <span class="keyword">sizeof</span>(struct sockaddr_un));</span><br><span class="line">        addr.sun_family = AF_UNIX;</span><br><span class="line">        <span class="built_in">strncpy</span>(addr.sun_path, <span class="string">&quot;/tmp/fd-pass.socket&quot;</span>, <span class="keyword">sizeof</span>(addr.sun_path) - <span class="number">1</span>);</span><br><span class="line"></span><br><span class="line">        fd = syscall(__NR_memfd_create,<span class="string">&quot;shm&quot;</span>,MFD_CLOEXEC);</span><br><span class="line">        ftruncate(fd,<span class="number">0x1000</span>);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (fd &lt; <span class="number">0</span>)</span><br><span class="line">                handle_error (<span class="string">&quot;Failed to open file 1 for reading&quot;</span>);</span><br><span class="line">        <span class="keyword">else</span></span><br><span class="line">                <span class="built_in">fprintf</span> (<span class="built_in">stdout</span>, <span class="string">&quot;Opened fd %d in parent\n&quot;</span>, fd);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (connect(sfd, (struct sockaddr *) &amp;addr, <span class="keyword">sizeof</span>(struct sockaddr_un)) == <span class="number">-1</span>)</span><br><span class="line">                handle_error (<span class="string">&quot;Failed to connect to socket&quot;</span>);</span><br><span class="line"></span><br><span class="line">        send_fd (sfd, &amp;fd, <span class="number">1</span>);</span><br><span class="line"></span><br><span class="line">        buffer = (<span class="keyword">char</span> *)mmap(<span class="literal">NULL</span>,<span class="number">0x30</span>,PROT_WRITE|PROT_READ,MAP_SHARED,fd,<span class="number">0</span>);</span><br><span class="line">        <span class="keyword">if</span>(buffer == <span class="literal">NULL</span>)&#123;</span><br><span class="line">                perror(<span class="string">&quot;[mmap error]&quot;</span>);</span><br><span class="line">                <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">while</span>(<span class="number">1</span>)&#123;</span><br><span class="line">                <span class="keyword">int</span> t=(<span class="keyword">int</span>)(rand()%<span class="number">1000</span>)/<span class="number">100</span>;</span><br><span class="line">                <span class="built_in">sprintf</span>(buffer,<span class="string">&quot;yhellow: %d&quot;</span>,t);</span><br><span class="line">                sleep(<span class="number">2</span>);</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="built_in">exit</span>(EXIT_SUCCESS);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>接收共享内存句柄：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;errno.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/un.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/wait.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/mman.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/socket.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/syscall.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> handle_error(msg) do &#123; perror(msg); exit(EXIT_FAILURE); &#125; while(0)</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">int</span> * <span class="title">recv_fd</span><span class="params">(<span class="keyword">int</span> socket, <span class="keyword">int</span> n)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">int</span> *fds = <span class="built_in">malloc</span> (n * <span class="keyword">sizeof</span>(<span class="keyword">int</span>));</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">msghdr</span> <span class="title">msg</span> =</span> &#123;<span class="number">0</span>&#125;;</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">cmsghdr</span> *<span class="title">cmsg</span>;</span></span><br><span class="line">        <span class="keyword">char</span> buf[CMSG_SPACE(n * <span class="keyword">sizeof</span>(<span class="keyword">int</span>))], dup[<span class="number">256</span>];</span><br><span class="line">        <span class="built_in">memset</span>(buf, <span class="string">&#x27;\0&#x27;</span>, <span class="keyword">sizeof</span>(buf));</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">iovec</span> <span class="title">io</span> =</span> &#123; .iov_base = &amp;dup, .iov_len = <span class="keyword">sizeof</span>(dup) &#125;;</span><br><span class="line"></span><br><span class="line">        msg.msg_iov = &amp;io;</span><br><span class="line">        msg.msg_iovlen = <span class="number">1</span>;</span><br><span class="line">        msg.msg_control = buf;</span><br><span class="line">        msg.msg_controllen = <span class="keyword">sizeof</span>(buf);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (recvmsg (socket, &amp;msg, <span class="number">0</span>) &lt; <span class="number">0</span>)</span><br><span class="line">                handle_error (<span class="string">&quot;Failed to receive message&quot;</span>);</span><br><span class="line"></span><br><span class="line">        cmsg = CMSG_FIRSTHDR(&amp;msg);</span><br><span class="line"></span><br><span class="line">        <span class="built_in">memcpy</span> (fds, (<span class="keyword">int</span> *) CMSG_DATA(cmsg), n * <span class="keyword">sizeof</span>(<span class="keyword">int</span>));</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> fds;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> *argv[])</span> </span>&#123;</span><br><span class="line">        <span class="keyword">ssize_t</span> nbytes;</span><br><span class="line">        <span class="keyword">char</span> *buffer;</span><br><span class="line">        <span class="keyword">int</span> sfd, cfd, *fdp;</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">sockaddr_un</span> <span class="title">addr</span>;</span></span><br><span class="line"></span><br><span class="line">        sfd = socket(AF_UNIX, SOCK_STREAM, <span class="number">0</span>);</span><br><span class="line">        <span class="keyword">if</span> (sfd == <span class="number">-1</span>)</span><br><span class="line">                handle_error (<span class="string">&quot;Failed to create socket&quot;</span>);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (unlink (<span class="string">&quot;/tmp/fd-pass.socket&quot;</span>) == <span class="number">-1</span> &amp;&amp; errno != ENOENT)</span><br><span class="line">                handle_error (<span class="string">&quot;Removing socket file failed&quot;</span>);</span><br><span class="line"></span><br><span class="line">        <span class="built_in">memset</span>(&amp;addr, <span class="number">0</span>, <span class="keyword">sizeof</span>(struct sockaddr_un));</span><br><span class="line">        addr.sun_family = AF_UNIX;</span><br><span class="line">        <span class="built_in">strncpy</span>(addr.sun_path, <span class="string">&quot;/tmp/fd-pass.socket&quot;</span>, <span class="keyword">sizeof</span>(addr.sun_path) - <span class="number">1</span>);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (bind(sfd, (struct sockaddr *) &amp;addr, <span class="keyword">sizeof</span>(struct sockaddr_un)) == <span class="number">-1</span>)</span><br><span class="line">                handle_error (<span class="string">&quot;Failed to bind to socket&quot;</span>);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (listen(sfd, <span class="number">5</span>) == <span class="number">-1</span>)</span><br><span class="line">                handle_error (<span class="string">&quot;Failed to listen on socket&quot;</span>);</span><br><span class="line"></span><br><span class="line">        cfd = accept(sfd, <span class="literal">NULL</span>, <span class="literal">NULL</span>);</span><br><span class="line">        <span class="keyword">if</span> (cfd == <span class="number">-1</span>)</span><br><span class="line">                handle_error (<span class="string">&quot;Failed to accept incoming connection&quot;</span>);</span><br><span class="line"></span><br><span class="line">        fdp = recv_fd (cfd, <span class="number">1</span>);</span><br><span class="line">        buffer = (<span class="keyword">char</span> *)mmap(<span class="literal">NULL</span>,<span class="number">0x30</span>,PROT_WRITE|PROT_READ,MAP_SHARED,*fdp,<span class="number">0</span>);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">while</span> (<span class="number">1</span>)&#123;</span><br><span class="line">                <span class="built_in">fprintf</span> (<span class="built_in">stdout</span>, <span class="string">&quot;Reading from passed fd %d\n&quot;</span>, *fdp);</span><br><span class="line">                <span class="built_in">printf</span>(<span class="string">&quot;%s\n&quot;</span>,buffer);</span><br><span class="line">                sleep(<span class="number">3</span>);</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (close(cfd) == <span class="number">-1</span>)</span><br><span class="line">                handle_error (<span class="string">&quot;Failed to close client socket&quot;</span>);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>结果：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">➜  <span class="built_in">exp</span> ./send </span><br><span class="line">Opened fd <span class="number">4</span> in parent</span><br><span class="line">➜  <span class="built_in">exp</span> ./read </span><br><span class="line">Reading from passed fd <span class="number">5</span></span><br><span class="line">yhellow: <span class="number">4</span></span><br><span class="line">Reading from passed fd <span class="number">5</span></span><br><span class="line">yhellow: <span class="number">0</span></span><br><span class="line">Reading from passed fd <span class="number">5</span></span><br><span class="line">yhellow: <span class="number">5</span></span><br><span class="line">Reading from passed fd <span class="number">5</span></span><br><span class="line">yhellow: <span class="number">4</span></span><br><span class="line">Reading from passed fd <span class="number">5</span></span><br><span class="line">yhellow: <span class="number">3</span></span><br></pre></td></tr></table></figure>
+<p>参考：<a target="_blank" rel="noopener" href="https://blog.csdn.net/m0_56145255/article/details/124792742">共享内存技术之memfd_create</a> </p>
+<p><strong>dma_buf 共享内存</strong></p>
+<p>dma_buf 可以实现 <code>buffer</code> 在多个设备的共享，如果设备驱动想要共享 DMA 缓冲区，可以让一个驱动来导出，一个驱动来使用：</p>
+<ul>
+<li>可以把一片底层驱动 A 的 buffer 导出到用户空间成为一个 fd</li>
+<li>也可以把 fd 导入到底层驱动 B</li>
+<li>如果进行 <code>mmap</code> 得到虚拟地址，CPU 也是可以在用户空间访问到已经获得用户空间虚拟地址的底层 buffer 的</li>
+</ul>
+<p>类似于消费者生产者模型，Linux DMA-BUF 就是基于这种方式来实现的</p>
+<p>dma_buf 在内核中的结构体如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">dma_buf</span> &#123;</span></span><br><span class="line">	<span class="keyword">size_t</span> size;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">file</span> *<span class="title">file</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">attachments</span>;</span></span><br><span class="line">	<span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">dma_buf_ops</span> *<span class="title">ops</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">mutex</span> <span class="title">lock</span>;</span></span><br><span class="line">	<span class="keyword">unsigned</span> vmapping_counter;</span><br><span class="line">	<span class="keyword">void</span> *vmap_ptr;</span><br><span class="line">	<span class="keyword">const</span> <span class="keyword">char</span> *exp_name;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">module</span> *<span class="title">owner</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">list_node</span>;</span></span><br><span class="line">	<span class="keyword">void</span> *priv;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">reservation_object</span> *<span class="title">resv</span>;</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">/* poll support */</span></span><br><span class="line">	<span class="keyword">wait_queue_head_t</span> poll;</span><br><span class="line"></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">dma_buf_poll_cb_t</span> &#123;</span></span><br><span class="line">		<span class="class"><span class="keyword">struct</span> <span class="title">dma_fence_cb</span> <span class="title">cb</span>;</span></span><br><span class="line">		<span class="keyword">wait_queue_head_t</span> *poll;</span><br><span class="line"></span><br><span class="line">		<span class="keyword">__poll_t</span> active;</span><br><span class="line">	&#125; cb_excl, cb_shared;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>当用户 <code>call VIDIOC_EXPBUF</code> 这个 <code>IOCTL</code> 的时候，可以把 dma_buf 转化为 fd：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">ioctl</span><span class="params">(<span class="keyword">int</span> fd, VIDIOC_EXPBUF, struct v4l2_exportbuffer *argp)</span></span>;</span><br></pre></td></tr></table></figure>
+<p>想要把 dma_buf 的导入侧设备驱动，则会用到如下这些API： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* 导出缓冲 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> dma_buf_export(priv, ops, size, flags)                  \</span></span><br><span class="line"><span class="meta">    dma_buf_export_named(priv, ops, size, flags, __FILE__)</span></span><br><span class="line"><span class="function">struct dma_buf *<span class="title">dma_buf_export_named</span><span class="params">(<span class="keyword">void</span> *priv, struct dma_buf_ops *ops,</span></span></span><br><span class="line"><span class="params"><span class="function">                                     <span class="keyword">size_t</span> size, <span class="keyword">int</span> flags,</span></span></span><br><span class="line"><span class="params"><span class="function">                                     <span class="keyword">const</span> <span class="keyword">char</span> *exp_name)</span></span>; </span><br><span class="line"><span class="comment">/* 获取文件描述符 */</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">dma_buf_fd</span><span class="params">(struct dma_buf *dmabuf, <span class="keyword">int</span> flags)</span></span>; </span><br><span class="line"></span><br><span class="line"><span class="comment">/* 连接缓冲 */</span></span><br><span class="line"><span class="function">struct dma_buf *<span class="title">dma_buf_get</span><span class="params">(<span class="keyword">int</span> fd)</span></span>;</span><br><span class="line"><span class="function">struct dma_buf_attachment *<span class="title">dma_buf_attach</span><span class="params">(struct dma_buf *dmabuf,</span></span></span><br><span class="line"><span class="params"><span class="function">                                          struct device *dev)</span></span>; </span><br><span class="line"></span><br><span class="line"><span class="comment">/* 申请访问 */</span></span><br><span class="line"><span class="function">struct sg_table * <span class="title">dma_buf_map_attachment</span><span class="params">(struct dma_buf_attachment *,</span></span></span><br><span class="line"><span class="params"><span class="function">                                         <span class="keyword">enum</span> dma_data_direction)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">dma_buf_unmap_attachment</span><span class="params">(struct dma_buf_attachment *, struct sg_table *)</span></span>; </span><br><span class="line"></span><br><span class="line"><span class="comment">/* 断开连接 */</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">dma_buf_detach</span><span class="params">(struct dma_buf *dmabuf,</span></span></span><br><span class="line"><span class="params"><span class="function">                    struct dma_buf_attachment *dmabuf_attach)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">dma_buf_put</span><span class="params">(struct dma_buf *dmabuf)</span></span>; </span><br></pre></td></tr></table></figure>
+<p>可以通过如下方式获取文件描述符： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">buffer_export</span><span class="params">(<span class="keyword">int</span> v4lfd, <span class="keyword">enum</span> v4l2_buf_type bt, <span class="keyword">int</span> index, <span class="keyword">int</span> *dmafd)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">v4l2_exportbuffer</span> <span class="title">expbuf</span>;</span></span><br><span class="line"></span><br><span class="line">    <span class="built_in">memset</span>(&amp;expbuf, <span class="number">0</span>, <span class="keyword">sizeof</span>(expbuf));</span><br><span class="line">    expbuf.type = bt;</span><br><span class="line">    expbuf.index = index;</span><br><span class="line">    <span class="comment">// int ioctl(int fd, int request, struct v4l2_exportbuffer *argp);</span></span><br><span class="line">    <span class="keyword">if</span> (ioctl(v4lfd, VIDIOC_EXPBUF, &amp;expbuf) == <span class="number">-1</span>) &#123;</span><br><span class="line">        perror(<span class="string">&quot;VIDIOC_EXPBUF&quot;</span>);</span><br><span class="line">        <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    *dmafd = expbuf.fd;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/11/23/Linux%20UDS%E4%B8%8EFD%E8%BF%81%E7%A7%BB%E6%8A%80%E6%9C%AF/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -955,7 +1088,7 @@
                   <i class="far fa-calendar-check"></i>
                 </span>
                 <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-11-14 10:20:23" itemprop="dateModified" datetime="2022-11-14T10:20:23+08:00">2022-11-14</time>
+                <time title="Modified: 2022-12-19 18:00:57" itemprop="dateModified" datetime="2022-12-19T18:00:57+08:00">2022-12-19</time>
               </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
@@ -1588,10 +1721,16 @@
                 <i class="far fa-calendar"></i>
               </span>
               <span class="post-meta-item-text">Posted on</span>
-              
 
-              <time title="Created: 2022-11-03 23:35:27 / Modified: 23:41:55" itemprop="dateCreated datePublished" datetime="2022-11-03T23:35:27+08:00">2022-11-03</time>
+              <time title="Created: 2022-11-03 23:35:27" itemprop="dateCreated datePublished" datetime="2022-11-03T23:35:27+08:00">2022-11-03</time>
             </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-12-19 18:00:36" itemprop="dateModified" datetime="2022-12-19T18:00:36+08:00">2022-12-19</time>
+              </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
                 <i class="far fa-folder"></i>
@@ -1808,157 +1947,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/11/03/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E6%95%A3%E5%88%97%E8%A1%A8&XArray/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/11/03/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E6%95%A3%E5%88%97%E8%A1%A8&XArray/" class="post-title-link" itemprop="url">数据结构：散列表&XArray</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2022-11-03 15:40:12 / Modified: 15:41:48" itemprop="dateCreated datePublished" datetime="2022-11-03T15:40:12+08:00">2022-11-03</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>3.8k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>3 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="散列表"><a href="#散列表" class="headerlink" title="散列表"></a>散列表</h2><p>散列表（Hash Table，也叫哈希表），是根据关键码值（Key，Value）直接进行访问的数据结构</p>
-<ul>
-<li>通过把关键码值映射到表中一个位置来访问记录，以加快查找的速度</li>
-<li>这个映射函数叫做哈希函数（散列函数），存放记录的数组叫做散列表</li>
-</ul>
-<p>散列表的基本思想就是“链表的数组”：</p>
-<img src="/2022/11/03/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E6%95%A3%E5%88%97%E8%A1%A8&XArray/1667454792774-1667456445567.png" class width="1667454792774"> 
-<p>运用流程如下：</p>
-<ul>
-<li>利用 Hash 算法来来把一个不同长度的特征值转化成杂乱的128位的编码</li>
-<li>将目标编码转变为数组下标</li>
-<li>在散列表中索引对应的链表，然后插链</li>
-</ul>
-<p>相比于正常的链表，散列表在插链之前先对链表的各个节点进行了“分组”（依赖哈希函数的无规律分组），在之后的查找/脱链过程中，程序只需要遍历对应的链表，而不是从头开始把所有的节点都遍历一遍</p>
-<p>将目标编码转变为数组下标的方法就是散列法，常见的散列法如下：</p>
-<ul>
-<li>除法散列法：<ul>
-<li>对目标编码进行取模</li>
-<li><code>index = value % 16</code></li>
-</ul>
-</li>
-<li>平方散列法：<ul>
-<li>乘法的运算要比除法来得省时，所以把除法换成乘法和一个位移操作</li>
-<li><code>index = (value * value) &gt;&gt; 28</code>（<code>value</code>的类型为<code>int</code>，乘法的结果不会超过32位）</li>
-</ul>
-</li>
-<li>斐波那契（Fibonacci）散列法：<ul>
-<li>找出一个理想的乘数，而不是拿 <code>value</code> 本身当作乘数</li>
-<li><code>index = (value * 2654435769) &gt;&gt; 28</code></li>
-</ul>
-</li>
-</ul>
-<p>散列表的优缺点如下：</p>
-<ul>
-<li>优点：<ul>
-<li>不论散列表中有多少数据，查找/插入/删除只需要接近常量的时间即 0(1) 的时间级（实际上只需要几条机器指令）</li>
-<li>散列表的编程实现也相对容易</li>
-</ul>
-</li>
-<li>缺点：<ul>
-<li>散列表是基于数组的，数组创建后难于扩展，某些哈希表被基本填满时，性能下降得非常严重</li>
-<li>程序员必须要清楚表中将要存储多少数据，或者准备好定期地把数据转移到更大的哈希表中，这是个费时的过程</li>
-</ul>
-</li>
-</ul>
-<h2 id="XArray"><a href="#XArray" class="headerlink" title="XArray"></a>XArray</h2><p>XArray 是一种抽象的数据类型，其行为类似于一个非常大的指针数组，它满足了与散列或常规可调整大小的数组相同的许多需求</p>
-<ul>
-<li>与散列表 (Hash Table) 相比：它允许您以高效缓存的方式明智地转到下一个或上一个条目</li>
-<li>与可调整大小的阵列 (Array Data Structure，多维数组) 相比：无需为了扩展阵列而复制数据或更改 MMU 映射 </li>
-<li>与双向链接列表相比：它具有更高的内存效率，可并行性和缓存友好性</li>
-<li>它利用 RCU 来执行查找而无需锁定</li>
-</ul>
-<p>XArray 其实是根据基数树 Radix Tree 修改而来的：保持基数树的数据结构不变，将结构更改为数组</p>
-<p>先对比一下 XArray 和 Radix Tree 的创建函数：</p>
-<ul>
-<li>XArray：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> *<span class="title">xas_create</span><span class="params">(struct xa_state *xas)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">xarray</span> *<span class="title">xa</span> =</span> xas-&gt;xa;</span><br><span class="line">	<span class="keyword">void</span> *entry;</span><br><span class="line">	<span class="keyword">void</span> __rcu **slot;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">xa_node</span> *<span class="title">node</span> =</span> xas-&gt;xa_node;</span><br><span class="line">	<span class="keyword">int</span> shift;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> order = xas-&gt;xa_shift;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (xas_top(node)) &#123; <span class="comment">/* 获取Root节点 */</span></span><br><span class="line">		entry = xa_head_locked(xa);</span><br><span class="line">		xas-&gt;xa_node = <span class="literal">NULL</span>;</span><br><span class="line">		shift = xas_expand(xas, entry); <span class="comment">/* 实现XArray纵向的生长 */</span></span><br><span class="line">		<span class="keyword">if</span> (shift &lt; <span class="number">0</span>)</span><br><span class="line">			<span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">		entry = xa_head_locked(xa);</span><br><span class="line">		slot = &amp;xa-&gt;xa_head;</span><br><span class="line">	&#125; <span class="keyword">else</span> <span class="keyword">if</span> (xas_error(xas)) &#123;</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">	&#125; <span class="keyword">else</span> <span class="keyword">if</span> (node) &#123;</span><br><span class="line">		<span class="keyword">unsigned</span> <span class="keyword">int</span> offset = xas-&gt;xa_offset;</span><br><span class="line"></span><br><span class="line">		shift = node-&gt;shift;</span><br><span class="line">		entry = xa_entry_locked(xa, node, offset);</span><br><span class="line">		slot = &amp;node-&gt;slots[offset];</span><br><span class="line">	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">		shift = <span class="number">0</span>;</span><br><span class="line">		entry = xa_head_locked(xa);</span><br><span class="line">		slot = &amp;xa-&gt;xa_head;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">while</span> (shift &gt; order) &#123;</span><br><span class="line">		shift -= XA_CHUNK_SHIFT;</span><br><span class="line">		<span class="keyword">if</span> (!entry) &#123;</span><br><span class="line">			node = xas_alloc(xas, shift); <span class="comment">/* 结点分配 */</span></span><br><span class="line">			<span class="keyword">if</span> (!node)</span><br><span class="line">				<span class="keyword">break</span>;</span><br><span class="line">			<span class="keyword">if</span> (xa_track_free(xa))</span><br><span class="line">				node_mark_all(node, XA_FREE_MARK);</span><br><span class="line">			rcu_assign_pointer(*slot, xa_mk_node(node));</span><br><span class="line">		&#125; <span class="keyword">else</span> <span class="keyword">if</span> (xa_is_node(entry)) &#123; <span class="comment">/* 判点是否为内部节点 */</span></span><br><span class="line">			node = xa_to_node(entry);</span><br><span class="line">		&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">			<span class="keyword">break</span>;</span><br><span class="line">		&#125;</span><br><span class="line">		entry = xas_descend(xas, node); <span class="comment">/* 节点查找 */</span></span><br><span class="line">		slot = &amp;node-&gt;slots[xas-&gt;xa_offset];</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> entry;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>Radix Tree：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">int</span> __radix_tree_create(struct radix_tree_root *root,</span><br><span class="line">		<span class="keyword">unsigned</span> <span class="keyword">long</span> index, struct radix_tree_node **nodep,</span><br><span class="line">		<span class="keyword">void</span> __rcu ***slotp)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">radix_tree_node</span> *<span class="title">node</span> =</span> <span class="literal">NULL</span>, *child;</span><br><span class="line">	<span class="keyword">void</span> __rcu **slot = (<span class="keyword">void</span> __rcu **)&amp;root-&gt;xa_head;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> maxindex;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> shift, offset = <span class="number">0</span>;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> max = index;</span><br><span class="line">	<span class="keyword">gfp_t</span> gfp = root_gfp_mask(root);</span><br><span class="line"></span><br><span class="line">	shift = radix_tree_load_root(root, &amp;child, &amp;maxindex); <span class="comment">/* 获取Root节点 */</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">/* Make sure the tree is high enough.  */</span></span><br><span class="line">	<span class="keyword">if</span> (max &gt; maxindex) &#123;</span><br><span class="line">		<span class="keyword">int</span> error = radix_tree_extend(root, gfp, max, shift); <span class="comment">/* 实现radix tree纵向的生长 */</span></span><br><span class="line">		<span class="keyword">if</span> (error &lt; <span class="number">0</span>)</span><br><span class="line">			<span class="keyword">return</span> error;</span><br><span class="line">		shift = error;</span><br><span class="line">		child = rcu_dereference_raw(root-&gt;xa_head);</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">while</span> (shift &gt; <span class="number">0</span>) &#123;</span><br><span class="line">		shift -= RADIX_TREE_MAP_SHIFT;</span><br><span class="line">		<span class="keyword">if</span> (child == <span class="literal">NULL</span>) &#123;</span><br><span class="line">			<span class="comment">/* Have to add a child node.  */</span></span><br><span class="line">			child = radix_tree_node_alloc(gfp, node, root, shift,</span><br><span class="line">							offset, <span class="number">0</span>, <span class="number">0</span>); <span class="comment">/* 结点分配 */</span></span><br><span class="line">			<span class="keyword">if</span> (!child)</span><br><span class="line">				<span class="keyword">return</span> -ENOMEM;</span><br><span class="line">			rcu_assign_pointer(*slot, node_to_entry(child));</span><br><span class="line">			<span class="keyword">if</span> (node)</span><br><span class="line">				node-&gt;count++;</span><br><span class="line">		&#125; <span class="keyword">else</span> <span class="keyword">if</span> (!radix_tree_is_internal_node(child)) <span class="comment">/* 判点是否为内部节点 */</span></span><br><span class="line">			<span class="keyword">break</span>;</span><br><span class="line"></span><br><span class="line">		<span class="comment">/* Go a level down */</span></span><br><span class="line">		node = entry_to_node(child);</span><br><span class="line">		offset = radix_tree_descend(node, &amp;child, index); <span class="comment">/* 节点查找 */</span></span><br><span class="line">		slot = &amp;node-&gt;slots[offset];</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (nodep)</span><br><span class="line">		*nodep = node;</span><br><span class="line">	<span class="keyword">if</span> (slotp)</span><br><span class="line">		*slotp = slot;</span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>两个函数之间，不管是函数名称还是执行流程，都有一些比较类似的地方，在条件符合时，两者可以互相替代</p>
-<p>一些高版本的 kernel 开始使用 XArray 来替代原来的基数树：</p>
-<ul>
-<li>linux-2.6.34 的 <code>address_space-&gt;i_pages</code> 使用基数树</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">address_space</span> &#123;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">inode</span>		*<span class="title">host</span>;</span>		<span class="comment">/* owner: inode, block_device */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">radix_tree_root</span>	<span class="title">page_tree</span>;</span>	<span class="comment">/* radix tree of all pages */</span></span><br><span class="line">	......</span><br></pre></td></tr></table></figure>
-<ul>
-<li>linux-4.20.1 的 <code>address_space-&gt;i_pages</code> 使用 XArray </li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">address_space</span> &#123;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">inode</span>		*<span class="title">host</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">xarray</span>		<span class="title">i_pages</span>;</span></span><br><span class="line">	......</span><br></pre></td></tr></table></figure>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2030,7 +2018,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">201</span>
+          <span class="site-state-item-count">202</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2084,7 +2072,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">40:14</span>
+    <span title="Reading time total">40:31</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
