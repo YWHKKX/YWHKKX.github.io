@@ -156,6 +156,646 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/" class="post-title-link" itemprop="url">操作系统真象还原（持续更新）</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-04-09 17:23:24" itemprop="dateCreated datePublished" datetime="2022-04-09T17:23:24+08:00">2022-04-09</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-04-17 15:06:55" itemprop="dateModified" datetime="2022-04-17T15:06:55+08:00">2022-04-17</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>16k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>14 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="陷入内核"><a href="#陷入内核" class="headerlink" title="陷入内核"></a>陷入内核</h2><img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649158216559-1650179214572.png" class width="1649158216559"> 
+<p>如果把软件分层的话， 最外圈是应用程序，里面是操作系统，应用程序处于特权级 3（ring 3），操作系统内核处于特权级 0（ring 0），当用户程序欲访问系统资源时（无论是硬件，还是内核数据结构），它需要进行系统调用，这样 CPU 便进入了内核态，也称看图中凹下去的部分，是不是有陆进去的感觉，这就是“陷入内核” </p>
+<h2 id="实模式（20位）"><a href="#实模式（20位）" class="headerlink" title="实模式（20位）"></a>实模式（20位）</h2><p>实模式出现于早期8088CPU时期，当时由于CPU的性能有限，一共只有20位地址线（所以地址空间只有1MB），以及8个16位的通用寄存器，以及4个16位的段寄存器，所以为了能够通过这些16位的寄存器去构成20位的主存地址，必须采取一种特殊的方式，当某个指令想要访问某个内存地址时，它通常需要用下面的这种格式来表示： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">(段基址：段偏移量)</span><br></pre></td></tr></table></figure>
+<ul>
+<li>第一个字段是段基址：它的值是由 <strong>段寄存器</strong> 提供的(一般来说，段寄存器有6种，分别为cs，ds，ss，es，fs，gs，这几种段寄存器都有自己的特殊意义)</li>
+<li>第二字段是段内偏移量：代表你要访问的这个内存地址距离这个段基址的偏移它的值就是由通用寄存器来提供的，所以也是16位</li>
+<li>那么两个16位的值如何组合成一个20位的地址呢？CPU采用的方式是把段寄存器所提供的段基址先向左移4位，这样就变成了一个20位的值，然后再与段偏移量相加</li>
+</ul>
+<h2 id="保护模式-（32位）"><a href="#保护模式-（32位）" class="headerlink" title="保护模式 （32位）"></a>保护模式 （32位）</h2><p>随着CPU的发展，CPU的地址线的个数也从原来的20根变为现在的32根，所以可以访问的内存空间也从1MB变为现在4GB，寄存器的位数也变为32位，所以实模式下的内存地址计算方式就已经不再适合了，所以就引入了现在的保护模式，实现更大空间的，更灵活也更安全的内存访问</p>
+<p>我们的偏移值和实模式下是一样的，就是变成了32位而已，而段值仍旧是存放在原来16位的段寄存器中， <strong>但是这些段寄存器存放的却不再是段基址了</strong> ，毕竟之前说过实模式下寻址方式不安全，我们在保护模式下需要加一些限制，而这些限制可不是一个寄存器能够容纳的，于是我们把这些关于内存段的限制信息放在一个叫做 <strong>全局描述符表(GDT)</strong> 的结构里</p>
+<p><strong>保护模式 VS 实模式</strong></p>
+<ul>
+<li>实模式的不足<ul>
+<li>实模式下操作系统和用户程序属于同一特权级，没有区别对待</li>
+<li>用户程序所引用的地址都是指向真实的物理地址，也就是说逻辑地址等于物理地址，实实在在地 指哪打哪</li>
+<li>用户程序可以自由修改段基址，可以不亦乐乎地访问所有内存，没人拦得住 </li>
+<li>访问超过 64KB 的内存区域时要切换段基址，转来转去容易晕乎</li>
+<li>一次只能运行一个程序，无法充分利用计算机资源</li>
+<li>共 20 条地址线，最大可用内存为1MB ，这即使在 20 年前也不够用</li>
+</ul>
+</li>
+<li>保护模式的优越<ul>
+<li>建立了全局描述符表（GDT），用于存储寄存器存不下的信息<ul>
+<li>实模式中直接把偏移地址写在段寄存器上</li>
+<li>保护模式则存储在GDT中并添加了许多“约束条件”，而寄存器中则写入段选择子用于索引对应的段信息</li>
+</ul>
+</li>
+<li>寻址方式扩展<ul>
+<li>实模式下对于内存寻址来说：“基址寻址、变址寻址、基址变址寻址”这三种形式中的基址寄存器只能是 “bx，bp”，变址寄存器只能是 “si，di”，也就是说，只能用这4个寄存器</li>
+<li>总之实模式下的寄存器有固定的使命，对于寻址来说，若想用其他的寄存器，甭说 CPU 报不报错，就连编译这关都过不了</li>
+<li>在保护模式下，这一切都不同了，同样是在内存寻址中，基址寄存器不再只是 “bx，bp”，而是所有 32 位的通用寄存器，变址寄存器也是一样，不再只是 “si，di”，而是除 esp 之外的所有 32 通用寄存器</li>
+</ul>
+</li>
+<li>指令扩展 <ul>
+<li>在16位的实模式下， CPU 的操作数是16位，在32位的保护模式下，操作数扩展到了32位，于是涉及到操作数变化的指令也要跟着扩展，既要兼容16位的操作数，也要支持32位的操作数 </li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p><strong>保护模式的开关</strong></p>
+<p>控制寄存器 CRx 系列是 CPU 的窗口，既可以用来展示 CPU 的内部状态，也可用于控制 CPU 的运行机制，进入保护模式，关键就是 CR0 的PE字段</p>
+<img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649696453838.png" class width="1649696453838"> 
+<ul>
+<li>PE=0 表示在实模式下运行</li>
+<li>PE=1 表示在保护模式下运行</li>
+</ul>
+<p><strong>保护模式的保护机制</strong></p>
+<ul>
+<li>向段寄存器加载选择子时的保护：<ul>
+<li>当引用一个内存段时，实际上就是往段寄存器中加载个选择子，为了避免出现非法引用内存段的情况， 在这时候，处理器会在以下几方面做出检查：</li>
+<li>验证段描述符是否超越界限<ul>
+<li>保护内容：<ul>
+<li>选择子的索引值一定要小于等于描述符表（GOT LDT）中描述符的个数</li>
+</ul>
+</li>
+<li>保护实现：<ul>
+<li>处理器先检查 TI 的值<ul>
+<li>如果 TI=0，则从全局描述符表寄存器 gdtr 中拿到 GOT 基地址和 GOT 界限值</li>
+<li>如果 TI=1，则从局部描述符表寄存器 ldtr 中拿到 LDT 基地址和 LDT 界限值</li>
+</ul>
+</li>
+<li>然后把“选择子的高13位”代入以下的表达式<ul>
+<li>描述符表基地址+选择子中的索引值*8+7 &lt;= 描述符表基址+标识符表界限值</li>
+<li>若不成立，处理器则抛出异常 </li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>代码段和数据段的保护<ul>
+<li>保护内容：<ul>
+<li>对于代码段和数据段来说，CPU 每访问一个地址，都要确认该地址不能超过其所在内存段的范围</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>栈段的保护</li>
+</ul>
+</li>
+</ul>
+<h2 id="全局描述符表"><a href="#全局描述符表" class="headerlink" title="全局描述符表"></a>全局描述符表</h2><p>全局描述符表中含有一个个表项，每一个表项称为 <strong>段描述符</strong> ，而段寄存器在保护模式下存放的便是相当于一个数组索引的东西，通过这个索引，可以找到对应的表项，段描述符存放了段基址、段界限、内存段类型属性(比如是数据段还是代码段，注意 <strong>一个段描述符只能用来定义一个内存段</strong>)等许多属性,具体信息见下图： </p>
+<img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649674596041.png" class width="1649674596041">   
+<p>全局描述符表位于内存中，需要用专门的寄存器指向它后，CPU 才知道它在哪里，这个专门的寄存器便是 <strong>GDTR</strong> (一个48位的寄存器)，专门用来存储 GDT 的内存地址及大小</p>
+<ul>
+<li><strong>段界限</strong>：表示段边界的扩张最值，即最大扩展多少或最小扩展多少，用20位来表示，它的单位可以是字节，也可以是4KB，这是由G位决定的</li>
+<li><strong>G位</strong>：G为0时表示单位为字节，G为1时表示单位为4KB</li>
+<li><strong>段基址</strong>：真正的段基址（共分为3部分来存储）</li>
+<li><strong>TYPE字段</strong>：用来指定本描述符的类型<ul>
+<li>什么是系统段？各种称为“门”的结构便是系统段，也就是硬件系统需要的结构，非软件使用的调用门、任务门</li>
+<li>简而言之，门的意思就是入口，它通往一段程序</li>
+<li>TYPE字段共4位，用于表示内存段或门的子类型</li>
+</ul>
+</li>
+<li><strong>S位</strong>：S为0时表示系统段，S为1时表示数据段）<ul>
+<li>一个段描述符，在 CPU 眼里分为两大类，要么描述的是系统段，要么描述的是数据段 </li>
+<li>凡是硬件运行需要用到的东西都可称之为系统</li>
+<li>凡是软件需要的东西都称为数据，无论是代码，还是数据，甚至包括栈，它们都作为硬件的输入，都是给硬件的数据而己，所以代码段在段描述符中也属于数据段</li>
+</ul>
+</li>
+<li><strong>DPL字段</strong>：Descriptor Privilege Level ，即描述符特权级<ul>
+<li>这是保护模式提供的安全解决方案，将计算机世界按权力划分成不同等级，每一种等级称为一种特权级（分为 ring0 ~ ring3）</li>
+<li>特权级是保护模式下才有的东西，CPU 由实模式进入保护模式后，特权级自动为0<ul>
+<li>因为保护模式的代码已经是操作系统的一部分了，所以操作系统应该处于最高的0特权级</li>
+<li>用户程序通常处于3特权级，权限最小</li>
+<li>某些指令只能在0特权级下执行，从而保证了安全</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>P位</strong>：Present，即段是否存在<ul>
+<li>如果该段存在于内存中，则P为1，反之P为0</li>
+<li>P位是由CPU来检查的，如果P为0，则CPU将会抛出异常然后跳转到对应的异常处理程序，然后把P改为1（这个异常处理程序是由开发人员来写的）</li>
+</ul>
+</li>
+<li><strong>AVL位</strong>：从名字上看它是 AVaiLable，可用的<ul>
+<li>不过这“可用的”是对用户来说的，也就是操作系统可以随意用此位，对硬件来说，它没有专门的用途</li>
+</ul>
+</li>
+<li><strong>L位</strong>：用来设置是否是 64 位代码段<ul>
+<li>L为1表示64位代码段，否则表示32位代码段</li>
+</ul>
+</li>
+<li><strong>D/B位</strong>：用来指示有效地址（段内偏移地址）及操作数的大小<ul>
+<li>对于代码段来说，此位是D位<ul>
+<li>若D为0，表示指令中的有效地址和操作数是16位，指令有效地址用IP寄存器</li>
+<li>若D为1，表示指令中的有效地址及操作数是32位，指令有效地址用EIP寄存器</li>
+</ul>
+</li>
+<li>对于栈段来说，此位是B位，用来指定操作数大小（此操作数涉及到“对栈指针寄存器的选择”以及“栈的地址上限”）<ul>
+<li>若B为0，使用的是sp寄存器，使用16位寄存器（最大寻址范围：0~0xFFFF）</li>
+<li>若B为1，使用的是esp寄存器，使用32位寄存器（最大寻址范围：0~0xFFFFFFFF）</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>段的选择子</strong>：（在段寄存器 CS、 DS、 ES、 FS、 GS、 SS 中）<ul>
+<li>在实模式下时，段中存储的是段基地址，即内存段的起始地址</li>
+<li>而在保护模式下时，由于段基址已经存入了段描述符中（各个段描述符组织为GDT表），所以段寄存器中再存放段基址是没有意义的，在段寄存器中存入的是一个叫作选择子的东西</li>
+<li>选择子“基本上”是个索引值（虽然它还有其他内容，暂时忽略）， 就是 GDT 中的下标，段选择子的结构如下：</li>
+</ul>
+</li>
+</ul>
+<img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649160006227-1650179214572.png" class width="1649160006227"> 
+<ul>
+<li>RPL：请求特权级别，通俗的讲我用什么权限来请求</li>
+<li>TI：TI=0时，查GDT表，TI=1时，查LDT表</li>
+<li>Index：处理器将索引值乘以8在加上GDT或者LDT的基地址，就是要加载的段描述符</li>
+</ul>
+<h2 id="局部描述符表"><a href="#局部描述符表" class="headerlink" title="局部描述符表"></a>局部描述符表</h2><p>CPU 厂商建议每个任务的私有内存段都应该放到自己的段描述符表中，该表就是局部描述符表（LDT），即每个任务都有自己的 LDT ，随着任务切换，也要切换相应任务的 LDT</p>
+<ul>
+<li>LDT 局部描述符表可以有若干张，每个任务可以有一张 </li>
+<li>LDT 也位于内存中，其地址需要先被加载到某个寄存器后，CPU 才能使用 LDT，该寄存器是 LDTR（即 LDT Register）</li>
+<li>LDT 跟 GDT 差不多，跳转的时候选择子的TI=0我们就用 GDT，如果TI=1我们就用 LDT<ul>
+<li>TI=0时：CS:IP=全局描述符表中第 1(0x8&gt;&gt;3) 项描述符给出的段基址 +0 的偏移地址</li>
+<li>TI=1时：CS:IP=局部描述符表中第 1(0x8&gt;&gt;3) 项描述符给出的段基址 +0 的偏移地址 </li>
+</ul>
+</li>
+</ul>
+<p>LDT 的使用步骤如下：</p>
+<ul>
+<li>定义一个局部描述符表 LDT</li>
+<li>在 GDT 中定义一个描述符 Descriptor_LDT：<ul>
+<li>其基地址用 LDT 的起始地址填充</li>
+<li>描述符 Descriptor_LDT 的选择子为 SelectorLDT</li>
+</ul>
+</li>
+<li>用 lldt 命令加载 lgtr</li>
+<li>jmp时的选择子 TI=1 就可以了</li>
+</ul>
+<h2 id="物理地址，有效地址，虚拟地址"><a href="#物理地址，有效地址，虚拟地址" class="headerlink" title="物理地址，有效地址，虚拟地址"></a>物理地址，有效地址，虚拟地址</h2><ul>
+<li>物理地址：<ul>
+<li>就是物理内存真正的地址，相当于内存中每个存储单元的门牌号，具有唯一性</li>
+<li>在实模式下，“段基址＋段内偏移地址”经过段部件的处理，直接输出的就是物理地址</li>
+<li>物理地址＝块号＋页内地址</li>
+</ul>
+</li>
+<li>有效地址（逻辑地址）：<ul>
+<li>无论在实模式或是保护模式下，段内偏移地址又称为有效地址，也称为逻辑地址（这是程序员可见的地址）</li>
+<li>逻辑地址＝页号＋页内地址</li>
+</ul>
+</li>
+<li>虚拟地址（线性地址）：<ul>
+<li>在保护模式下，“段基址＋段内偏移地址”称为线性地址，不过，此时的段基址已经不再是真正的地址，而是个被称为选择子的东西（它本质是个索引，类似于数组下标，通过这个索引便能在 GDT 中找到相应的段描述符）</li>
+<li>若开启了分页功能，那么线性地址又多了个名字，就就是虚拟地址，虚拟地址要经过页部件转换成具体的物理地址，这样 CPU 才能将其送上地址总线去访问内存</li>
+</ul>
+</li>
+</ul>
+<img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649160944655-1650179214572.png" class width="1649160944655"> 
+<h2 id="OSI七层模型"><a href="#OSI七层模型" class="headerlink" title="OSI七层模型"></a>OSI七层模型</h2><img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649161146525-1650179214572.png" class width="1649161146525"> 
+<h2 id="编译型语言-amp-解释型语言"><a href="#编译型语言-amp-解释型语言" class="headerlink" title="编译型语言&amp;解释型语言"></a>编译型语言&amp;解释型语言</h2><ul>
+<li>解释型语言<ul>
+<li>也称为脚本语言，如 JavaScript Python Perl PHP Shell 脚本等，它们本身是文本文件，是某个应用程序的输入，这个应用程序是脚本解释器</li>
+<li>脚本中的代码从来没真正上过 CPU 去执行， CPU CS: ip 寄存器从来没指向过它们，在 CPU 眼里只看得到脚本解释器，而这些脚本中的代码， CPU 从来就不知道有它们的存在</li>
+<li>这些脚本代码看似在按照开发人员的逻辑执行，本质上是脚本解释器在时时分析这个脚本，动态根据关键字和语法来做出相应的行为</li>
+</ul>
+</li>
+<li>编译型语言<ul>
+<li>编译型语言编译出来的程序运行时本身就是一个进程它是由操作系统直接调用的，也就是由操作系统加载到内存后，操作系统将 CS: IP 寄存器指向这个程序的入口，使它直接上 CPU 运行</li>
+<li>总之调度器在就绪队列中能看到此进程，而解释型程序是无法让调度器“入眼”的，调度器只会看到该脚本语言的解释器</li>
+</ul>
+</li>
+</ul>
+<h2 id="BIOS中断，DOS中断，Linux中断"><a href="#BIOS中断，DOS中断，Linux中断" class="headerlink" title="BIOS中断，DOS中断，Linux中断"></a>BIOS中断，DOS中断，Linux中断</h2><p>BIOS DOS 都是存在于实模式下的程序，由它们建立的中断调用都是建立在中断向量表（Interrupt Vector Table，IVT）中的，它们都是通过软中断指令 int 中断号来调用的</p>
+<p>中断向量表中的每个中断向量大小是4字节，这4字节描述了一个中断处理例程（程序）的段基址和 段内偏移地址，因为中断向量表的长度为 1024 字节，故该表最多容纳 256 个中断向量处理程序，计算机启动之初，中断向量表中的中断例程是由 BIOS 立的，它从物理内存地址 0x0000 处初始化并在中断向量表中添加各种处理例程</p>
+<ul>
+<li>BIOS中断<ul>
+<li>BIOS中断调用的主要功能是提供了硬件访问的方法，该方法使对硬件的操作变得简单易行</li>
+<li>BIOS也是一段程序，是程序就很可能要重复性地执行某段代码，它直接将其写成中断函数，直接调用多省心</li>
+<li>BIOS中断还可以给后来的程序用，如加载器或 boot loader，它们在调用硬件资源时就不需要自己重写代码了</li>
+</ul>
+</li>
+<li>DOS中断<ul>
+<li>DOS是运行在实模式下的，故其建立的中断调用也建立在中断向量表中，只不过其中断向量号和 BIOS 的不能冲突</li>
+<li>DOS中断只占用 0x21 这个中断号，也就是 DOS 只有这一个中断例程</li>
+<li>DOS中断调用中那么多功能是如何实现的：通过先往 ah 寄存器中写好子功能号，再执行 int 0x21 这时在中断向量表中第 0x21 个表项（即物理地址 0x21*4 处中的中断处理程序），开始根据寄存器 ah 中的值来调用相应的子功能</li>
+</ul>
+</li>
+<li>Linux中断<ul>
+<li>Linux 内核是在进入保护模式后才建立中断例程的，不过在保护模式下，中断向量表己经不存在了，取而代之的是中断描述符表（Interrupt Descriptor Table，IDT）</li>
+<li>Linux 的系统调用和 DOS 中断调用类似，不过 Linux 是通过 int 0x80 指令进入一个中断程序后再根据 eax 寄存器的值来调用不同的子功能函数的（ebx，ecx，edx作为参数）</li>
+</ul>
+</li>
+</ul>
+<h2 id="魔数"><a href="#魔数" class="headerlink" title="魔数"></a>魔数</h2><p>魔数，其实也称为神奇数字，它被用来为重要的数据定义标签，用独特的数字唯一地标识该数据</p>
+<p>案例：</p>
+<ul>
+<li>主引导记录最后的两个字节的内容是 0x55, 0xaa，这表明这个扇区里面有可加载的程序， BIOS 就用它来校验该扇区是否可引导</li>
+<li>各分区都有超级块，一般位于本分区的第2个扇区，超级块里面记录了此分区的信息，其中就有文件系统的魔数，一种文件系统对应一个魔数，比对此值便知道文件系统类型</li>
+</ul>
+<h2 id="MBR，EBR，DBR，OBR"><a href="#MBR，EBR，DBR，OBR" class="headerlink" title="MBR，EBR，DBR，OBR"></a>MBR，EBR，DBR，OBR</h2><p>计算机在接电之后运行的是基本输入输出系统 BIOS，而 BIOS 是位于主板上的一个小程序，其所在的空间有限，代码量较少，功能受限，因此它不可能一人扛下所有的任务需求，也就是肯定不能充 当操作系统的角色，必须采取控制权接力的方式，一步步地让处理器执行更为复杂强大的指令，最终把处理器的使用权交给操作系统，这才让计算机走上了正轨，从而可以完成各种复杂的功能</p>
+<p>采用接力式控制权交接，BIOS 只完成一些简单的检测或初始化工作，然后找机会把处理器使用权交出去：下一个接力棒的选手是 MBR（为了方便 BIOS 找到 MBR，MBR 必须在固定的位置等待，因此位于整个硬盘最开始的扇区）</p>
+<ul>
+<li><p>MBR（Main Boot Record）</p>
+<ul>
+<li>MBR 是主引导记录，它存在于整个硬盘最开始的那个扇区，即 0盘 0道 1扇区，这个扇区便称为 MBR 引导扇区</li>
+<li>MBR 引导扇区中的内容是：446字节的引导程序及参数（bootloader），64字节的分区表，2字节结束标记 0x55 0xaa</li>
+</ul>
+</li>
+<li><p>OBR（OS Boot Record）</p>
+<ul>
+<li>为了 MBR 方便找到活动分区上的内核加载器，内核加载器的入口地址也必须在固定的位置，这个位置就是各分区最开始的扇区，这个“各分区起始的扇区”中存放的是操作系统引导程序 一一 内核加载器</li>
+<li>因此该扇区称为操作系统引导扇区，其中的引导程序（内核加载器）称为操作系统引导记录 OBR（即 OS Boot Recod），此扇区也被称为 OBR 引导扇区</li>
+</ul>
+</li>
+<li><p>DBR（DOS Boot Record）</p>
+<ul>
+<li>OBR 是从 DBR 遗留下来的， 要想了解 OBR，还是先从了解 DBR 开始，DBR（DOS Boot Record），也就是 DOS 操作系统的引导记录</li>
+<li>DBR 中的内容大概是：<ul>
+<li>跳转指令，使 MBR 跳转到引导代码</li>
+<li>厂商信息、 DOS 版本信息</li>
+<li>BIOS 参数块 BPB（即 BIOS Parameter Block）</li>
+<li>操作系统引导程序</li>
+<li>结束标记 0x55 和 0xaa</li>
+</ul>
+</li>
+<li>在 DOS 时代只有4个分区，不存在扩展分区，这4个分区都相当于主分区，所以各主分区最开始的扇区称为 DBR 引导扇区，后来有了扩展分区之后，无论分区是主分区，还是逻辑分区，为了兼容，分区最开始的扇区都作为 DOS 引导扇区</li>
+<li>后来 DOS 也退出历史舞台了，所以 DBR 也称为 OBR</li>
+</ul>
+</li>
+<li><p>EBR（Expand Boot Record）</p>
+<ul>
+<li>当初为了解决分区数量限制的问题才有了扩展分区， EBR 是扩展分区中为了兼容 MBR 才提出的概念，主要是兼容 MBR 中的分区表</li>
+<li>EBR 位于各子扩展分区中最开始的扇区（注意：各主分区和各逻辑分区中最开始的扇区是操作系统引导扇区），理论上 MBR 只有1个，但 EBR 有无数个</li>
+</ul>
+</li>
+</ul>
+<h2 id="接力式控制权交接"><a href="#接力式控制权交接" class="headerlink" title="接力式控制权交接"></a>接力式控制权交接</h2><p><strong>BIOS主导</strong></p>
+<p>BIOS 是计算机上第一个运行的软件，但它不可能自己加载自己，由此可以知道，它是由硬件加载的 —— 只读存储器 ROM（只读存储器中的内容是不可擦除的）</p>
+<p>BIOS 代码所做的工作也是一成不变的，而且在正常情况下，其本身是不需要修改的（平时听说的那些主板坏了要刷 BIOS 的情况属于例外），于是 BIOS 顺理成章地便被写进此 ROM</p>
+<p>此 ROM 被映射在低端 lMB 内存的顶部，即地址 0xF0000 ~ 0xFFFFF 处，只要访问此处的地址便是访问了 BIOS（这个映射是由硬件完成的），在开机的瞬间，也就是接电的一瞬间，CPU CS: IP 寄存器被强制初始化为 0xF000: 0xFFF0 （指向有效地址 0xFFFF0），此地址便是 BIOS 的入口地址</p>
+<p>因为 BIOS 是在实模式下运行的，而实模式只能访问 1MB 空间（20位地址线，2的20次方是1MB）而地址 0xFFF0 距离 1MB 只有16个字节了，肯定不能完成全部的工作，所以此处的代码只能是个跳转指令 <code>jmp far f000:e05b</code>（即跳向了 0xfe05b 处，这是 BIOS 代码真正开始的地方）</p>
+<p>接下来 BIOS 便马不停蹄地检测内存、显卡等外设信息，当检测通过，并初始化好硬件后，开始在内存中 0x000 ~ 0x3FF 处建数据结构，中断向量表 IVT 并填写中断例程，BIOS 最后一项工作就是校验启动盘中位于“0盘0道1扇区”的内容</p>
+<p><strong>MBR主导</strong></p>
+<p>BIOS 将会加载存储设备上，第一个扇区（通常512字节）到内存（0x7c00），然后跳转到 0x7c00 的第一条地址开始执行，这512字节就是 MBR，其中包含了BootLoader（最后两字节固定）</p>
+<p>通常，MBR 的任务是加载某个程序（这个程序一般是内核加载器，很少有直接加载内核的）到指定位置，并将控制权交给它（所谓的交控制权就是 jmp 去而己），之后 MBR 就没用了，被覆盖也没关系</p>
+<p>MBR 的大小必须是 512 字节，这是为了保证 0x55 0xaa 这两个魔数恰好出现在该扇区的最后两个字节处（即第 510 字节处和第 511 字节处），由于我们的 bochs 模拟的是 x86 平台，所以是小端字节序，故其最后两个字节内容是 0xaa55 </p>
+<h2 id="A20地址线"><a href="#A20地址线" class="headerlink" title="A20地址线"></a>A20地址线</h2><p>地址（Address ）线从0开始编号，在 8086/8088 中，只有20位地址线，即 A0 ~ A19</p>
+<img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649695447640.png" class width="1649695447640"> 
+<p>对于 80286 后续的 CPU，虽然地址总线从原来的20位发展到了24位，但它们为了兼容20位的地址线，采用了 A20GATE 来控制 A20 地址线</p>
+<ul>
+<li>如果 A20Gate 被打开，当访问到 0x100000 ~ 0x10FFEF 之间的地址时， CPU 将真正访问这块物理内存（正常使用24位的地址线）</li>
+<li>如果 A20Gate 被禁止，当访问 0x100000 ~ 0x10FFEF 之间的地址时， CPU 将采用 8086/8088 的地址回绕（为了兼容 8086/8088 的实模式）</li>
+</ul>
+<h2 id="获取物理内存容量"><a href="#获取物理内存容量" class="headerlink" title="获取物理内存容量"></a>获取物理内存容量</h2><p>Linux 有多种办法可以获取内存容量，如果一种方式失效，它就会尝试其他办法</p>
+<p>在 Linux 2.6 内核中，是用 detect_memory 函数来获取内存容量的，其函数在本质上是通过调用 BIOS 中断 0x15 实现的，分别是 BIOS 中断 0x15 的3个子功能，子功能号要存放到寄存器 EAX AX 中，如下：</p>
+<ul>
+<li>EAX=0xE820：遍历主机上全部内存</li>
+<li>AX=0xE801：分别检测低 15MB 和 16MB ~ 4GB 的内存，最大支持 4GB</li>
+<li>AH=0x88：最多检测出 64MB 内存，如果实际内存超过此容量也按照 64MB 返回 </li>
+</ul>
+<h2 id="分页机制"><a href="#分页机制" class="headerlink" title="分页机制"></a>分页机制</h2><p>分页机制是基于分段机制诞生的，它的目的是为了解决分段机制的不足之处：</p>
+<ul>
+<li>在保护模式中段寄存器中的内容己经是段选择子，但段选择子最终就是为了要找到段基址，其内存访问的核心机制依然是“段基址：段内偏移地址”，这两个地址在相加之后才是绝对地址，也就是我们所说的线性地址</li>
+<li>此线性地址在分段机制下被 CPU 认为是物理地址，直接拿来就能用，也就是说，此线性地址可以直接送上地址总线</li>
+<li>这种线性地址与物理地址一一对应的关系不利于 CPU 对多任务的控制（因为 CPU 必须使用连续的内存块来加载程序，而一些细小的内存块则难以利用）</li>
+</ul>
+<p>分页机制的关键点就是：</p>
+<ul>
+<li>解除线性地址与物理地址一一对应的关系</li>
+<li>然后将它们的关系通过某种映射关系重新建立，可以将线性地址映射到任意物理地址</li>
+</ul>
+<p>分页机制的作用有两方面：</p>
+<ul>
+<li>将线性地址转换成物理地址</li>
+<li>用大小相等的页代替大小不等的段</li>
+</ul>
+<img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649750602645.png" class width="1649750602645"> 
+<img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649750359767.png" class width="1649750359767"> 
+<ul>
+<li>CPU 在不打开分页机制的情况下，是按照默认的分段方式进行的，段基址和段内偏移地址经过段部件处理后所输出的线性地址，CPU 就认为是物理地址</li>
+<li>如果打开了分页机制，段部件输出的线性地址就不再等同于物理地址了，我们称之为虚拟地址，它是逻辑上的，是假的，不应该被送上地址总线</li>
+<li>CPU 必须要拿到物理地址才行，此虚拟地址对应的物理地址需要在页表中查找，这项查找工作是由页部件自动完成的</li>
+</ul>
+<p>为了要搞清楚页部件的工作原理，必须要搞清楚这两件事：</p>
+<ul>
+<li>分页机制的原理</li>
+<li>页表的结构</li>
+</ul>
+<p><strong>一级页表</strong></p>
+<p>页是地址空间的计量单位，并不是专属物理地址或线性地址，只要是 4KB 的地址空间都可以称为一 页，所以线性地址的一页也要对应物理地址的一页</p>
+<p>一页大小为 4KB ，这样一来，4GB 地址空间被划分 4GB/4KB=1M 个页，也就是 4GB 空间中可以容纳 1048576 个页，页表中自然也要有 1048576 个页表项，这就是我们要说的一级页表</p>
+<img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649751824877.png" class width="1649751824877"> 
+<ul>
+<li>其实一级页表就是把 4GB 的物理内存拆分为 1M 个 4KB 的内存页</li>
+<li>然后操作系统会根据页表的顺序重新编排一个虚拟地址提供给每个进程，使其可以索引到分配给自己的物理内存<ul>
+<li>对于各个进程来说：<ul>
+<li>进程看到的，使用的，就是一段连续的 4GB 虚拟地址</li>
+<li>好像每个进程都在单独使用计算机的内存空间一样</li>
+</ul>
+</li>
+<li>对于操作系统来说：<ul>
+<li>操作系统看到的，是各个进程都在使用物理内存上不连续的内存块</li>
+<li>而操作系统的任务就是，把这些不连续的物理内存块整合成页表，提供给各个进程</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>当计算机采用一级页表进行内存管理时：</p>
+<ul>
+<li>系统分配出连续的 1K 个内存页，用于充当页表</li>
+<li>有一个专门的寄存器来存放页表的地址（CPU不同，寄存器不同）</li>
+</ul>
+<p>一级页表的转换过程：</p>
+<ul>
+<li>根据线性地址，获取页表项索引和物理页内偏移</li>
+<li>根据固定寄存器获取页表的物理地址，然后通过索引获取对应的页表项</li>
+<li>页表项里面装有对应的物理页地址</li>
+<li>最后通过物理页内偏移计算出具体的物理地址</li>
+</ul>
+<p><strong>一级页表的局限</strong></p>
+<ul>
+<li>一级页表中的所有表项必须要提前建好，原因是操作系统要占用 4GB 虚拟地址空间的高 1GB ，用户进程占用低 3GB，每个进程都有自己的页表，进程越多，页表占用空间越大</li>
+<li>根据局部性原理可知，很多时候，进程在一段时间内只需要访问某几个页面就可以正常运行了，因此也没有必要让整个页面都常驻内存</li>
+<li>有时候，我们希望页表在我们需要的时候动态增加，不需要一次性建立好</li>
+</ul>
+<p>对应的解决方案就是二级页表</p>
+<p><strong>二级页表</strong></p>
+<p>无论是几级页表，标准页的尺寸都是 4KB，所以 4GB 线性地址空间最多有 1M 个标准页</p>
+<ul>
+<li>一级页表是将这 1M 个标准页放置到一张页表中：<ul>
+<li>导致这一张页表很大，还必选占用连续的内存空间（连续 1K 个标准页）</li>
+<li>并且每个进程都需要一张这个页表</li>
+</ul>
+</li>
+<li>二级页表是将这 1M 个标准页平均放置 1K 个页表中：<ul>
+<li>每个页表的大小减少了，并且不需要占用连续的内存空间</li>
+<li>需要建立一张页表，用来统一管理这些不连续的页表（称为页目录表，或外层页表，或顶层页表）</li>
+</ul>
+</li>
+</ul>
+<p>具体的“平均放置”过程：</p>
+<ul>
+<li>将长长的页表进行分组，使每个页面中刚好可以放下一个分组：每个页表项4B，所以每个页面中可以存放1K（1024）个页表项，因此每1K个连续的页表项为一组，每组刚好占一个页面</li>
+</ul>
+<img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649850553506.png" class width="1649850553506">  
+<p>以32位逻辑地址空间的分页系统为例：</p>
+<ul>
+<li>如果采用一级页表，那么页表所占用的内存空间是1MB，而且必须是连续的</li>
+<li>现在我们将页表等分成1024份，即产生了1024个页面，并且每个页面有1024个表项（每个表项1B，即每个页面1KB），存储的是页号与物理块号的映射关系</li>
+<li>然后我们建立外层页表，由于有1024个页面，所以外层页表有1024个表项（每个表项1B，外层页表1KB），存储的是各个页面的首地址</li>
+<li>这样我们就实现了一个两级页表，由于两级页表采用了离散分配的方式，外层页表和每个表项所对应的页面分别存储在不同的物理块中，解决了需要连续存储的问题</li>
+</ul>
+<p>当计算机采用二级页表进行内存管理时：</p>
+<ul>
+<li>页目录表（Page Directory Table，PDT）装有最多 1KB 个页目录表项（页目录表条目）<ul>
+<li>页目录表：一级页表</li>
+<li>页目录表项：二级页表</li>
+<li>相当于在一级页表中装有二级页表</li>
+</ul>
+</li>
+<li>每个页目录表项（Page Table Entry，PTE）都装有最多 1KB 个表项<ul>
+<li>每个表项都指向一个物理页（和一级页表的情况相同）</li>
+<li>此时二级页表就担当起原来一级页表的工作</li>
+</ul>
+</li>
+</ul>
+<p>二级页表的转换过程：</p>
+<ul>
+<li>根据线性地址，获取页目录表项索引，页表项索引和物理页内偏移</li>
+<li>根据固定寄存器获取页目录表的物理地址，然后通过页目录表项索引获取对应的页目录表项</li>
+<li>页目录表项存放着二级页表的物理地址</li>
+<li>通过页表项索引获取对应的二级页表项</li>
+<li>二级页表项中存放着对应的物理页地址</li>
+<li>最后通过物理页内偏移计算出具体的物理地址</li>
+</ul>
+<h2 id="页表结构"><a href="#页表结构" class="headerlink" title="页表结构"></a>页表结构</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* page table/directory entry flags */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTE_P           0x001                   <span class="comment">// Present</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTE_W           0x002                   <span class="comment">// Writeable</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTE_U           0x004                   <span class="comment">// User</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTE_PWT         0x008                   <span class="comment">// Write-Through</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTE_PCD         0x010                   <span class="comment">// Cache-Disable</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTE_A           0x020                   <span class="comment">// Accessed</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTE_D           0x040                   <span class="comment">// Dirty</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTE_PS          0x080                   <span class="comment">// Page Size</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTE_MBZ         0x180                   <span class="comment">// Bits must be zero</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTE_AVAIL       0xE00                   <span class="comment">// Available for software use</span></span></span><br><span class="line">                                                </span><br><span class="line"><span class="comment">// The PTE_AVAIL bits aren&#x27;t used by the kernel or interpreted by the hardware, so user processes are allowed to set them arbitrarily.</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PTE_USER        (PTE_U | PTE_W | PTE_P) <span class="comment">// Offset</span></span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>0 - <strong>P</strong>resent：表示当前PTE所指向的物理页面是否驻留在内存中</li>
+<li>1 - <strong>W</strong>riteable：表示是否允许读写</li>
+<li>2 - <strong>U</strong>ser：表示该页的访问所需要的特权级（即User(ring 3)是否允许访问）</li>
+<li>3 - <strong>P</strong>ageWriteThough：表示是否使用write through缓存写策略</li>
+<li>4 - <strong>P</strong>ageCacheDisable：表示是否 <strong>不对</strong> 该页进行缓存</li>
+<li>5 - <strong>A</strong>ccess：表示该页是否已被访问过</li>
+<li>6 - <strong>D</strong>irty：表示该页是否已被修改</li>
+<li>7 - <strong>P</strong>ageSize：表示该页的大小</li>
+<li>8 - <strong>M</strong>ustBeZero：该位必须保留为0</li>
+<li>9-11 - <strong>A</strong>vailable：第9-11这三位并没有被内核或中断所使用，可保留给OS使用</li>
+<li>12-31 - <strong>O</strong>ffset：目标地址的后20位</li>
+</ul>
+<h2 id="线性地址结构"><a href="#线性地址结构" class="headerlink" title="线性地址结构"></a>线性地址结构</h2><img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649860246487.png" class width="1649860246487"> 
+<p>线性地址（linear address）也称虚拟地址virtual address：是一个32位无符号整数，用来表示高达4GB的地址</p>
+<p>一级页表：</p>
+<ul>
+<li>线性地址的高20位在页表中索引页表项</li>
+<li>线性地址的低12位与页表项中的物理地址相加，所求的和便是最终线性地址对应的物理地址</li>
+</ul>
+<p>二级页表：</p>
+<ul>
+<li>线性地址的高10位（第31~22位）用来在页目录中定位一个页表<ul>
+<li>也就是这高10位用于定位页目录中的<strong>页目录项 PDE</strong></li>
+<li>PDE 中有页表物理页地址</li>
+</ul>
+</li>
+<li>线性地址的中间10位（第 21~12位）用来在页表中定位具体的物理页 <ul>
+<li>也就是在页表中定位一个<strong>页表项 PTE</strong></li>
+<li>PTE 中有分配的物理页地址</li>
+</ul>
+</li>
+<li>余下的12位（第11~0位）用于页内偏移量</li>
+</ul>
+<p>注意：</p>
+<ul>
+<li>页目录表（一级页表）内存放二级页表的 <strong>物理地址</strong> ，但却使用 <strong>线性地址</strong> 索引页目录表中的条目</li>
+<li>构成线性地址的各个部分都是 <strong>偏移或索引</strong></li>
+</ul>
+<h2 id="特权级别简述"><a href="#特权级别简述" class="headerlink" title="特权级别简述"></a>特权级别简述</h2><p>特权级别（Privilege Level）是存在于 Descriptor（描述符）及 Segment Selector（段选择子，存储在段寄存器以及门描述符中） 中一个数值，当这些 Descriptor 或 Segment Selector 要进行某些操作，或者被别的对象访问时，该数值用于控制它们能够进行的操作或者限制它们的可访问性</p>
+<p>特权级共分为四档，分别为0-3：</p>
+<ul>
+<li>Kernel为第0特权级（ring 0）</li>
+<li>用户程序为第3特权级（ring 3）</li>
+<li>操作系统保护分别为第1和第2特权级</li>
+</ul>
+<p><strong>描述符特权级（DPL，Descriptor Privilege Level）</strong></p>
+<ul>
+<li>实施特权级保护的第一步，是为所有可管理的对象赋予一个特权级，以决定谁能访问它们，每个 Descriptor 都具有描述符特权级（DPL，Descriptor Privilege Level）字段，Descriptor 总是指向它所“描述”的目标对象，代表着该对象，因此该字段（DPL）实际上是目标对象的特权级</li>
+<li>存储于段描述符中：</li>
+</ul>
+<img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649146076621.png" class width="1649146076621"> 
+<p><strong>当前特权级（CPL，Current Privilege Level）</strong></p>
+<ul>
+<li>当处理器正在一个代码段中取指令和执行指令时，那个代码段的特权级叫做当前特权级（CPL，Current Privilege Level），正在执行的这个代码段，其选择子位于段寄存器CS中，其最低两位就是当前特权级的数值</li>
+<li>存储于CS寄存器的段选择子中（CS中的DPL就是CPL）：</li>
+</ul>
+<img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649146195666.png" class width="1649146195666"> 
+<p><strong>请求特权级（RPL，Request Privilege Level）</strong></p>
+<ul>
+<li>我们知道，要将控制从一个代码段转移到另一个代码段，通常是使用 <code>jmp</code> 和 <code>call</code> 指令，并在指令中提供目标代码段的选择子，以及段内偏移量(入口点)，而为了访问内存中的数据，也必须先将段选择子加载到段寄存器DS、ES、FS或者GS中，不管是实施控制转移，还是访问数据段，这都可以看成是一个请求，请求者提供一个段选择子，请求访问指定的段，从这个意义上来说，RPL也就是指请求者的特权级别（RPL，Request Privilege Level）</li>
+<li>存储于段选择子中：（段选择子存储于各个段寄存器以及门描述符中：调用门、任务门、中断门、陷阱门）</li>
+</ul>
+<img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649146143417.png" class width="1649146143417"> 
+<p><strong>输出特权级（IOPL，I/O Privilege Level）</strong></p>
+<ul>
+<li>除了那些特权级敏感的指令外，处理器还允许对各个特权级别所能执行的I/O操作进行控制，通常，这指的是端口访问的许可权，因为对设备的访问都是通过端口进行的</li>
+<li>在处理器的标志寄存器EFLAGS中，位13、位12是IOPL位，也就是输入/输出特权级（IOPL，I/O Privilege Level），它代表着当前任务的I/O特权级别，某些指令，例如 IN，OUT，CLI 需要 I/O 特权，这些操作根据 IOPL 和 CPL 确定合法性</li>
+<li>存储于EFLAGS中： </li>
+</ul>
+<img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649146429816.png" class width="1649146429816">  
+<h2 id="特权级别运用"><a href="#特权级别运用" class="headerlink" title="特权级别运用"></a>特权级别运用</h2><p><strong>特权级检查</strong></p>
+<p>在下述的特权级比较中，需要注意特权级越低，其ring值越大：</p>
+<ul>
+<li>访问门时（中断、陷入、异常），要求 <strong>DPL[段] &lt;= CPL &lt;= DPL[门]</strong> （ring值比较）<ul>
+<li>访问门的代码权限比门的特权级要高，因为这样才能访问门（CPL &lt;= DPL[门]）</li>
+<li>但访问门的代码权限比被访问的段的权限要低，因为通过门的目的是访问特权级更高的段，这样就可以达到低权限应用程序使用高权限内核服务的目的（CPL &lt;= DPL[门]）</li>
+<li>简述：代码权限低于段权限时，可以通过访问门的方式来访问段</li>
+</ul>
+</li>
+<li>访问段时，要求 <strong>DPL[段] &gt;= max {CPL, RPL}</strong> （ring值比较）<ul>
+<li>只能使用最低的权限来访问段数据</li>
+<li>简述：请求权限与当前权限只要有一个低于段权限，就会导致访问失败</li>
+</ul>
+</li>
+</ul>
+<p><strong>特权级切换</strong></p>
+<p><strong>TSS</strong></p>
+<p>TSS（Task State Segment）是操作系统在进行进程切换时保存进程现场信息的段，其结构如下：</p>
+<img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649147399799.png" class width="1649147399799"> 
+<ul>
+<li>TSS中分别保留了 ring0、ring1、ring2 的栈，当用户程序从 ring3 跳至 ring0 时（例如执行中断），此时的栈就会从用户栈切换到内核栈，切换栈的操作从开始中断的那一瞬间就已完成（例如：从<code>int 0x78</code>到中断处理例程之间）</li>
+<li>TSS段的段描述符保存在GDT中，其 ring0 的栈会在初始化GDT时被一起设置，<code>TR</code> 寄存器会保存当前TSS的段描述符，以提高索引速度</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="class"><span class="keyword">struct</span> <span class="title">segdesc</span> <span class="title">gdt</span>[] =</span> &#123;</span><br><span class="line">    SEG_NULL,</span><br><span class="line">    [SEG_KTEXT] = SEG(STA_X | STA_R, <span class="number">0x0</span>, <span class="number">0xFFFFFFFF</span>, DPL_KERNEL),</span><br><span class="line">    [SEG_KDATA] = SEG(STA_W, <span class="number">0x0</span>, <span class="number">0xFFFFFFFF</span>, DPL_KERNEL),</span><br><span class="line">    [SEG_UTEXT] = SEG(STA_X | STA_R, <span class="number">0x0</span>, <span class="number">0xFFFFFFFF</span>, DPL_USER),</span><br><span class="line">    [SEG_UDATA] = SEG(STA_W, <span class="number">0x0</span>, <span class="number">0xFFFFFFFF</span>, DPL_USER),</span><br><span class="line">    [SEG_TSS]   = SEG_NULL,</span><br><span class="line">&#125;;</span><br><span class="line"><span class="keyword">static</span> <span class="class"><span class="keyword">struct</span> <span class="title">pseudodesc</span> <span class="title">gdt_pd</span> =</span> &#123;</span><br><span class="line">      <span class="keyword">sizeof</span>(gdt) - <span class="number">1</span>, (<span class="keyword">uintptr_t</span>)gdt</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">  <span class="comment">/* gdt_init - initialize the default GDT and TSS */</span></span><br><span class="line">  <span class="function"><span class="keyword">static</span> <span class="keyword">void</span></span></span><br><span class="line"><span class="function">  <span class="title">gdt_init</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 设置TSS的ring0栈地址，包括esp寄存器和SS段寄存器</span></span><br><span class="line">      load_esp0((<span class="keyword">uintptr_t</span>)bootstacktop);</span><br><span class="line">      ts.ts_ss0 = KERNEL_DS;</span><br><span class="line"></span><br><span class="line">      <span class="comment">// 将TSS写入GDT中</span></span><br><span class="line">      gdt[SEG_TSS] = SEGTSS(STS_T32A, (<span class="keyword">uintptr_t</span>)&amp;ts, <span class="keyword">sizeof</span>(ts), DPL_KERNEL);</span><br><span class="line"></span><br><span class="line">      <span class="comment">// 加载GDT至GDTR寄存器</span></span><br><span class="line">      lgdt(&amp;gdt_pd);</span><br><span class="line"></span><br><span class="line">      <span class="comment">// 加载TSS至TR寄存器</span></span><br><span class="line">      ltr(GD_TSS);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>trapFrame</strong></p>
+<p>trapframe 结构是进入中断门所必须的结构，中断处理例程的入口代码用于保存上下文并构建一个 trapframe</p>
+<p>trapframe 的结构如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">trapframe</span> &#123;</span></span><br><span class="line">    <span class="comment">// tf_regs保存了基本寄存器的值，包括eax,ebx,esi,edi寄存器等等</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">pushregs</span> <span class="title">tf_regs</span>;</span></span><br><span class="line">    <span class="keyword">uint16_t</span> tf_gs;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_padding0;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_fs;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_padding1;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_es;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_padding2;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_ds;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_padding3;</span><br><span class="line">    <span class="keyword">uint32_t</span> tf_trapno;</span><br><span class="line">    <span class="comment">// 以下这些信息会被CPU硬件自动压入切换后的栈。包括下面切换特权级所使用的esp、ss等数据</span></span><br><span class="line">    <span class="keyword">uint32_t</span> tf_err;</span><br><span class="line">    <span class="keyword">uintptr_t</span> tf_eip;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_cs;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_padding4;</span><br><span class="line">    <span class="keyword">uint32_t</span> tf_eflags;</span><br><span class="line">    <span class="comment">// 以下这些信息会在切换特权级时被使用</span></span><br><span class="line">    <span class="keyword">uintptr_t</span> tf_esp;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_ss;</span><br><span class="line">    <span class="keyword">uint16_t</span> tf_padding5;</span><br><span class="line">&#125; __attribute__((packed));</span><br></pre></td></tr></table></figure>
+<p><strong>切换特权级的过程</strong></p>
+<ul>
+<li>特权级提升<ul>
+<li>在陷入的一瞬间，CPU会因为特权级的改变，索引TSS，切换 <code>ss</code> 和 <code>esp</code> 为内核栈，并按顺序自动压入<code>user_ss</code>、<code>user_esp</code>、<code>user_eflags</code>、<code>user_cs</code>、<code>old_eip</code>以及<code>err</code></li>
+<li>之后CPU会在中断处理例程入口处，先将剩余的段寄存器以及所有的通用寄存器压栈，构成一个 <code>trapframe</code> ，然后将该 <code>trapframe</code> 传入给真正的中断处理例程并执行</li>
+<li>该处理例程会判断传入的中断数(<code>trapno</code>)并执行特定的代码，在提升特权级的代码中，程序会处理传入的 <code>trapframe</code> 信息中的 <code>CS、DS、eflags</code> 寄存器，修改上面的 DPL、CPL与IOPL 以达到提升特权的目的</li>
+<li>将修改后的 <code>trapframe</code> 压入用户栈（这一步没有修改 <code>user_esp</code> 寄存器），并设置中断处理例程结束后将要弹出 <code>esp</code> 寄存器的值为用户栈的新地址（与刚刚不同，这一步修改了将要恢复的 <code>user_esp</code> 寄存器）</li>
+<li>在内核中，“将修改后的trapframe压入用户栈”这一步，需要舍弃 <code>trapframe</code> 中末尾两个旧的<code>ss</code>和<code>esp</code>寄存器数据</li>
+</ul>
+</li>
+<li>特权级降低<ul>
+<li>与 ring3 调用中断不同，当 ring0 调用中断时，进入中断前和进入中断后的这个过程，栈不发生改变</li>
+<li>修改后的 <code>trapFrame</code> 不需要像上面那样保存至将要使用的栈，因为当前环境下 <code>iret</code> 前后特权级会发生改变，执行该命令会弹出 <code>ss</code> 和 <code>esp</code> ，所以可以通过 <code>iret</code> 来设置返回时的栈地</li>
+</ul>
+</li>
+</ul>
+<h2 id="中断描述符表"><a href="#中断描述符表" class="headerlink" title="中断描述符表"></a>中断描述符表</h2><p>中断描述符表（Interrupt Descriptor Table, IDT ）是保护模式下用于存储中断处理程序入口的表，当 CPU 接收一个中断时，需要用中断向量在此表中检索对应的描述符，在该描述符中找到中断处理程序的起始地址，然后执行中断处理程序</p>
+<p>实模式下用于存储中断处理程序入口的表叫中断向量表（Interrupt Vector Table，IVT）</p>
+<p>在计算机中，用门来表示一段程序的入口：</p>
+<ul>
+<li>任务门<ul>
+<li>任务门和任务状态段（Task Status Segment，TSS）是 Intel 处理器在硬件一级提供的任务切换机制，所以任务门需要和 TSS 配合在一起使用，在任务门中记录的是 TSS 选择子，（偏移量未使用）</li>
+<li>任务门可以存在于全局描述符表 GDT，局部描述符表 LDT，中断描述符表 IDT 中</li>
+</ul>
+</li>
+<li>中断门<ul>
+<li>中断门包含了中断处理程序所在段的段选择子和段内偏移地址，当通过此方式进入中断后，标志寄存 eflags 中的IF位自动置 0（也就是在进入中断后，自动把中断关闭，避免中断嵌套）</li>
+<li>Linux 就是利用中断门实现的系统调用（就是那个著名的 int 0x80）</li>
+<li>中断门只允许存在于中断描述符表 IDT 中</li>
+</ul>
+</li>
+<li>陷阱门<ul>
+<li>陷阱门和中断门非常相似，区别是由陷阱门进入中断后，标志寄存器 eflags 中的IF位不会自动置 0</li>
+<li>陷阱门只允许存在于中断描述符表 IDT 中 </li>
+</ul>
+</li>
+<li>调用门<ul>
+<li>调用门是提供给用户进程进入 ring0 特权级的方式</li>
+<li>调用门中将记录例程的地址，并且它不能用 int 指令调用，只能用 call 和 jmp 指令</li>
+<li>调用门可以安装在全局描述符表 GDT，局部描述符表 LDT 中</li>
+</ul>
+</li>
+</ul>
+<h2 id="可编程中断控制器-8259A"><a href="#可编程中断控制器-8259A" class="headerlink" title="可编程中断控制器 8259A"></a>可编程中断控制器 8259A</h2><p>任务是串行在 CPU 上执行的， CPU 每次只能执行一个任务，如果同时有多个外设发出中断，而 CPU 只能先处理一个</p>
+<p>可编程中断控制器 8259A 就可以作为中断代理，决定哪个中断优先被 CPU 受理</p>
+<img src="/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/1649763643638.png" class width="1649763643638"> 
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/04/09/Ucore-Lab1/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1842,149 +2482,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/04/01/IO_FILE%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90%EF%BC%9AFSOP/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/04/01/IO_FILE%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90%EF%BC%9AFSOP/" class="post-title-link" itemprop="url">IO_FILE源码分析：FSOP</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2022-04-01 15:52:48" itemprop="dateCreated datePublished" datetime="2022-04-01T15:52:48+08:00">2022-04-01</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-08-23 09:26:35" itemprop="dateModified" datetime="2022-08-23T09:26:35+08:00">2022-08-23</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/SourceCodeAnalysis/" itemprop="url" rel="index"><span itemprop="name">SourceCodeAnalysis</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>5k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>5 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="IO-FILE源码分析：FSOP"><a href="#IO-FILE源码分析：FSOP" class="headerlink" title="IO_FILE源码分析：FSOP"></a>IO_FILE源码分析：FSOP</h2><p><strong>vtable</strong></p>
-<p>IO_FILE结构体里面有个很重要的数据结构 —— vtable</p>
-<p>vtable 采用虚表调用的形式，如果劫持了 vtable ，就可以调用我们需要的任意函数，甚至可以伪造 vtable ，使程序错误使用我们构造的 fake vtable </p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; p/x*(struct _IO_FILE_plus*)_IO_list_all</span><br><span class="line">$<span class="number">1</span> = &#123;</span><br><span class="line">  file = &#123;</span><br><span class="line">    _flags = <span class="number">0xfbad2086</span>,</span><br><span class="line">    _IO_read_ptr = <span class="number">0x0</span>,</span><br><span class="line">    _IO_read_end = <span class="number">0x0</span>,</span><br><span class="line">    _IO_read_base = <span class="number">0x0</span>,</span><br><span class="line">    _IO_write_base = <span class="number">0x0</span>,</span><br><span class="line">    _IO_write_ptr = <span class="number">0x0</span>,</span><br><span class="line">    _IO_write_end = <span class="number">0x0</span>,</span><br><span class="line">    _IO_buf_base = <span class="number">0x0</span>,</span><br><span class="line">    _IO_buf_end = <span class="number">0x0</span>,</span><br><span class="line">    _IO_save_base = <span class="number">0x0</span>,</span><br><span class="line">    _IO_backup_base = <span class="number">0x0</span>,</span><br><span class="line">    _IO_save_end = <span class="number">0x0</span>,</span><br><span class="line">    _markers = <span class="number">0x0</span>,</span><br><span class="line">    _chain = <span class="number">0x7ffff7dd2620</span>, <span class="comment">// 指向下一个链表节点(stderr的下一个:stdout)</span></span><br><span class="line">    _fileno = <span class="number">0x2</span>, <span class="comment">// fileno值为2(标准错误流的文件描述符就是&#x27;2&#x27;)</span></span><br><span class="line">    _flags2 = <span class="number">0x0</span>,</span><br><span class="line">    _old_offset = <span class="number">0xffffffffffffffff</span>,</span><br><span class="line">    _cur_column = <span class="number">0x0</span>,</span><br><span class="line">    _vtable_offset = <span class="number">0x0</span>,</span><br><span class="line">    _shortbuf = &#123;<span class="number">0x0</span>&#125;,</span><br><span class="line">    _lock = <span class="number">0x7ffff7dd3770</span>,</span><br><span class="line">    _offset = <span class="number">0xffffffffffffffff</span>,</span><br><span class="line">    _codecvt = <span class="number">0x0</span>,</span><br><span class="line">    _wide_data = <span class="number">0x7ffff7dd1660</span>,</span><br><span class="line">    _freeres_list = <span class="number">0x0</span>,</span><br><span class="line">    _freeres_buf = <span class="number">0x0</span>,</span><br><span class="line">    __pad5 = <span class="number">0x0</span>,</span><br><span class="line">    _mode = <span class="number">0x0</span>,</span><br><span class="line">    _unused2 = &#123;<span class="number">0x0</span> &lt;repeats <span class="number">20</span> times&gt;&#125;</span><br><span class="line">  &#125;,</span><br><span class="line">  vtable = <span class="number">0x7ffff7dd06e0</span> <span class="comment">// target</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; p*(struct _IO_jump_t*)_IO_list_all.vtable <span class="comment">// vtable的所有字段都可以劫持</span></span><br><span class="line">$<span class="number">6</span> = &#123;</span><br><span class="line">  __dummy = <span class="number">0</span>,</span><br><span class="line">  __dummy2 = <span class="number">0</span>,</span><br><span class="line">  __finish = <span class="number">0x7ffff7a869d0</span> &lt;_IO_new_file_finish&gt;,</span><br><span class="line">  __overflow = <span class="number">0x7ffff7a87740</span> &lt;_IO_new_file_overflow&gt;,</span><br><span class="line">  __underflow = <span class="number">0x7ffff7a874b0</span> &lt;_IO_new_file_underflow&gt;,</span><br><span class="line">  __uflow = <span class="number">0x7ffff7a88610</span> &lt;__GI__IO_default_uflow&gt;,</span><br><span class="line">  __pbackfail = <span class="number">0x7ffff7a89990</span> &lt;__GI__IO_default_pbackfail&gt;,</span><br><span class="line">  __xsputn = <span class="number">0x7ffff7a861f0</span> &lt;_IO_new_file_xsputn&gt;,</span><br><span class="line">  __xsgetn = <span class="number">0x7ffff7a85ed0</span> &lt;__GI__IO_file_xsgetn&gt;,</span><br><span class="line">  __seekoff = <span class="number">0x7ffff7a854d0</span> &lt;_IO_new_file_seekoff&gt;,</span><br><span class="line">  __seekpos = <span class="number">0x7ffff7a88a10</span> &lt;_IO_default_seekpos&gt;,</span><br><span class="line">  __setbuf = <span class="number">0x7ffff7a85440</span> &lt;_IO_new_file_setbuf&gt;,</span><br><span class="line">  __sync = <span class="number">0x7ffff7a85380</span> &lt;_IO_new_file_sync&gt;,</span><br><span class="line">  __doallocate = <span class="number">0x7ffff7a7a190</span> &lt;__GI__IO_file_doallocate&gt;,</span><br><span class="line">  __read = <span class="number">0x7ffff7a861b0</span> &lt;__GI__IO_file_read&gt;,</span><br><span class="line">  __write = <span class="number">0x7ffff7a85b80</span> &lt;_IO_new_file_write&gt;,</span><br><span class="line">  __seek = <span class="number">0x7ffff7a85980</span> &lt;__GI__IO_file_seek&gt;,</span><br><span class="line">  __close = <span class="number">0x7ffff7a85350</span> &lt;__GI__IO_file_close&gt;,</span><br><span class="line">  __stat = <span class="number">0x7ffff7a85b70</span> &lt;__GI__IO_file_stat&gt;,</span><br><span class="line">  __showmanyc = <span class="number">0x7ffff7a89b00</span> &lt;_IO_default_showmanyc&gt;,</span><br><span class="line">  __imbue = <span class="number">0x7ffff7a89b10</span> &lt;_IO_default_imbue&gt;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>下面是 raycp 大佬对 vtable 调用的总结</p>
-<p>fread 函数中调用的 vtable 函数有：</p>
-<ul>
-<li><code>_IO_sgetn</code>函数调用了vtable的<code>_IO_file_xsget</code></li>
-<li><code>_IO_doallocbuf</code>函数调用了vtable的<code>_IO_file_doallocate</code>以初始化输入缓冲区</li>
-<li>vtable中的<code>_IO_file_doallocate</code>调用了vtable中的<code>__GI__IO_file_stat</code>以获取文件信息</li>
-<li><code>__underflow</code>函数调用了vtable中的<code>_IO_new_file_underflow</code>实现文件数据读取</li>
-<li>vtable中的<code>_IO_new_file_underflow</code>调用了vtable<code>__GI__IO_file_read</code>最终去执行系统调用read</li>
-</ul>
-<p>fwrite 函数调用的 vtable 函数有：</p>
-<ul>
-<li><code>_IO_fwrite</code>函数调用了vtable的<code>_IO_new_file_xsputn</code></li>
-<li><code>_IO_new_file_xsputn</code>函数调用了vtable中的<code>_IO_new_file_overflow</code>实现缓冲区的建立以及刷新缓冲区</li>
-<li>vtable中的<code>_IO_new_file_overflow</code>函数调用了vtable的<code>_IO_file_doallocate</code>以初始化输入缓冲区</li>
-<li>vtable中的<code>_IO_file_doallocate</code>调用了vtable中的<code>__GI__IO_file_stat</code>以获取文件信息</li>
-<li><code>new_do_write</code>中的<code>_IO_SYSWRITE</code>调用了vtable<code>_IO_new_file_write</code>最终去执行系统调用write</li>
-</ul>
-<p>fclose 函数调用的 vtable 函数有：</p>
-<ul>
-<li>在清空缓冲区的<code>_IO_do_write</code>函数中会调用vtable中的函数</li>
-<li>关闭文件描述符<code>_IO_SYSCLOSE</code>函数为vtable中的<code>__close</code>函数</li>
-<li><code>_IO_FINISH</code>函数为vtable中的<code>__finish</code>函数</li>
-</ul>
-<p><strong>FSOP</strong></p>
-<p>终于到今天的主角了，FSOP全称是 <code>File Stream Oriented Programming</code> ，它的核心就在于伪造  <code>_IO_list_all</code> 指针（ <code>_IO_list_all</code> 永远指向当前FILE结构体链的第一个元素）</p>
-<ul>
-<li>这个技术的核心就是劫持 <code>_IO_list_all</code> 的值来伪造链表和其中的 <code>_IO_FILE</code> 项，但是单纯的伪造只是构造了数据还需要某种方法进行触发</li>
-<li>FSOP 选择的触发方法是调用 <code>_IO_flush_all_lockp</code>，这个函数会刷新 <code>_IO_list_all</code> 链表中所有项的文件流（相当于对每个FILE调用 fflush），也对应着会调用 <code>_IO_FILE_plus.vtable</code> 中的 <code>IO_overflow</code> 函数</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line">_IO_flush_all_lockp (<span class="keyword">int</span> do_lock)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">int</span> result = <span class="number">0</span>;</span><br><span class="line">  FILE *fp;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> _IO_MTSAFE_IO</span></span><br><span class="line">  _IO_cleanup_region_start_noarg (flush_cleanup);</span><br><span class="line">  _IO_lock_lock (list_all_lock);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">  <span class="keyword">for</span> (fp = (FILE *) _IO_list_all; fp != <span class="literal">NULL</span>; fp = fp-&gt;_chain)</span><br><span class="line">    &#123;</span><br><span class="line">      run_fp = fp;</span><br><span class="line">      <span class="keyword">if</span> (do_lock)</span><br><span class="line">        _IO_flockfile (fp);</span><br><span class="line">      <span class="keyword">if</span> (((fp-&gt;_mode &lt;= <span class="number">0</span> &amp;&amp; fp-&gt;_IO_write_ptr &gt; fp-&gt;_IO_write_base)<span class="comment">/*一些检查，需要绕过*/</span></span><br><span class="line">           || (_IO_vtable_offset (fp) == <span class="number">0</span></span><br><span class="line">               &amp;&amp; fp-&gt;_mode &gt; <span class="number">0</span> &amp;&amp; (fp-&gt;_wide_data-&gt;_IO_write_ptr</span><br><span class="line">                                    &gt; fp-&gt;_wide_data-&gt;_IO_write_base))<span class="comment">/*也可以绕过这个*/</span></span><br><span class="line">           )</span><br><span class="line">          &amp;&amp; _IO_OVERFLOW (fp, EOF) == EOF)<span class="comment">/*遍历_IO_list_all ，选出_IO_FILE作为_IO_OVERFLOW的参数，执行函数*/</span></span><br><span class="line">        result = EOF;</span><br><span class="line">      <span class="keyword">if</span> (do_lock)</span><br><span class="line">        _IO_funlockfile (fp);</span><br><span class="line">      run_fp = <span class="literal">NULL</span>;</span><br><span class="line">    &#125;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> _IO_MTSAFE_IO</span></span><br><span class="line">  _IO_lock_unlock (list_all_lock);</span><br><span class="line">  _IO_cleanup_region_end (<span class="number">0</span>);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">  <span class="keyword">return</span> result;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>IO_flush_all_lockp</code> 函数触发条件：</p>
-<ul>
-<li>当 libc 执行 abort 流程时，abort 可以通过触发 malloc_printerr 来触发</li>
-<li>当执行 exit 函数时</li>
-<li>当执行流从 main 函数返回时</li>
-</ul>
-<p>FSOP 攻击的前提条件：</p>
-<ul>
-<li>泄露出 libc 地址，知道 <code>_IO_lsit_all</code> 的地址</li>
-<li>任意地址写的能力，修改 <code>_IO_list_all</code> 为可控的地址</li>
-<li>可以在可控内存中伪造 <code>_IO_FILE_plus</code> 结构</li>
-</ul>
-<p>伪造的 <code>_IO_FILE_plus</code> 结构体要绕过的 check：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1.</span>((fp-&gt;_mode &lt;= <span class="number">0</span> &amp;&amp; fp-&gt;_IO_write_ptr &gt; fp-&gt;_IO_write_base)</span><br><span class="line">或者是</span><br><span class="line"><span class="number">2.</span>_IO_vtable_offset (fp) == <span class="number">0</span> &amp;&amp; fp-&gt;_mode &gt; <span class="number">0</span> &amp;&amp; (fp-&gt;_wide_data-&gt;_IO_write_ptr &gt; fp-&gt;_wide_data-&gt;_IO_write_base)</span><br></pre></td></tr></table></figure>
-<p><strong>FSOP 利用姿势</strong></p>
-<p>在考虑进行 FSOP 攻击时，常常不会有可控的 WAA，这时我们利用 unsortedbin attack 在 <code>_IO_list_all</code> 中写入 main_arena + 88 的地址，那么程序就会把 main_arena + 88 当做FILE结构体</p>
-<p>然后 main_arena + 0xc0(88+0x68) 的位置就是FILE结构体的 <code>_chain</code> 条目，同时，main_arena + 0xc0 也会指向对应大小为“0x60”的 smallbin，那么大小为“0x60”的smallbin就会被程序当成下一个FILE结构体</p>
-<p>到了这里通常有两种应对方式，一是直接申请大小为“0x60”的chunk，把它放入对应 smallbin 的头部，然后在其内部进行伪造，二是通过堆溢出等方式，修改 unsortedbin 的size为“0x61”（注意规避合并机制），再次申请 chunk，该 unsortedbin 就会被放入 smallbin</p>
-<p>接下来就是对 FILE 结构体的伪造，只需要伪造 vtable 的指向地址，然后再该地址处写入 fake vtable 就可以了</p>
-<p>而在对 vtable 的伪造中，主要是伪造 <code>_IO_OVERFLOW</code> 条目（第4个），因为程序对FILE结构的破坏，导致程序会触发报错提示，根据程序调用链发现中途会调用 <code>_IO_OVERFLOW</code> ，正好可以被控制</p>
-<p>这就是 FSOP 的全过程了，可以去学习 house of orange 进行巩固</p>
-<hr>
-<p>文字描述有点多，需要根据题目过一遍</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2056,7 +2553,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">212</span>
+          <span class="site-state-item-count">213</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2069,7 +2566,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">129</span>
+        <span class="site-state-item-count">130</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -2110,7 +2607,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">42:44</span>
+    <span title="Reading time total">42:51</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
