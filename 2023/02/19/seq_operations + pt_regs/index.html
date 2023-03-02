@@ -29,7 +29,7 @@
 <meta property="og:description" content="babydriver 先进行解压： 12mv rootfs.cpio rootfs.cpio.gz gunzip rootfs.cpio.gz  这个 rootfs.cpio 其实是个压缩包，不过它省略了后缀“.gz”，这里需要先改名后解压  123#!&#x2F;bin&#x2F;bashqemu-system-x86_64 -initrd rootfs.cpio -kernel bzImage -append &amp;">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2023-02-19T11:26:43.000Z">
-<meta property="article:modified_time" content="2023-02-27T11:33:52.949Z">
+<meta property="article:modified_time" content="2023-03-01T04:29:53.140Z">
 <meta property="article:author" content="yhellow">
 <meta property="article:tag" content="pt_regs">
 <meta property="article:tag" content="seq_operations">
@@ -193,7 +193,7 @@
                   <i class="far fa-calendar-check"></i>
                 </span>
                 <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2023-02-27 19:33:52" itemprop="dateModified" datetime="2023-02-27T19:33:52+08:00">2023-02-27</time>
+                <time title="Modified: 2023-03-01 12:29:53" itemprop="dateModified" datetime="2023-03-01T12:29:53+08:00">2023-03-01</time>
               </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
@@ -270,7 +270,7 @@
 <li>为了提高切换的速度，内核将内核空间的 PGD 与用户空间的 PGD 两张页全局目录表放在一段连续的内存中（两张表，一张一页4k，总计8k，内核空间的在低地址，用户空间的在高地址）</li>
 <li>只需要将 CR3 的第 13 位取反便能完成页表切换的操作</li>
 </ul>
-<p>KPTI：会使 <code>ret2usr</code> 失效，在用户空间中构造 <code>fake tty_operations</code> 也会失效</p>
+<p>KPTI：会使 <code>ret2usr</code> 失效，在用户空间中构造 <code>fake tty_operations</code> 也会失效，在 ROP 中需要切换 CR3 的 gadget</p>
 <p>KPTI pass：使用 <code>seq_operations + pt_regs</code></p>
 <p>结构体 <code>seq_operations</code> 的条目如下：</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">seq_operations</span> &#123;</span></span><br><span class="line">    <span class="keyword">void</span> * (*start) (struct seq_file *m, <span class="keyword">loff_t</span> *pos);</span><br><span class="line">    <span class="keyword">void</span> (*stop) (struct seq_file *m, <span class="keyword">void</span> *v);</span><br><span class="line">    <span class="keyword">void</span> * (*next) (struct seq_file *m, <span class="keyword">void</span> *v, <span class="keyword">loff_t</span> *pos);</span><br><span class="line">    <span class="keyword">int</span> (*show) (struct seq_file *m, <span class="keyword">void</span> *v);</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
@@ -294,26 +294,25 @@
 <p>使用如下命令来查找需要的偏移：（使用前先关闭 kaslr，并开启 root 权限）</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">/ <span class="meta"># cat /proc/kallsyms | grep commit_creds</span></span><br><span class="line">ffffffff810a1420 T commit_creds</span><br><span class="line">/ <span class="meta"># cat /proc/kallsyms | grep init_cred</span></span><br><span class="line">ffffffff81e48c60 D init_cred</span><br></pre></td></tr></table></figure>
 <p>接下来需要把 <code>seq_operations-&gt;start</code> 覆盖为一个 gadget（类似于 <code>add rsp, offset;...; ret;</code>）</p>
-<p>在开启 KPTI 内核，提权返回到用户态（<code>iretq/sysret</code>）之前如果不设置CR3寄存器的值，就会导致进程找不到当前程序的正确页表，引发段错误，程序退出</p>
-<p>常规设置需要从上到下执行3个 gadget：</p>
+<p>在开启 KPTI 内核，提权返回到用户态（<code>iretq/sysret</code>）之前如果不设置CR3寄存器的值，就会导致进程找不到当前程序的正确页表，引发段错误</p>
+<p>常规设置需要从上到下执行3个 gadget：（改写 CR3 的第13位）</p>
 <ul>
 <li><code>pop rdi; ret;</code>（RDI 写入 <code>0x6f0</code>）</li>
 <li><code>mov cr4, rdi; ret;</code></li>
 <li><code>swapgs; pop rbp; ret;</code></li>
 </ul>
-<p>如果开启了 KPTI 保护，用户态上写的 ROP 链就不能使用了</p>
-<p>如果使用 <code>pt_regs</code> 在内核态写 ROP 链，就没有那么多空间来放入 gadget，于是我们用 <code>swapgs_restore_regs_and_return_to_usermode</code> 函数一次搞定（低版本的内核没有这个函数）</p>
+<p>使用 <code>pt_regs</code> 在内核态写 ROP 链，就没有那么多空间来放入 gadget，于是我们用 <code>swapgs_restore_regs_and_return_to_usermode</code> 函数一次搞定（低版本的内核没有这个函数）</p>
 <ul>
 <li>需要的栈布局如下：</li>
 </ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">swapgs_restore_regs_and_return_to_usermode</span><br><span class="line"><span class="number">0</span> <span class="comment">// padding</span></span><br><span class="line"><span class="number">0</span> <span class="comment">// padding</span></span><br><span class="line">user_shell_addr</span><br><span class="line">user_cs</span><br><span class="line">user_rflags</span><br><span class="line">user_sp</span><br><span class="line">user_ss</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">swapgs_restore_regs_and_return_to_usermode + <span class="number">22</span></span><br><span class="line"><span class="number">0</span> <span class="comment">// padding</span></span><br><span class="line"><span class="number">0</span> <span class="comment">// padding</span></span><br><span class="line">user_shell_addr</span><br><span class="line">user_cs</span><br><span class="line">user_rflags</span><br><span class="line">user_sp</span><br><span class="line">user_ss</span><br></pre></td></tr></table></figure>
 <ul>
-<li>只要把 <code>swapgs_restore_regs_and_return_to_usermode</code> 放在 R10 的位置就可以符合条件</li>
+<li>只要把 <code>swapgs_restore_regs_and_return_to_usermode + 22</code> 放在 R10 的位置就可以符合条件</li>
 </ul>
 <p>综合上面的内容，我们可以得到劫持控制流的思路：</p>
 <ul>
 <li>执行 <code>write(fd[1], &amp;magic_addr, 8)</code> 写入形如 <code>add rsp, 0x148; ...; ret;</code> 的 gadget</li>
-<li>通过 <code>pt_regs</code> 构造 ROP 链（R10 写上 <code>swapgs_restore_regs_and_return_to_usermode</code>）</li>
+<li>通过 <code>pt_regs</code> 构造 ROP 链（R10 写上 <code>swapgs_restore_regs_and_return_to_usermode + 22</code>）</li>
 <li>在 gadget 打上断点，然后计算该 gadget 到 <code>pt_regs</code> 结构体的偏移，寻找准确的 gadget</li>
 </ul>
 <p>在实际的调试中，我发现 <code>pt_regs</code> 的内容没有那么规整（可能是 sys_read 破坏了 <code>pt_regs</code> 原本的结构），下面给一个调试案例：</p>
@@ -325,7 +324,7 @@
 <li>ROP 的构造思路：<ul>
 <li>在 <code>0xbbbb2222-0x33333333</code> 分别放入 <code>pop_rdi_ret</code> <code>init_cred</code> <code>commit_creds</code></li>
 <li>在 <code>0x44444444</code> 放入 <code>add_rsp_offset_ret</code> 以跳转到 <code>0x11110000</code></li>
-<li>在 <code>0x11110000</code> 中放入 <code>swapgs_restore_regs_and_return_to_usermode</code></li>
+<li>在 <code>0x11110000</code> 中放入 <code>swapgs_restore_regs_and_return_to_usermode + 22</code></li>
 <li>在 <code>seq_operations-&gt;start</code> 中写入的 gadget 需要把栈迁移的 ROP 链上</li>
 </ul>
 </li>
@@ -441,7 +440,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">214</span>
+          <span class="site-state-item-count">215</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -490,12 +489,12 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-area"></i>
     </span>
-    <span title="Symbols count total">2.8m</span>
+    <span title="Symbols count total">2.9m</span>
     <span class="post-meta-divider">|</span>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">42:58</span>
+    <span title="Reading time total">43:14</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
