@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="Libc Musl 简析Musl 是一个轻量级的C标准库，设计作为 GNU C library (glibc)、 uClibc 或 Android Bionic 的替代用于嵌入式操作系统和移动设备 它遵循 POSIX 2008 规格和 C99 标准，采用 MIT 许可证授权，使用 Musl 的 Linux 发行版和项目包括 sabotage， bootstrap-linux， LightCube">
+<meta property="og:type" content="article">
+<meta property="og:title" content="musl 1.2.x 堆分配器初探">
+<meta property="og:url" content="http://example.com/2023/03/08/musl%201.2.x%20%E5%A0%86%E5%88%86%E9%85%8D%E5%99%A8%E5%88%9D%E6%8E%A2/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="Libc Musl 简析Musl 是一个轻量级的C标准库，设计作为 GNU C library (glibc)、 uClibc 或 Android Bionic 的替代用于嵌入式操作系统和移动设备 它遵循 POSIX 2008 规格和 C99 标准，采用 MIT 许可证授权，使用 Musl 的 Linux 发行版和项目包括 sabotage， bootstrap-linux， LightCube">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2023/03/08/musl%201.2.x%20%E5%A0%86%E5%88%86%E9%85%8D%E5%99%A8%E5%88%9D%E6%8E%A2/1678206958466.png">
+<meta property="og:image" content="http://example.com/2023/03/08/musl%201.2.x%20%E5%A0%86%E5%88%86%E9%85%8D%E5%99%A8%E5%88%9D%E6%8E%A2/1678274126255.png">
+<meta property="article:published_time" content="2023-03-08T12:29:38.000Z">
+<meta property="article:modified_time" content="2023-03-08T12:32:33.050Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="musl">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2023/03/08/musl%201.2.x%20%E5%A0%86%E5%88%86%E9%85%8D%E5%99%A8%E5%88%9D%E6%8E%A2/1678206958466.png">
+
+<link rel="canonical" href="http://example.com/2023/03/08/musl%201.2.x%20%E5%A0%86%E5%88%86%E9%85%8D%E5%99%A8%E5%88%9D%E6%8E%A2/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>musl 1.2.x 堆分配器初探 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/03/08/musl%201.2.x%20%E5%A0%86%E5%88%86%E9%85%8D%E5%99%A8%E5%88%9D%E6%8E%A2/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          musl 1.2.x 堆分配器初探
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-03-08 20:29:38 / Modified: 20:32:33" itemprop="dateCreated datePublished" datetime="2023-03-08T20:29:38+08:00">2023-03-08</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>10k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>9 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="Libc-Musl-简析"><a href="#Libc-Musl-简析" class="headerlink" title="Libc Musl 简析"></a>Libc Musl 简析</h2><p>Musl 是一个轻量级的C标准库，设计作为 GNU C library (glibc)、 uClibc 或 Android Bionic 的替代用于嵌入式操作系统和移动设备</p>
+<p>它遵循 POSIX 2008 规格和 C99 标准，采用 MIT 许可证授权，使用 Musl 的 Linux 发行版和项目包括 <code>sabotage</code>， <code>bootstrap-linux</code>， <code>LightCube OS</code> 等</p>
+<h2 id="Libc-Musl-堆管理器-1-2-x"><a href="#Libc-Musl-堆管理器-1-2-x" class="headerlink" title="Libc Musl 堆管理器 - 1.2.x"></a>Libc Musl 堆管理器 - 1.2.x</h2><p>1.2.x 和 1.1.x 堆管理结构几乎完全不同：</p>
+<img src="/2023/03/08/musl%201.2.x%20%E5%A0%86%E5%88%86%E9%85%8D%E5%99%A8%E5%88%9D%E6%8E%A2/1678206958466.png" class width="1678206958466">  
+<ul>
+<li>1.2.x 新版本使用 mallocng</li>
+<li>1.1.x 旧版本使用 oidmalloc</li>
+</ul>
+<p><strong>1.2.x Musl 关键结构体</strong></p>
+<p>在 Musl 中有几大重要的结构体：</p>
+<p>malloc_context：musl libc 的全局管理结构指针，存放在 <code>libc.so</code> 的 <code>.bss</code> 段 </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">malloc_context</span> &#123;</span></span><br><span class="line">	<span class="keyword">uint64_t</span> secret; <span class="comment">/* 在每页的开头,用于校验/检查meta_area-&gt;check */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifndef</span> PAGESIZE</span></span><br><span class="line">	<span class="keyword">size_t</span> pagesize;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">	<span class="keyword">int</span> init_done; <span class="comment">/* 用于判断该结构体是否进行了初始化 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> mmap_counter; <span class="comment">/* mmap计数器 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">meta</span> *<span class="title">free_meta_head</span>;</span> <span class="comment">/* 释放堆内存管理器 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">meta</span> *<span class="title">avail_meta</span>;</span> <span class="comment">/* 可用的的堆内存管理器 */</span></span><br><span class="line">	<span class="keyword">size_t</span> avail_meta_count, avail_meta_area_count, meta_alloc_shift;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">meta_area</span> *<span class="title">meta_area_head</span>, *<span class="title">meta_area_tail</span>;</span> <span class="comment">/* 头指针和尾指针 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span> *avail_meta_areas;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">meta</span> *<span class="title">active</span>[48];</span> <span class="comment">/* 可以用来分配的meta */</span></span><br><span class="line">	<span class="keyword">size_t</span> usage_by_class[<span class="number">48</span>]; <span class="comment">/* 对应大小的group所管理的chunk个数 */</span></span><br><span class="line">	<span class="keyword">uint8_t</span> unmap_seq[<span class="number">32</span>], bounces[<span class="number">32</span>];</span><br><span class="line">	<span class="keyword">uint8_t</span> seq;</span><br><span class="line">	<span class="keyword">uintptr_t</span> brk; <span class="comment">/* 使用brk开拓的heap的最高地址 */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>musl 把 chunk 大小分为48类，用 size_to_class 进行计算（与 <code>*active[48]</code> 对应）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> <span class="keyword">uint16_t</span> size_classes[] = &#123;</span><br><span class="line">	<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>, <span class="number">8</span>,</span><br><span class="line">	<span class="number">9</span>, <span class="number">10</span>, <span class="number">12</span>, <span class="number">15</span>,</span><br><span class="line">	<span class="number">18</span>, <span class="number">20</span>, <span class="number">25</span>, <span class="number">31</span>,</span><br><span class="line">	<span class="number">36</span>, <span class="number">42</span>, <span class="number">50</span>, <span class="number">63</span>,</span><br><span class="line">	<span class="number">72</span>, <span class="number">84</span>, <span class="number">102</span>, <span class="number">127</span>,</span><br><span class="line">	<span class="number">146</span>, <span class="number">170</span>, <span class="number">204</span>, <span class="number">255</span>,</span><br><span class="line">	<span class="number">292</span>, <span class="number">340</span>, <span class="number">409</span>, <span class="number">511</span>,</span><br><span class="line">	<span class="number">584</span>, <span class="number">682</span>, <span class="number">818</span>, <span class="number">1023</span>,</span><br><span class="line">	<span class="number">1169</span>, <span class="number">1364</span>, <span class="number">1637</span>, <span class="number">2047</span>,</span><br><span class="line">	<span class="number">2340</span>, <span class="number">2730</span>, <span class="number">3276</span>, <span class="number">4095</span>,</span><br><span class="line">	<span class="number">4680</span>, <span class="number">5460</span>, <span class="number">6552</span>, <span class="number">8191</span>,</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>meta_area：mallocng 在分配 meta 时，总是先分配一页的内存，然后划分为多个 meta 区域，而该页的最开始存放的就是 meta_area</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">meta_area</span> &#123;</span></span><br><span class="line">	<span class="keyword">uint64_t</span> check; <span class="comment">/* 用于和malloc_context-&gt;secret进行匹配 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">meta_area</span> *<span class="title">next</span>;</span> <span class="comment">/* 下一个节点指针 */</span></span><br><span class="line">	<span class="keyword">int</span> nslots; <span class="comment">/* 当前使用的meta数量 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">meta</span> <span class="title">slots</span>[];</span> <span class="comment">/* 指向meta的指针(结构体meta_area后面的内存就是meta数组) */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>slots 结构体数组可以看作是一个 meta 的集合</li>
+</ul>
+<p>meta：组成一个 meta 队列</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">meta</span> &#123;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">meta</span> *<span class="title">prev</span>, *<span class="title">next</span>;</span> <span class="comment">/* 双向链表 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">group</span> *<span class="title">mem</span>;</span> <span class="comment">/* 指向group */</span></span><br><span class="line">	<span class="keyword">volatile</span> <span class="keyword">int</span> avail_mask, freed_mask; <span class="comment">/* 可用/释放chunk的bitmap */</span></span><br><span class="line">	<span class="keyword">uintptr_t</span> last_idx:<span class="number">5</span>; <span class="comment">/* 表示最后一个chunk的下标 */</span></span><br><span class="line">	<span class="keyword">uintptr_t</span> freeable:<span class="number">1</span>;</span><br><span class="line">	<span class="keyword">uintptr_t</span> sizeclass:<span class="number">6</span>; <span class="comment">/* group的大小,如果mem是mmap分配,固定为63 */</span></span><br><span class="line">	<span class="keyword">uintptr_t</span> maplen:<span class="number">8</span>*<span class="keyword">sizeof</span>(<span class="keyword">uintptr_t</span>)<span class="number">-12</span>; <span class="comment">/* 如果group是mmap分配的,则代表内存页数,否则为&#x27;0&#x27; */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>meta 可以是 brk 分配的，可以是 mmap 映射的</li>
+</ul>
+<p>group：由多个相同大小的 chunk 以及一些控制信息组成的（并且物理相邻）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">group</span> &#123;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">meta</span> *<span class="title">meta</span>;</span> <span class="comment">/* 指回meta */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span> active_idx:<span class="number">5</span>;</span><br><span class="line">	<span class="keyword">char</span> pad[UNIT - <span class="keyword">sizeof</span>(struct meta *) - <span class="number">1</span>]; <span class="comment">/* 0x10字节对齐(NUIT为0x10) */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span> storage[];</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>group 只能是 mmap 映射的</li>
+<li>这里的 storage 就是我们习惯中理解的 chunk</li>
+</ul>
+<p>chunk 没有专门在代码中定义，但总体结构如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">chunk</span> &#123;</span></span><br><span class="line">    <span class="keyword">char</span> prev_user_data[]; <span class="comment">/* 用于存储上一个chunk的数据 */</span></span><br><span class="line">    <span class="keyword">uint8_t</span> idx; <span class="comment">/* 低5bit作为idx表示这是group中第几个chunk,高3bit作为预留位 */</span></span><br><span class="line">    <span class="keyword">uint16_t</span> offset; <span class="comment">/* 与第一个chunk的偏移 */</span></span><br><span class="line">    <span class="keyword">char</span> user_data[]; <span class="comment">/* 用于存储数据 */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>group 中第一个 chunk 的 pre_user_data 为一个指针，指向这个 group 的 meta 元数据（其实就是 <code>group-&gt;meta</code> 指针）</li>
+<li>其余 chunk 使用 offset 表示与所属 group 中第一个 chunk 的偏移，而 pre_user_data 用于存储上一个 chunk 的数据</li>
+</ul>
+<p>这些结构体的关系如下图：</p>
+<img src="/2023/03/08/musl%201.2.x%20%E5%A0%86%E5%88%86%E9%85%8D%E5%99%A8%E5%88%9D%E6%8E%A2/1678274126255.png" class width="1678274126255"> 
+<ul>
+<li>相同类型的 meta 之间通过双向链表进行连接，头节点地址存储于 <code>malloc_context-&gt;active</code> 中</li>
+<li>而 meta_area 会形成一条单向链表，其头节点和尾节点指针都存储于 <code>malloc_context</code> 中</li>
+</ul>
+<p><strong>1.2.x Musl 关键函数</strong></p>
+<p>malloc：核心分配函数</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> *<span class="title">malloc</span><span class="params">(<span class="keyword">size_t</span> n)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">if</span> (size_overflows(n)) <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">meta</span> *<span class="title">g</span>;</span></span><br><span class="line">	<span class="keyword">uint32_t</span> mask, first;</span><br><span class="line">	<span class="keyword">int</span> sc;</span><br><span class="line">	<span class="keyword">int</span> idx;</span><br><span class="line">	<span class="keyword">int</span> ctr;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">/* 判断size大小是否大于131052(0x1FFEC),由于chunk存在12字节的复用,所以这里大小为0x1FFEC */</span></span><br><span class="line">	<span class="keyword">if</span> (n &gt;= MMAP_THRESHOLD) &#123; <span class="comment">/* 大于则使用mmap进行内存分配 */</span></span><br><span class="line">		<span class="keyword">size_t</span> needed = n + IB + UNIT;</span><br><span class="line">		<span class="keyword">void</span> *p = mmap(<span class="number">0</span>, needed, PROT_READ|PROT_WRITE,</span><br><span class="line">			MAP_PRIVATE|MAP_ANON, <span class="number">-1</span>, <span class="number">0</span>);</span><br><span class="line">		<span class="keyword">if</span> (p==MAP_FAILED) <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">		wrlock(); <span class="comment">/* 加malloc锁 */</span></span><br><span class="line">		step_seq();</span><br><span class="line">		g = alloc_meta(); <span class="comment">/* 分配一个meta,mmap得到的chunk会记录在这个meta结构体中 */</span></span><br><span class="line">		<span class="keyword">if</span> (!g) &#123;</span><br><span class="line">			unlock(); <span class="comment">/* 解除malloc锁 */</span></span><br><span class="line">			munmap(p, needed);</span><br><span class="line">			<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">		&#125;</span><br><span class="line">        </span><br><span class="line">		g-&gt;mem = p; <span class="comment">/* 返回的chunk指针 */</span> </span><br><span class="line">		g-&gt;mem-&gt;meta = g; <span class="comment">/* meta指针 */</span></span><br><span class="line">		g-&gt;last_idx = <span class="number">0</span>; <span class="comment">/* 该group只存在一个chunk,idx设为&#x27;0&#x27; */</span></span><br><span class="line">		g-&gt;freeable = <span class="number">1</span>; <span class="comment">/* 记录是否可释放的标志位 */</span></span><br><span class="line">		g-&gt;sizeclass = <span class="number">63</span>; <span class="comment">/* 由mmap分配的内存,默认为&#x27;63&#x27; */</span></span><br><span class="line">		g-&gt;maplen = (needed+<span class="number">4095</span>)/<span class="number">4096</span>; <span class="comment">/* 计算映射内存的长度 */</span></span><br><span class="line">		g-&gt;avail_mask = g-&gt;freed_mask = <span class="number">0</span>; <span class="comment">/* 设置两个bitmap */</span></span><br><span class="line">		ctx.mmap_counter++;</span><br><span class="line">		idx = <span class="number">0</span>;</span><br><span class="line">		<span class="keyword">goto</span> success;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	sc = size_to_class(n); <span class="comment">/* 计算size类别 */</span></span><br><span class="line"></span><br><span class="line">	rdlock(); <span class="comment">/* 对malloc函数进行上锁 */</span></span><br><span class="line">	g = ctx.active[sc]; <span class="comment">/* 取得对应的meta结构体(可能取NULL,也可能取满的meta) */</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 如果这个sc对应的meta为空,则根据条件选择更大的meta进行分配 */</span></span><br><span class="line">	<span class="keyword">if</span> (!g &amp;&amp; sc&gt;=<span class="number">4</span> &amp;&amp; sc&lt;<span class="number">32</span> &amp;&amp; sc!=<span class="number">6</span> &amp;&amp; !(sc&amp;<span class="number">1</span>) &amp;&amp; !ctx.usage_by_class[sc]) &#123;</span><br><span class="line">        <span class="comment">/* if g!=0 sc∈[4,32) sc≠6 sc为偶数:对应的meta数组存在可用chunk */</span></span><br><span class="line">		<span class="keyword">size_t</span> usage = ctx.usage_by_class[sc|<span class="number">1</span>];</span><br><span class="line">		<span class="keyword">if</span> (!ctx.active[sc|<span class="number">1</span>] || (!ctx.active[sc|<span class="number">1</span>]-&gt;avail_mask</span><br><span class="line">		    &amp;&amp; !ctx.active[sc|<span class="number">1</span>]-&gt;freed_mask))</span><br><span class="line">			usage += <span class="number">3</span>;</span><br><span class="line">		<span class="keyword">if</span> (usage &lt;= <span class="number">12</span>)</span><br><span class="line">			sc |= <span class="number">1</span>; <span class="comment">/* 尝试增加sc的值 */</span></span><br><span class="line">		g = ctx.active[sc];</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span> (;;) &#123; <span class="comment">/* avail_mask就是表示可用chunk的bitmap */</span></span><br><span class="line">		mask = g ? g-&gt;avail_mask : <span class="number">0</span>; <span class="comment">/* g=0,表示其没有可用的chunk,first一定为&#x27;0&#x27; */</span></span><br><span class="line">		first = mask&amp;-mask; <span class="comment">/* 只要avail_mask的每个位不全为&#x27;0&#x27;,first就也不为&#x27;0&#x27;,代表还有可用的chunk */</span></span><br><span class="line">		<span class="keyword">if</span> (!first) <span class="keyword">break</span>; <span class="comment">/* 没有avail的chunk(满的meta),跳出循环 */</span></span><br><span class="line">		<span class="keyword">if</span> (RDLOCK_IS_EXCLUSIVE || !MT)</span><br><span class="line">			g-&gt;avail_mask = mask-first; <span class="comment">/* 将取出chunk对应的avail设为&#x27;0&#x27; */</span></span><br><span class="line">		<span class="keyword">else</span> <span class="keyword">if</span> (a_cas(&amp;g-&gt;avail_mask, mask, mask-first)!=mask) <span class="comment">/* 自旋 */</span></span><br><span class="line">			<span class="keyword">continue</span>;</span><br><span class="line">		idx = a_ctz_32(first); <span class="comment">/* 获取对应chunk的idx */</span></span><br><span class="line">		<span class="keyword">goto</span> success;</span><br><span class="line">	&#125;</span><br><span class="line">	upgradelock(); <span class="comment">/* malloc锁更新 */</span></span><br><span class="line"></span><br><span class="line">	idx = alloc_slot(sc, n); <span class="comment">/* 申请新的chunk(重新分配meta) */</span></span><br><span class="line">	<span class="keyword">if</span> (idx &lt; <span class="number">0</span>) &#123;</span><br><span class="line">		unlock(); <span class="comment">/* 解除malloc锁 */</span></span><br><span class="line">		<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">	&#125;</span><br><span class="line">	g = ctx.active[sc]; <span class="comment">/* 更新g,找到对应的meta */</span></span><br><span class="line"></span><br><span class="line">success:</span><br><span class="line">	ctr = ctx.mmap_counter;</span><br><span class="line">	unlock(); <span class="comment">/* 解除malloc锁 */</span></span><br><span class="line">	<span class="keyword">return</span> enframe(g, idx, n, ctr); <span class="comment">/* 返回分配的chunk */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>判断是否需要调用 mmap</li>
+<li>先计算 chunk size 的范围，判断 <code>ctx.active[sc]</code> 中对应的 meta，此时有3种情况：<ul>
+<li>meta 为 NULL：<ul>
+<li>查看是否可以获取更大的 meta，进入下一步（判断 meta 是否装满）</li>
+</ul>
+</li>
+<li>meta 存在但是装满：<ul>
+<li>调用 <code>alloc_slot</code> 尝试分配新的 <code>meta</code>，进入下一步（返回目标 chunk）</li>
+</ul>
+</li>
+<li>meta 存在并且有空闲：<ul>
+<li>计算对应 chunk 的 idx，返回目标 chunk</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>其中有一些重要的函数：<code>alloc_meta</code>，<code>alloc_slot</code></p>
+<p>alloc_meta：分配一个 meta</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> alloc_meta __malloc_alloc_meta</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">struct meta *<span class="title">alloc_meta</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">meta</span> *<span class="title">m</span>;</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span> *p;</span><br><span class="line">	<span class="keyword">if</span> (!ctx.init_done) &#123; <span class="comment">/* 查看ctx是否进行了初始化,没有就简单初始化一下 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifndef</span> PAGESIZE</span></span><br><span class="line">		ctx.pagesize = get_page_size();</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">		ctx.secret = get_random_secret();</span><br><span class="line">		ctx.init_done = <span class="number">1</span>;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">size_t</span> pagesize = PGSZ;</span><br><span class="line">	<span class="keyword">if</span> (pagesize &lt; <span class="number">4096</span>) pagesize = <span class="number">4096</span>;</span><br><span class="line">    <span class="comment">/* 查看释放的meta队列是否存在空闲的结点,存在的话就直接返回 */</span></span><br><span class="line">	<span class="keyword">if</span> ((m = dequeue_head(&amp;ctx.free_meta_head))) <span class="keyword">return</span> m;</span><br><span class="line">	<span class="keyword">if</span> (!ctx.avail_meta_count) &#123;</span><br><span class="line">		<span class="keyword">int</span> need_unprotect = <span class="number">1</span>;</span><br><span class="line">		<span class="keyword">if</span> (!ctx.avail_meta_area_count &amp;&amp; ctx.brk!=<span class="number">-1</span>) &#123;</span><br><span class="line">            <span class="comment">/* 新分配一页内存 */</span></span><br><span class="line">			<span class="keyword">uintptr_t</span> <span class="keyword">new</span> = ctx.brk + pagesize;</span><br><span class="line">			<span class="keyword">int</span> need_guard = <span class="number">0</span>;</span><br><span class="line">			<span class="keyword">if</span> (!ctx.brk) &#123;</span><br><span class="line">				need_guard = <span class="number">1</span>;</span><br><span class="line">				ctx.brk = brk(<span class="number">0</span>);</span><br><span class="line">				ctx.brk += -ctx.brk &amp; (pagesize<span class="number">-1</span>);</span><br><span class="line">				<span class="keyword">new</span> = ctx.brk + <span class="number">2</span>*pagesize;</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">if</span> (brk(<span class="keyword">new</span>) != <span class="keyword">new</span>) &#123; <span class="comment">/* 获取内存失败 */</span></span><br><span class="line">				ctx.brk = <span class="number">-1</span>;</span><br><span class="line">			&#125; <span class="keyword">else</span> &#123; <span class="comment">/* 获取内存成功 */</span></span><br><span class="line">				<span class="keyword">if</span> (need_guard) mmap((<span class="keyword">void</span> *)ctx.brk, pagesize,</span><br><span class="line">					PROT_NONE, MAP_ANON|MAP_PRIVATE|MAP_FIXED, <span class="number">-1</span>, <span class="number">0</span>);</span><br><span class="line">                <span class="comment">/* 保护页,在brk后面映射一个不可用的页(PROT_NONE)</span></span><br><span class="line"><span class="comment">                如果堆溢出到这里就会发送SIGV */</span></span><br><span class="line">				ctx.brk = <span class="keyword">new</span>;</span><br><span class="line">				ctx.avail_meta_areas = (<span class="keyword">void</span> *)(<span class="keyword">new</span> - pagesize);</span><br><span class="line">				ctx.avail_meta_area_count = pagesize&gt;&gt;<span class="number">12</span>;</span><br><span class="line">				need_unprotect = <span class="number">0</span>;</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">if</span> (!ctx.avail_meta_area_count) &#123; <span class="comment">/* 如果前面brk()分配失败了,直接mmap匿名映射一片PROT_NONE的内存再划分 */</span></span><br><span class="line">			<span class="keyword">size_t</span> n = <span class="number">2UL</span> &lt;&lt; ctx.meta_alloc_shift;</span><br><span class="line">			p = mmap(<span class="number">0</span>, n*pagesize, PROT_NONE,</span><br><span class="line">				MAP_PRIVATE|MAP_ANON, <span class="number">-1</span>, <span class="number">0</span>);</span><br><span class="line">			<span class="keyword">if</span> (p==MAP_FAILED) <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">			ctx.avail_meta_areas = p + pagesize;</span><br><span class="line">			ctx.avail_meta_area_count = (n<span class="number">-1</span>)*(pagesize&gt;&gt;<span class="number">12</span>);</span><br><span class="line">			ctx.meta_alloc_shift++;</span><br><span class="line">		&#125;</span><br><span class="line">		p = ctx.avail_meta_areas;</span><br><span class="line">		<span class="keyword">if</span> ((<span class="keyword">uintptr_t</span>)p &amp; (pagesize<span class="number">-1</span>)) need_unprotect = <span class="number">0</span>;</span><br><span class="line">		<span class="keyword">if</span> (need_unprotect)</span><br><span class="line">			<span class="keyword">if</span> (mprotect(p, pagesize, PROT_READ|PROT_WRITE)</span><br><span class="line">			    &amp;&amp; errno != ENOSYS)</span><br><span class="line">				<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">		ctx.avail_meta_area_count--;</span><br><span class="line">		ctx.avail_meta_areas = p + <span class="number">4096</span>;</span><br><span class="line">		<span class="keyword">if</span> (ctx.meta_area_tail) &#123;</span><br><span class="line">			ctx.meta_area_tail-&gt;next = (<span class="keyword">void</span> *)p;</span><br><span class="line">		&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">			ctx.meta_area_head = (<span class="keyword">void</span> *)p;</span><br><span class="line">		&#125;</span><br><span class="line">		ctx.meta_area_tail = (<span class="keyword">void</span> *)p;</span><br><span class="line">		ctx.meta_area_tail-&gt;check = ctx.secret;</span><br><span class="line">		ctx.avail_meta_count = ctx.meta_area_tail-&gt;nslots</span><br><span class="line">			= (<span class="number">4096</span>-<span class="keyword">sizeof</span>(struct meta_area))/<span class="keyword">sizeof</span> *m;</span><br><span class="line">		ctx.avail_meta = ctx.meta_area_tail-&gt;slots;</span><br><span class="line">	&#125;</span><br><span class="line">	ctx.avail_meta_count--;</span><br><span class="line">	m = ctx.avail_meta++;</span><br><span class="line">	m-&gt;prev = m-&gt;next = <span class="number">0</span>;</span><br><span class="line">	<span class="keyword">return</span> m;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>alloc_slot：申请新的 chunk（重新分配 meta）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">int</span> <span class="title">alloc_slot</span><span class="params">(<span class="keyword">int</span> sc, <span class="keyword">size_t</span> req)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">uint32_t</span> first = try_avail(&amp;ctx.active[sc]); <span class="comment">/* 寻找队列中可用的chunk */</span></span><br><span class="line">	<span class="keyword">if</span> (first) <span class="keyword">return</span> a_ctz_32(first);</span><br><span class="line"></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">meta</span> *<span class="title">g</span> =</span> alloc_group(sc, req); <span class="comment">/* 给sc分配一个meta再分配一个新的group结构体 */</span></span><br><span class="line">	<span class="keyword">if</span> (!g) <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line"></span><br><span class="line">	g-&gt;avail_mask--; <span class="comment">/* 第一个chunk被使用了 */</span></span><br><span class="line">	<span class="built_in">queue</span>(&amp;ctx.active[sc], g); <span class="comment">/* 分配的meta入队 */</span></span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>alloc_group：给 sc 分配一个 meta 再分配一个新的 group 结构体</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> struct meta *<span class="title">alloc_group</span><span class="params">(<span class="keyword">int</span> sc, <span class="keyword">size_t</span> req)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">size_t</span> size = UNIT*size_classes[sc];</span><br><span class="line">	<span class="keyword">int</span> i = <span class="number">0</span>, cnt;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span> *p;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">meta</span> *<span class="title">m</span> =</span> alloc_meta(); <span class="comment">/* 分配一个新的meta用于管理新的meta */</span></span><br><span class="line">	<span class="keyword">if</span> (!m) <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">	<span class="keyword">size_t</span> usage = ctx.usage_by_class[sc];</span><br><span class="line">	<span class="keyword">size_t</span> pagesize = PGSZ;</span><br><span class="line">	<span class="keyword">int</span> active_idx;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">/* cnt为需要增加的chunk数量,以下算法是通过sc来求得最优cnt */</span></span><br><span class="line">	<span class="keyword">if</span> (sc &lt; <span class="number">9</span>) &#123;</span><br><span class="line">		<span class="keyword">while</span> (i&lt;<span class="number">2</span> &amp;&amp; <span class="number">4</span>*small_cnt_tab[sc][i] &gt; usage)</span><br><span class="line">			i++;</span><br><span class="line">		cnt = small_cnt_tab[sc][i];</span><br><span class="line">	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">		cnt = med_cnt_tab[sc&amp;<span class="number">3</span>];</span><br><span class="line">		<span class="keyword">while</span> (!(cnt&amp;<span class="number">1</span>) &amp;&amp; <span class="number">4</span>*cnt &gt; usage)</span><br><span class="line">			cnt &gt;&gt;= <span class="number">1</span>;</span><br><span class="line">		<span class="keyword">while</span> (size*cnt &gt;= <span class="number">65536</span>*UNIT)</span><br><span class="line">			cnt &gt;&gt;= <span class="number">1</span>;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (cnt==<span class="number">1</span> &amp;&amp; size*cnt+UNIT &lt;= pagesize/<span class="number">2</span>) cnt = <span class="number">2</span>; <span class="comment">/* 如果在上面我们的cnt为&#x27;1&#x27;,是不够使用mmap的,将cnt增加到2可能就可以了 */</span></span><br><span class="line">	<span class="keyword">if</span> (size*cnt+UNIT &gt; pagesize/<span class="number">2</span>) &#123; <span class="comment">/* 通过mmap分配 */</span></span><br><span class="line">		<span class="keyword">int</span> nosmall = is_bouncing(sc);</span><br><span class="line">		account_bounce(sc);</span><br><span class="line">		step_seq();</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> (!(sc&amp;<span class="number">1</span>) &amp;&amp; sc&lt;<span class="number">32</span>) usage += ctx.usage_by_class[sc+<span class="number">1</span>];</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> (<span class="number">4</span>*cnt &gt; usage &amp;&amp; !nosmall) &#123;</span><br><span class="line">			<span class="keyword">if</span> (<span class="number">0</span>);</span><br><span class="line">			<span class="keyword">else</span> <span class="keyword">if</span> ((sc&amp;<span class="number">3</span>)==<span class="number">1</span> &amp;&amp; size*cnt&gt;<span class="number">8</span>*pagesize) cnt = <span class="number">2</span>;</span><br><span class="line">			<span class="keyword">else</span> <span class="keyword">if</span> ((sc&amp;<span class="number">3</span>)==<span class="number">2</span> &amp;&amp; size*cnt&gt;<span class="number">4</span>*pagesize) cnt = <span class="number">3</span>;</span><br><span class="line">			<span class="keyword">else</span> <span class="keyword">if</span> ((sc&amp;<span class="number">3</span>)==<span class="number">0</span> &amp;&amp; size*cnt&gt;<span class="number">8</span>*pagesize) cnt = <span class="number">3</span>;</span><br><span class="line">			<span class="keyword">else</span> <span class="keyword">if</span> ((sc&amp;<span class="number">3</span>)==<span class="number">0</span> &amp;&amp; size*cnt&gt;<span class="number">2</span>*pagesize) cnt = <span class="number">5</span>;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">size_t</span> needed = size*cnt + UNIT; <span class="comment">/* 需要分配的大小 */</span></span><br><span class="line">		needed += -needed &amp; (pagesize<span class="number">-1</span>); <span class="comment">/* 进行对齐操作 */</span></span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> (!nosmall &amp;&amp; cnt&lt;=<span class="number">7</span>) &#123;</span><br><span class="line">			req += IB + UNIT;</span><br><span class="line">			req += -req &amp; (pagesize<span class="number">-1</span>);</span><br><span class="line">			<span class="keyword">if</span> (req&lt;size+UNIT || (req&gt;=<span class="number">4</span>*pagesize &amp;&amp; <span class="number">2</span>*cnt&gt;usage)) &#123;</span><br><span class="line">				cnt = <span class="number">1</span>;</span><br><span class="line">				needed = req;</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		p = mmap(<span class="number">0</span>, needed, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, <span class="number">-1</span>, <span class="number">0</span>);</span><br><span class="line">		<span class="keyword">if</span> (p==MAP_FAILED) &#123;</span><br><span class="line">			free_meta(m);</span><br><span class="line">			<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">		&#125;</span><br><span class="line">		m-&gt;maplen = needed&gt;&gt;<span class="number">12</span>;</span><br><span class="line">		ctx.mmap_counter++; <span class="comment">/* mmap申请的内存数量加&#x27;1&#x27; */</span></span><br><span class="line">		active_idx = (<span class="number">4096</span>-UNIT)/size<span class="number">-1</span>; <span class="comment">/* 计算active_idx(最多为cnt-1) */</span></span><br><span class="line">		<span class="keyword">if</span> (active_idx &gt; cnt<span class="number">-1</span>) active_idx = cnt<span class="number">-1</span>;</span><br><span class="line">		<span class="keyword">if</span> (active_idx &lt; <span class="number">0</span>) active_idx = <span class="number">0</span>;</span><br><span class="line">	&#125; <span class="keyword">else</span> &#123; <span class="comment">/* 通过brk分配 */</span></span><br><span class="line">		<span class="keyword">int</span> j = size_to_class(UNIT+cnt*size-IB); <span class="comment">/* 将size转化为内部的类 */</span></span><br><span class="line">		<span class="keyword">int</span> idx = alloc_slot(j, UNIT+cnt*size-IB); <span class="comment">/* 重新分配meta(又调用回去了?有点迷) */</span></span><br><span class="line">		<span class="keyword">if</span> (idx &lt; <span class="number">0</span>) &#123;</span><br><span class="line">			free_meta(m);</span><br><span class="line">			<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="class"><span class="keyword">struct</span> <span class="title">meta</span> *<span class="title">g</span> =</span> ctx.active[j]; <span class="comment">/* 直接获取meta */</span></span><br><span class="line">		p = enframe(g, idx, UNIT*size_classes[j]-IB, ctx.mmap_counter);</span><br><span class="line">		m-&gt;maplen = <span class="number">0</span>;</span><br><span class="line">		p[<span class="number">-3</span>] = (p[<span class="number">-3</span>]&amp;<span class="number">31</span>) | (<span class="number">6</span>&lt;&lt;<span class="number">5</span>);</span><br><span class="line">		<span class="keyword">for</span> (<span class="keyword">int</span> i=<span class="number">0</span>; i&lt;=cnt; i++)</span><br><span class="line">			p[UNIT+i*size<span class="number">-4</span>] = <span class="number">0</span>;</span><br><span class="line">		active_idx = cnt<span class="number">-1</span>;</span><br><span class="line">	&#125;</span><br><span class="line">	ctx.usage_by_class[sc] += cnt; <span class="comment">/* 这个sc又增加了cnt个chunk */</span></span><br><span class="line">	m-&gt;avail_mask = (<span class="number">2u</span>&lt;&lt;active_idx)<span class="number">-1</span>;</span><br><span class="line">	m-&gt;freed_mask = (<span class="number">2u</span>&lt;&lt;(cnt<span class="number">-1</span>))<span class="number">-1</span> - m-&gt;avail_mask;</span><br><span class="line">	m-&gt;mem = (<span class="keyword">void</span> *)p;</span><br><span class="line">	m-&gt;mem-&gt;meta = m;</span><br><span class="line">	m-&gt;mem-&gt;active_idx = active_idx;</span><br><span class="line">	m-&gt;last_idx = cnt<span class="number">-1</span>;</span><br><span class="line">	m-&gt;freeable = <span class="number">1</span>;</span><br><span class="line">	m-&gt;sizeclass = sc;</span><br><span class="line">	<span class="keyword">return</span> m;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>参考：<a target="_blank" rel="noopener" href="https://eur1ka.github.io/51092.html">musl-1.2.2堆内存分配源码分析 | eur1ka’s blog</a> </p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/musl/" rel="tag"><i class="fa fa-tag"></i> musl</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/03/07/%E5%86%85%E6%A0%B8shellcode+seq_operations/" rel="prev" title="内核shellcode+seq_operations">
+      <i class="fa fa-chevron-left"></i> 内核shellcode+seq_operations
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#Libc-Musl-%E7%AE%80%E6%9E%90"><span class="nav-number">1.</span> <span class="nav-text">Libc Musl 简析</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Libc-Musl-%E5%A0%86%E7%AE%A1%E7%90%86%E5%99%A8-1-2-x"><span class="nav-number">2.</span> <span class="nav-text">Libc Musl 堆管理器 - 1.2.x</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">218</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">133</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">2.9m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">43:49</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

