@@ -156,6 +156,146 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/09/02/IO_FILE%20%E5%B8%B8%E7%94%A8%E8%B0%83%E7%94%A8%E9%93%BE/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/09/02/IO_FILE%20%E5%B8%B8%E7%94%A8%E8%B0%83%E7%94%A8%E9%93%BE/" class="post-title-link" itemprop="url">IO_FILE 常用调用链（持续更新）</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-09-02 16:21:36" itemprop="dateCreated datePublished" datetime="2022-09-02T16:21:36+08:00">2022-09-02</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-12-09 18:33:55" itemprop="dateModified" datetime="2022-12-09T18:33:55+08:00">2022-12-09</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Technology/" itemprop="url" rel="index"><span itemprop="name">Technology</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>2.3k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>2 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>house of cat</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">__malloc_assert -&gt; __fxprintf -&gt; __vfxprintf -&gt; locked_vfxprintf -&gt; __vfprintf_internal -&gt; [_IO_wfile_seekoff] (IO_wfile_jumps)</span><br></pre></td></tr></table></figure>
+<p>触发条件：</p>
+<ul>
+<li>伪造 vtable = IO_wfile_jumps+0x10</li>
+<li>修改 top chunk -&gt; P = 0，使 top chunk 不够分配</li>
+</ul>
+<p><strong>house of emma</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">__malloc_assert -&gt; __fxprintf -&gt; __vfxprintf -&gt; locked_vfxprintf -&gt; __vfprintf_internal -&gt; [_IO_cookie_write](IO_wfile_jumps)</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7fc235f79a20</span> &lt;_IO_cookie_write+<span class="number">48</span>&gt;    call   rax                           &lt;getkeyserv_handle+<span class="number">528</span>&gt;</span><br><span class="line">       rdi: <span class="number">0x562b7f47baf0</span> ◂— <span class="number">0x0</span> <span class="comment">/* __cookie:可控heap */</span></span><br><span class="line">       rsi: <span class="number">0x7fc2360bb360</span> ◂— <span class="string">&quot;%s%s%s:%u: %s%sAssertion `%s&#x27; failed.\n&quot;</span></span><br><span class="line">       rdx: <span class="number">0x0</span></span><br><span class="line">       rcx: <span class="number">0x0</span>    </span><br></pre></td></tr></table></figure>
+<p>触发条件：</p>
+<ul>
+<li>伪造 vtable = IO_wfile_jumps+0x40</li>
+<li>修改 top chunk -&gt; P = 0，使 top chunk 不够分配</li>
+</ul>
+<p><strong>house of kiwi</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">__malloc_assert -&gt; fflush -&gt; sync(_IO_file_jumps)</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7ffff7e78523</span> &lt;fflush+<span class="number">131</span>&gt;    call   qword ptr [rbp + <span class="number">0x60</span>]        &lt;setcontext+<span class="number">61</span>&gt;</span><br><span class="line">       rdi: <span class="number">0x7ffff7fc35e0</span> (_IO_2_1_stderr_) ◂— <span class="number">0xfbad2887</span></span><br><span class="line">       rsi: <span class="number">0xc00</span></span><br><span class="line">       rdx: <span class="number">0x7ffff7fc38c0</span> (_IO_helper_jumps) ◂— <span class="number">0x0</span></span><br><span class="line">       rcx: <span class="number">0x7ffff7ef2417</span> (write+<span class="number">23</span>) ◂— cmp    rax, <span class="number">-0x1000</span> <span class="comment">/* &#x27;H=&#x27; */</span></span><br></pre></td></tr></table></figure>
+<p>触发条件：</p>
+<ul>
+<li>修改 top chunk -&gt; P = 0，使 top chunk 不够分配</li>
+</ul>
+<p><strong>IO_flush_all</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">_IO_flush_all -&gt; _IO_flush_all_lockp -&gt; [_IO_wdefault_xsgetn](IO_wstrn_jumps) -&gt; _IO_switch_to_wget_mode</span><br></pre></td></tr></table></figure>
+<p>触发条件：</p>
+<ul>
+<li>伪造 vtable = IO_wstrn_jumps+0x28</li>
+<li>手动调用 <code>_IO_flush_all</code></li>
+</ul>
+<p><strong>_IO_str_jumps -&gt; _IO_str_overflow</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">malloc_printerr -&gt; __libc_message -&gt; __GI_abort -&gt; _IO_flush_all_lockp -&gt; _IO_str_overflow</span><br><span class="line">__run_exit_handlers -&gt; _IO_cleanup -&gt; _IO_flush_all_lockp -&gt; _IO_str_overflow</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在 <code>libc-2.27.so</code> 及之前，程序在 <code>_IO_str_overflow</code> 里可以通过 <code>call qword ptr [rbx + 0xe0]</code> 来执行指定的函数</li>
+<li>在 <code>libc-2.29.so</code> 及之后，程序在 <code>__GI__IO_str_overflow</code> 里不再使用上面的指令，而是调用 <code>call malloc@plt</code> ，所以要在 <code>&amp;_IO_list_all.vtable+8</code> 处写入将要执行的函数</li>
+</ul>
+<p>伪造条件：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">fp-&gt;_flags = <span class="number">0</span></span><br><span class="line">fp-&gt;_IO_write_base = <span class="number">0</span></span><br><span class="line">fp-&gt;_IO_write_ptr = addr_rdx</span><br><span class="line">fp-&gt;_IO_buf_base = <span class="number">0</span></span><br><span class="line">fp-&gt;_IO_buf_end = (addr_rdi - <span class="number">100</span>) / <span class="number">2</span></span><br><span class="line">fp-&gt;_mode = <span class="number">0</span></span><br><span class="line">vtable = addr_IO_str_jumps</span><br></pre></td></tr></table></figure>
+<p>触发条件：</p>
+<ul>
+<li>破坏 unsortedbin</li>
+<li>执行 exit</li>
+</ul>
+<p><strong>_IO_str_jumps -&gt; _IO_str_finish</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">malloc_printerr -&gt; __libc_message -&gt; __GI_abort -&gt; _IO_flush_all_lockp -&gt; [_IO_str_finish]</span><br><span class="line">__run_exit_handlers -&gt; _IO_cleanup -&gt; _IO_flush_all_lockp -&gt; [_IO_str_finish]</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在 <code>libc-2.27.so</code> 及之前，程序在 <code>_IO_str_finish</code> 里可以通过 <code>call qword ptr [rbx + 0xe8]</code> 来执行指定的函数</li>
+<li>在 <code>libc-2.29.so</code> 及之后，程序在 <code>_IO_str_finish</code> 里不再使用上面的指令，而是调用 <code>call free@plt</code> ，所以要在 <code>&amp;_IO_list_all.vtable+0x10</code> 处写入将要执行的函数</li>
+</ul>
+<p>伪造条件：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">fp-&gt;_flags = <span class="number">0</span></span><br><span class="line">fp-&gt;_IO_write_ptr = <span class="number">0xffffffff</span></span><br><span class="line">fp-&gt;_IO_write_base = <span class="number">0</span></span><br><span class="line">fp-&gt;_wide_data-&gt;_IO_buf_base = addr_rdi <span class="comment">// 也就是 fp-&gt;_IO_write_end</span></span><br><span class="line">fp-&gt;_flags2 = <span class="number">0</span></span><br><span class="line">fp-&gt;_mode = <span class="number">0</span></span><br><span class="line">vtable = addr_IO_str_jumps - <span class="number">8</span></span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>触发条件：</p>
+<ul>
+<li>破坏 unsortedbin</li>
+<li>执行 exit</li>
+</ul>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/31/C%E8%AF%AD%E8%A8%80%E7%89%882048/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -3763,202 +3903,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/18/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9ASocket%E7%AE%80%E8%BF%B0/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/08/18/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9ASocket%E7%AE%80%E8%BF%B0/" class="post-title-link" itemprop="url">网络相关知识：Socket简述</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2022-08-18 00:00:37" itemprop="dateCreated datePublished" datetime="2022-08-18T00:00:37+08:00">2022-08-18</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-09-04 17:17:57" itemprop="dateModified" datetime="2022-09-04T17:17:57+08:00">2022-09-04</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>4.9k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>4 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="TCP-IP-amp-UDP"><a href="#TCP-IP-amp-UDP" class="headerlink" title="TCP/IP &amp; UDP"></a>TCP/IP &amp; UDP</h2><p>TCP/IP（Transmission Control Protocol/Internet Protocol）：</p>
-<ul>
-<li>输控制协议/网间协议，是一个工业标准的协议集（一系列网络协议的总和），它是为广域网设计的</li>
-</ul>
-<p>UDP（User Data Protocol）：</p>
-<ul>
-<li>用户数据报协议，是与 TCP 相对应的协议，它是属于 TCP/IP 协议族中的一种 </li>
-</ul>
-<img src="/2022/08/18/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9ASocket%E7%AE%80%E8%BF%B0/1641473679035.png" class width="1641473679035"> 
-<h2 id="Socket简述"><a href="#Socket简述" class="headerlink" title="Socket简述"></a>Socket简述</h2><p><strong>Socket</strong> 就是应用层与 TCP/IP 协议族通信的中间软件抽象层，它是一组接口：</p>
-<img src="/2022/08/18/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9ASocket%E7%AE%80%E8%BF%B0/1641473787712.png" class width="1641473787712"> 
-<ul>
-<li>socket 可以大大简化“网络通信编程”，我们不需要完全掌握这种编程的各个细节，只需要使用 socket 的接口就可以了</li>
-</ul>
-<img src="/2022/08/18/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9ASocket%E7%AE%80%E8%BF%B0/1641474031711.png" class width="1641474031711"> 
-<h2 id="网络通信"><a href="#网络通信" class="headerlink" title="网络通信"></a>网络通信</h2><p>本地的进程间通信（IPC）有很多种方式，但可以总结为下面4类：</p>
-<ul>
-<li>消息传递（管道、FIFO、消息队列）</li>
-<li>同步（互斥量、条件变量、读写锁、文件和写记录锁、信号量）</li>
-<li>共享内存（匿名的和具名的）</li>
-<li>远程过程调用（Solaris 门和 Sun RPC）</li>
-</ul>
-<p>在进行网络通信之前，系统需要先“识别”程序，TCP/IP 协议族完成了这个功能：</p>
-<ul>
-<li>网络层的 <strong>ip地址</strong> 可以唯一标识网络中的主机</li>
-<li>传输层的 <strong>协议+端口</strong> 可以唯一标识主机中的应用程序（进程）</li>
-</ul>
-<p>这样利用三元组（ip地址，协议，端口）就可以标识网络的进程了</p>
-<h2 id="Socket函数"><a href="#Socket函数" class="headerlink" title="Socket函数"></a>Socket函数</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">socket</span><span class="params">(<span class="keyword">int</span> domain, <span class="keyword">int</span> type, <span class="keyword">int</span> protocol)</span></span></span><br></pre></td></tr></table></figure>
-<p>用于创建一个 socket 描述符，它唯一标识一个 socket </p>
-<ul>
-<li>domain：即协议域，又称为协议族（family），协议族决定了 socket 的地址类型，在通信中必须采用对应的地址</li>
-<li>type：指定socket类型</li>
-<li>protocol：故名思意，就是指定协议</li>
-<li>return：返回一个文件描述符 sockfd（描述字它存在于协议族空间中，但没有一个具体的地址）<ul>
-<li>如果想要给它赋值一个地址，就必须调用 bind() 函数</li>
-<li>否则就当调用 connect() 时系统会自动随机分配一个端口 </li>
-</ul>
-</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">bind</span><span class="params">(<span class="keyword">int</span> sockfd, <span class="keyword">const</span> struct sockaddr *addr, <span class="keyword">socklen_t</span> addrlen)</span></span></span><br></pre></td></tr></table></figure>
-<p>把一个地址族中的特定地址赋给 socket </p>
-<ul>
-<li>sockfd：即socket描述字，它是通过 socket() 函数创建了，唯一标识一个socket，bind()函数就是将给这个描述字绑定一个名字</li>
-<li>addr：一个 const struct sockaddr * 指针，指向要绑定给 sockfd 的协议地址，这个地址结构根据地址创建 socket 时的地址协议族的不同而不同</li>
-<li>addrlen：地址的长度 </li>
-</ul>
-<p>通常服务器在启动的时候都会绑定一个众所周知的地址（如ip地址+端口号），用于提供服务，客户就可以通过它来接连服务器</p>
-<p>而客户端就不用指定，有系统自动分配一个端口号和自身的ip地址组合就行</p>
-<ul>
-<li>这就是为什么通常服务器端在 listen 之前会调用 bind，而客户端就不会调用，而是在 connect 时由系统随机生成一个</li>
-</ul>
-<p>socket 函数创建的 socket 默认是一个主动类型的，listen 函数将 socket 变为被动类型的，等待客户的连接请求：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">listen</span><span class="params">(<span class="keyword">int</span> sockfd, <span class="keyword">int</span> backlog)</span></span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>sockfd：即 socket 描述字</li>
-<li>backlog：相应 socket 可以排队的最大连接个数 </li>
-</ul>
-<p>服务端通过调用 accept 函数来接受客户端的 connect 请求：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">accept</span><span class="params">(<span class="keyword">int</span> sockfd, struct sockaddr *addr, <span class="keyword">socklen_t</span> *addrlen)</span></span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>sockfd：即 socket 描述字</li>
-<li>addr：服务器的 socket 地址 </li>
-<li>addrlen：地址的长度</li>
-</ul>
-<p>客户端通过调用 connect 函数来建立与 TCP 服务器的连接（服务器必须先调用 listen 开启监听）：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">connect</span><span class="params">(<span class="keyword">int</span> sockfd, <span class="keyword">const</span> struct sockaddr *addr, <span class="keyword">socklen_t</span> addrlen)</span></span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>sockfd：即 socket 描述字</li>
-<li>addr：服务器的 socket 地址 </li>
-<li>addrlen：地址的长度</li>
-</ul>
-<p>TCP 服务器端依次调用 socket、bind、listen 之后，就会监听指定的 socket 地址了</p>
-<p>TCP 客户端依次调用 socket、connect 之后就想 TCP 服务器发送了一个连接请求</p>
-<p>TCP 服务器监听到这个请求之后，就会调用 accept 函数取接收请求，这样连接就建立好了 </p>
-<ul>
-<li>如果 accpet 成功，那么其返回值是由内核自动生成的一个全新的描述字，代表与返回客户的 TCP 连接 </li>
-</ul>
-<h2 id="三次握手-四次释放"><a href="#三次握手-四次释放" class="headerlink" title="三次握手 四次释放"></a>三次握手 四次释放</h2><p>一，TCP建立连接要进行“三次握手”，即交换三个分组，大致流程如下：</p>
-<ul>
-<li>客户端向服务器发送一个 SYN J</li>
-<li>服务器向客户端响应一个 SYN K，并对 SYN J 进行确认 ACK J+1</li>
-<li>客户端再想服务器发一个确认 ACK K+1</li>
-</ul>
-<img src="/2022/08/18/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9ASocket%E7%AE%80%E8%BF%B0/1641475541309.png" class width="1641475541309"> 
-<ul>
-<li>当客户端调用 connect 时，触发了连接请求，向服务器发送了 SYN J 包，这时 connect 进入阻塞状态</li>
-<li>服务器监听到连接请求，即收到 SYN J 包，调用 accept 函数接收请求向客户端发送 SYN K ，ACK J+1，这时 accept 进入阻塞状态</li>
-<li>客户端收到服务器的 SYN K ，ACK J+1 之后，这时 connect 返回，并对 SYN K 进行确认，服务器收到 ACK K+1 时，accept 返回，至此三次握手完毕，连接建立</li>
-</ul>
-<p>二，socket中有四次握手释放连接的过程，流程如下：</p>
-<ul>
-<li>某个应用进程首先调用 close 主动关闭连接，这时 TCP 发送一个 FIN M</li>
-<li>另一端接收到 FIN M 之后，执行被动关闭，对这个 FIN 进行确认（它的接收也作为文件结束符 EOF 传递给应用进程，因为 FIN 的接收意味着应用进程在相应的连接上再也接收不到额外数据）</li>
-<li>一段时间之后，接收到文件结束符 EOF 的应用进程调用 close 关闭它的 socket，这导致它的 TCP 也发送一个 FIN N</li>
-<li>接收到这个 FIN 的源发送端 TCP 对它进行确认</li>
-</ul>
-<img src="/2022/08/18/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9ASocket%E7%AE%80%E8%BF%B0/1641475703919.png" class width="1641475703919"> 
-<ul>
-<li>这样每个方向上都有一个 FIN 和 ACK </li>
-</ul>
-<h2 id="本地进程间通信案例"><a href="#本地进程间通信案例" class="headerlink" title="本地进程间通信案例"></a>本地进程间通信案例</h2><p><strong>服务端</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span>  </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/types.h&gt;</span>  </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/socket.h&gt;</span>  </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/un.h&gt;</span>   </span></span><br><span class="line">   </span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> CAN_SERVICE <span class="meta-string">&quot;B&quot;</span> </span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">void</span>)</span>  </span></span><br><span class="line"><span class="function"></span>&#123;      </span><br><span class="line">    <span class="keyword">int</span> ret;     </span><br><span class="line">    <span class="keyword">int</span> len;  </span><br><span class="line">    <span class="keyword">int</span> accept_fd;</span><br><span class="line">    <span class="keyword">int</span> socket_fd; </span><br><span class="line">    <span class="keyword">static</span> <span class="keyword">char</span> recv_buf[<span class="number">1024</span>];</span><br><span class="line">    <span class="keyword">socklen_t</span> clt_addr_len; </span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">sockaddr_un</span> <span class="title">clt_addr</span>;</span>  </span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">sockaddr_un</span> <span class="title">srv_addr</span>;</span>  </span><br><span class="line"></span><br><span class="line">    socket_fd=socket(PF_UNIX,SOCK_STREAM,<span class="number">0</span>);  </span><br><span class="line">    <span class="keyword">if</span>(socket_fd&lt;<span class="number">0</span>)  </span><br><span class="line">    &#123;  </span><br><span class="line">        perror(<span class="string">&quot;cannot create communication socket&quot;</span>);  </span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;  </span><br><span class="line">    &#125;    </span><br><span class="line">          </span><br><span class="line">    <span class="comment">// 设置服务端参数(服务端的sockaddr必须和客户端的sockaddr一样)  </span></span><br><span class="line">    srv_addr.sun_family=AF_UNIX;  </span><br><span class="line">    <span class="built_in">strncpy</span>(srv_addr.sun_path,CAN_SERVICE,<span class="keyword">sizeof</span>(srv_addr.sun_path)<span class="number">-1</span>);  </span><br><span class="line">    unlink(CAN_SERVICE);  </span><br><span class="line"> </span><br><span class="line">    <span class="comment">// 绑定socket地址 </span></span><br><span class="line">    ret=bind(socket_fd,(struct sockaddr*)&amp;srv_addr,<span class="keyword">sizeof</span>(srv_addr));  </span><br><span class="line">    <span class="keyword">if</span>(ret==<span class="number">-1</span>)  </span><br><span class="line">    &#123;  </span><br><span class="line">        perror(<span class="string">&quot;cannot bind server socket&quot;</span>);  </span><br><span class="line">        close(socket_fd);  </span><br><span class="line">        unlink(CAN_SERVICE);  </span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;  </span><br><span class="line">    &#125;  </span><br><span class="line"> </span><br><span class="line">    <span class="comment">// 监听   </span></span><br><span class="line">    ret=listen(socket_fd,<span class="number">1</span>);  </span><br><span class="line">    <span class="keyword">if</span>(ret==<span class="number">-1</span>)  </span><br><span class="line">    &#123;  </span><br><span class="line">        perror(<span class="string">&quot;cannot listen the client connect request&quot;</span>);  </span><br><span class="line">        close(socket_fd);  </span><br><span class="line">        unlink(CAN_SERVICE);  </span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;  </span><br><span class="line">    &#125;  </span><br><span class="line"> </span><br><span class="line">    <span class="comment">// 接受connect请求 </span></span><br><span class="line">    len=<span class="keyword">sizeof</span>(clt_addr);  </span><br><span class="line">    accept_fd=accept(socket_fd,(struct sockaddr*)&amp;clt_addr,&amp;len);  </span><br><span class="line">    <span class="keyword">if</span>(accept_fd&lt;<span class="number">0</span>)  </span><br><span class="line">    &#123;  </span><br><span class="line">        perror(<span class="string">&quot;cannot accept client connect request&quot;</span>);  </span><br><span class="line">        close(socket_fd);  </span><br><span class="line">        unlink(CAN_SERVICE);  </span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;  </span><br><span class="line">    &#125;  </span><br><span class="line"> </span><br><span class="line">    <span class="comment">// 读取和写入  </span></span><br><span class="line">    <span class="built_in">memset</span>(recv_buf,<span class="number">0</span>,<span class="number">1024</span>);  </span><br><span class="line">    <span class="keyword">int</span> num=read(accept_fd,recv_buf,<span class="keyword">sizeof</span>(recv_buf));  </span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;Message from client (%d)) :%s\n&quot;</span>,num,recv_buf);    </span><br><span class="line">         </span><br><span class="line">    <span class="comment">// 关闭socket</span></span><br><span class="line">    close(accept_fd);  </span><br><span class="line">    close(socket_fd);  </span><br><span class="line">    unlink(CAN_SERVICE);  </span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;  </span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><strong>客户端</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span>  </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/types.h&gt;</span>  </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/socket.h&gt;</span>  </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/un.h&gt;</span>  </span></span><br><span class="line"> </span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> CAN_SERVICE <span class="meta-string">&quot;B&quot;</span> </span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">void</span>)</span>  </span></span><br><span class="line"><span class="function"></span>&#123; </span><br><span class="line">    <span class="keyword">int</span> ret;  </span><br><span class="line">    <span class="keyword">int</span> socket_fd;   </span><br><span class="line">    <span class="keyword">char</span> snd_buf[<span class="number">1024</span>];   </span><br><span class="line">    <span class="keyword">static</span> <span class="class"><span class="keyword">struct</span> <span class="title">sockaddr_un</span> <span class="title">srv_addr</span>;</span>  </span><br><span class="line">    </span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;%d\n&quot;</span>,PF_UNIX);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;%d\n&quot;</span>,SOCK_STREAM);</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 创建socket </span></span><br><span class="line">    socket_fd=socket(PF_UNIX,SOCK_STREAM,<span class="number">0</span>);  </span><br><span class="line">    <span class="keyword">if</span>(socket_fd&lt;<span class="number">0</span>)  </span><br><span class="line">    &#123;  </span><br><span class="line">        perror(<span class="string">&quot;cannot create communication socket&quot;</span>);  </span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;  </span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 设置客户端参数(客户端的sockaddr必须和服务端的sockaddr一样) </span></span><br><span class="line">    srv_addr.sun_family=AF_UNIX;  </span><br><span class="line">    <span class="built_in">strcpy</span>(srv_addr.sun_path,CAN_SERVICE);  </span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 连接到服务端</span></span><br><span class="line">    ret=connect(socket_fd,(struct sockaddr*)&amp;srv_addr,<span class="keyword">sizeof</span>(srv_addr)); </span><br><span class="line">    <span class="keyword">if</span>(ret==<span class="number">-1</span>)  </span><br><span class="line">    &#123;  </span><br><span class="line">        perror(<span class="string">&quot;cannot connect to the server&quot;</span>);  </span><br><span class="line">        close(socket_fd);  </span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;  </span><br><span class="line">    &#125;  </span><br><span class="line">    <span class="built_in">memset</span>(snd_buf,<span class="number">0</span>,<span class="number">1024</span>);  </span><br><span class="line">    <span class="built_in">strcpy</span>(snd_buf,<span class="string">&quot;message from client&quot;</span>);  </span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 读取和写入    </span></span><br><span class="line">    write(socket_fd,snd_buf,<span class="keyword">sizeof</span>(snd_buf));  </span><br><span class="line">    close(socket_fd);  </span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;  </span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>当 bind 执行以后，当前目录会出现一个名为 “B”(CAN_SERVICE) 的文件</li>
-<li>当 unlink(CAN_SERVICE) 执行以后，文件 “B” 消失</li>
-<li>如果不及时调用 unlink 的话，会出现 <code>Address already in use</code> 报错</li>
-</ul>
-<p>参考：<a target="_blank" rel="noopener" href="https://zhuanlan.zhihu.com/p/100151937">超详细的Socket通信原理和实例讲解 - 知乎</a> </p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -4030,7 +3974,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">224</span>
+          <span class="site-state-item-count">225</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -4043,7 +3987,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">135</span>
+        <span class="site-state-item-count">136</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -4079,12 +4023,12 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-area"></i>
     </span>
-    <span title="Symbols count total">2.9m</span>
+    <span title="Symbols count total">3m</span>
     <span class="post-meta-divider">|</span>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">44:36</span>
+    <span title="Reading time total">45:03</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
