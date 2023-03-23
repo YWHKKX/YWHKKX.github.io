@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="第一个任务这部分的实验要完成将 TAC 的指令序列转换成目标代码，本文中在这里对实现做了一些限制，假设数据类型只包含整数类型，不包含如浮点数、数组、结构和指针等其它数据类型（也不包括全局变量） 目标语言为汇编语言，这样做的目的就是尽可能简单地实现目标代码的生成并能运行程序观察运行结果，完成了一个可运行的编译程序 MIPS32 架构 MIPS32 的架构是一种基于固定长度的定期编码指令集，并采用导入">
+<meta property="og:type" content="article">
+<meta property="og:title" content="编译原理-Lab4">
+<meta property="og:url" content="http://example.com/2023/03/23/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86-Lab4/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="第一个任务这部分的实验要完成将 TAC 的指令序列转换成目标代码，本文中在这里对实现做了一些限制，假设数据类型只包含整数类型，不包含如浮点数、数组、结构和指针等其它数据类型（也不包括全局变量） 目标语言为汇编语言，这样做的目的就是尽可能简单地实现目标代码的生成并能运行程序观察运行结果，完成了一个可运行的编译程序 MIPS32 架构 MIPS32 的架构是一种基于固定长度的定期编码指令集，并采用导入">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2023-03-23T11:27:58.000Z">
+<meta property="article:modified_time" content="2023-03-23T11:29:30.289Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="miscellaneous">
+<meta property="article:tag" content="labs">
+<meta property="article:tag" content="Compilers Principles">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2023/03/23/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86-Lab4/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>编译原理-Lab4 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/03/23/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86-Lab4/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          编译原理-Lab4
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-03-23 19:27:58 / Modified: 19:29:30" itemprop="dateCreated datePublished" datetime="2023-03-23T19:27:58+08:00">2023-03-23</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>15k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>13 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="第一个任务"><a href="#第一个任务" class="headerlink" title="第一个任务"></a>第一个任务</h2><p>这部分的实验要完成将 TAC 的指令序列转换成目标代码，本文中在这里对实现做了一些限制，假设数据类型只包含整数类型，不包含如浮点数、数组、结构和指针等其它数据类型（也不包括全局变量）</p>
+<p>目标语言为汇编语言，这样做的目的就是尽可能简单地实现目标代码的生成并能运行程序观察运行结果，完成了一个可运行的编译程序</p>
+<p><strong>MIPS32 架构</strong></p>
+<p>MIPS32 的架构是一种基于固定长度的定期编码指令集，并采用导入/存储（load/store）数据模型</p>
+<p>目标语言可选定 MIPS32 指令序列，可以在 SPIM Simulator 上运行</p>
+<p>MIPS32 体系结构有 : </p>
+<ul>
+<li>32个通用寄存器</li>
+<li>2个特殊寄存器（整数乘除法寄存器）</li>
+<li>32个浮点寄存器</li>
+<li>PC：程序计数器（在 MIPS32 下，PC 不是一个通用寄存器）</li>
+</ul>
+<p>本实验只使用 <code>t1-t9 s0-s7</code>，并且不区分功能</p>
+<p>TAC 指令和 MIPS32 指令的对应关系如下表所示：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th><strong>中间代码</strong></th>
+<th><strong>MIPS32</strong> <strong>指令</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LABEL x</td>
+<td>x:</td>
+</tr>
+<tr>
+<td>x :=#k</td>
+<td>li reg(x),k</td>
+</tr>
+<tr>
+<td>x := y</td>
+<td>move reg(x), reg(y)</td>
+</tr>
+<tr>
+<td>x := y + z</td>
+<td>add reg(x), reg(y) , reg(z)</td>
+</tr>
+<tr>
+<td>x := y - z</td>
+<td>sub reg(x), reg(y) , reg(z)</td>
+</tr>
+<tr>
+<td>x := y * z</td>
+<td>mul reg(x), reg(y) , reg(z)</td>
+</tr>
+<tr>
+<td>x := y / z</td>
+<td>div reg(y) , reg(z)<br>mflo reg(x)</td>
+</tr>
+<tr>
+<td>GOTO x</td>
+<td>j x</td>
+</tr>
+<tr>
+<td>RETURN x</td>
+<td>move $v0, reg(x)<br>jr $ra</td>
+</tr>
+<tr>
+<td>IF x==y GOTO z</td>
+<td>beq reg(x),reg(y),z</td>
+</tr>
+<tr>
+<td>IF x!=y GOTO z</td>
+<td>bne reg(x),reg(y),z</td>
+</tr>
+<tr>
+<td>IF x&gt;y GOTO z</td>
+<td>bgt reg(x),reg(y),z</td>
+</tr>
+<tr>
+<td>IF x&gt;=y GOTO z</td>
+<td>bge reg(x),reg(y),z</td>
+</tr>
+<tr>
+<td>IF x&lt;y GOTO z</td>
+<td>ble reg(x),reg(y),z</td>
+</tr>
+<tr>
+<td>IF x&lt;=y GOTO z</td>
+<td>blt reg(x),reg(y),z</td>
+</tr>
+<tr>
+<td>X:=CALL f</td>
+<td>jal f<br>move reg(x),$v0</td>
+</tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li>其中 reg(x) 表示变量 x 所分配的寄存器</li>
+<li>寄存器 v0 用来存放子程序的返回值 </li>
+</ul>
+<p><strong>安装 MIPS 编译器和模拟器</strong></p>
+<p>安装编译器和依赖：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">sudo apt-get install emdebian-archive-keyring</span><br><span class="line">sudo apt-get install linux-libc-dev-mips-cross libc6-mips-cross libc6-dev-mips-cross binutils-mips-linux-gnu gcc-mips-linux-gnu g++-mips-linux-gnu</span><br></pre></td></tr></table></figure>
+<p>检测是否安装成功：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">mips-linux-gnu-gcc -dumpmachine</span><br></pre></td></tr></table></figure>
+<p>安装 mips 虚拟机：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo apt-get install qemu-system-mips </span><br></pre></td></tr></table></figure>
+<p>下载内核映像和初始化文件：（不推荐）</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">wget http://ftp.debian.org/debian/dists/stable/main/installer-mipsel/current/images/malta/netboot/initrd.gz</span><br><span class="line">wget http://ftp.debian.org/debian/dists/stable/main/installer-mipsel/current/images/malta/netboot/vmlinuz-5.10.0-20-4kc-malta</span><br></pre></td></tr></table></figure>
+<p>创建虚拟磁盘：（不推荐）</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">qemu-img create -f qcow2 hda.img 2G</span><br></pre></td></tr></table></figure>
+<p>开启虚拟机：（不推荐）</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">qemu-system-mips -M malta \</span><br><span class="line">  -m 512 -hda hda.img \</span><br><span class="line">  -kernel vmlinuz-5.10.0-20-4kc-malta \</span><br><span class="line">  -initrd initrd.gz \</span><br><span class="line">  -append &quot;console=ttyS0 nokaslr&quot; \</span><br><span class="line">  -nographic</span><br></pre></td></tr></table></figure>
+<ul>
+<li>上面这种方法有点 BUG，目前没有启动成功</li>
+</ul>
+<p>下载内核映像和初始化文件：（推荐）</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">wget http://people.debian.org/\~aurel32/qemu/mips/debian_squeeze_mips_standard.qcow2</span><br><span class="line">wget http://people.debian.org/~aurel32/qemu/mips/vmlinux-2.6.32-5-4kc-malta</span><br></pre></td></tr></table></figure>
+<p>开启虚拟机：（推荐）</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">qemu-system-mips -M malta -kernel vmlinux-2.6.32-5-4kc-malta -hda debian_squeeze_mips_standard.qcow2 -append &quot;root=/dev/sda1 console=tty0&quot;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>user：user</li>
+<li>password：user</li>
+</ul>
+<p>安装 libguestfs：用于挂载 qcow2 磁盘镜像</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo apt-get install libguestfs-tools</span><br></pre></td></tr></table></figure>
+<p>挂载/卸载命令：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">sudo guestmount -a debian_squeeze_mips_standard.qcow2 -m /dev/sda1 rootfs</span><br><span class="line">sudo cp $1 rootfs/home/user</span><br><span class="line">sudo chmod 777 rootfs/home/user/$1</span><br><span class="line">sudo guestunmount rootfs</span><br></pre></td></tr></table></figure>
+<p><strong>寄存器分配算法</strong></p>
+<p>在目标生成阶段，一个很重要的工作就是寄存器的分配：</p>
+<ul>
+<li>最为简单的就是朴素的寄存器分配算法，效率最低，也最容易实现 </li>
+<li>对于一个基本块采用的局部寄存器分配算法，实现起来相对不是太难，且效率上有一定提升</li>
+</ul>
+<p>本实验采用朴素的寄存器分配算法：</p>
+<ul>
+<li>将所有的变量或临时变量都放入内存中 </li>
+<li>每翻译一条中间代码之前都需要吧要用到的变量先加载到寄存器中，得到该代码的计算结果之后又需要将结果写回内存</li>
+</ul>
+<p>可分配的寄存集合：（不区分功能）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">string</span> regs[] = &#123;<span class="string">&quot;t1&quot;</span>,<span class="string">&quot;t2&quot;</span>,<span class="string">&quot;t3&quot;</span>,<span class="string">&quot;t4&quot;</span>,<span class="string">&quot;t5&quot;</span>,<span class="string">&quot;t6&quot;</span>,<span class="string">&quot;t7&quot;</span>,<span class="string">&quot;t8&quot;</span>,<span class="string">&quot;t9&quot;</span>,<span class="string">&quot;s0&quot;</span>,<span class="string">&quot;s1&quot;</span>,<span class="string">&quot;s2&quot;</span>,<span class="string">&quot;s3&quot;</span>,<span class="string">&quot;s4&quot;</span>,<span class="string">&quot;s5&quot;</span>,<span class="string">&quot;s6&quot;</span>,<span class="string">&quot;s7&quot;</span>&#125;;</span><br></pre></td></tr></table></figure>
+<p>核心算法如下：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br></pre></td><td class="code"><pre><span class="line">vector&lt;string&gt; variables; <span class="comment">/* 变量数组 */</span></span><br><span class="line">map&lt;string,string&gt; table; <span class="comment">/* 记录已经分配寄存器的变量&#123;key:变量,value:寄存器&#125; */</span></span><br><span class="line">map&lt;string,<span class="keyword">int</span>&gt; reg_ok;</span><br><span class="line"></span><br><span class="line"><span class="function">string <span class="title">Get_R</span><span class="params">(<span class="keyword">const</span> string&amp; temp_str)</span></span>&#123; <span class="comment">/* 引用是原变量的一个别名,跟原来的变量实质上是同一个东西 */</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">auto</span> it = variables.<span class="built_in">begin</span>();it!=variables.<span class="built_in">end</span>();++it)&#123; <span class="comment">/* it为迭代器 */</span></span><br><span class="line">        <span class="keyword">if</span> (*it == temp_str)&#123; <span class="comment">/* 去除重复 */</span></span><br><span class="line">            it = variables.<span class="built_in">erase</span>(it);</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125; </span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (table.<span class="built_in">find</span>(temp_str) != table.<span class="built_in">end</span>())&#123;</span><br><span class="line">        <span class="comment">/* 如果已经存在寄存器分配,那么直接返回寄存器 */</span></span><br><span class="line">        <span class="keyword">return</span> <span class="string">&quot;$&quot;</span>+table[temp_str];</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span>&#123; <span class="comment">/* 目前传入的变量只有两种类型:temp临时变量,var函数形参 */</span></span><br><span class="line">        vector&lt;string&gt; keys;</span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">auto</span> &amp;it:table) <span class="comment">/* 遍历table的key(已经分配寄存器) */</span></span><br><span class="line">            <span class="comment">/* 类似于python的&quot;for i in data&quot; */</span></span><br><span class="line">            keys.<span class="built_in">emplace_back</span>(it.first); <span class="comment">/* 直接在vector尾部创建这个元素 */</span></span><br><span class="line"></span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">auto</span> &amp;key:keys)&#123; <span class="comment">/* 当遇到未分配寄存器的变量时,清空之前所有分配的临时变量的映射关系(临时变量只使用一次) */</span></span><br><span class="line">            <span class="keyword">if</span> (key.<span class="built_in">find</span>(<span class="string">&quot;temp&quot;</span>)!=string::npos &amp;&amp; </span><br><span class="line">                <span class="built_in">find</span>(variables.<span class="built_in">begin</span>(),variables.<span class="built_in">end</span>(),key) == variables.<span class="built_in">end</span>())&#123;</span><br><span class="line">                reg_ok[table[key]] = <span class="number">1</span>;</span><br><span class="line">                table.<span class="built_in">erase</span>(key);</span><br><span class="line">            &#125;</span><br><span class="line">        &#125; </span><br><span class="line"></span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">const</span> <span class="keyword">auto</span> &amp; reg : regs)&#123; <span class="comment">/* 对于所有寄存器 */</span></span><br><span class="line">            <span class="keyword">if</span>(reg_ok[reg] == <span class="number">1</span>)&#123; <span class="comment">/* 如果寄存器可用 */</span></span><br><span class="line">                table[temp_str] = reg; <span class="comment">/* 将可用寄存器分配给该变量,映射关系存到table中 */</span></span><br><span class="line">                reg_ok[reg] = <span class="number">0</span>; <span class="comment">/* 寄存器reg设置为已用 */</span></span><br><span class="line">                <span class="keyword">return</span> <span class="string">&quot;$&quot;</span>+reg;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125; </span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>朴素寄存器分配的翻译</strong> </p>
+<p>翻译的操作如下表：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th><strong>中间代码</strong></th>
+<th style="text-align:left"><strong>MIPS32</strong> <strong>指令</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>x :=#k</td>
+<td style="text-align:left">li $t3 ,k<br>sw $t3, x的偏移量($sp)</td>
+</tr>
+<tr>
+<td>x := y</td>
+<td style="text-align:left">lw $t1, y的偏移量($sp)<br>move $t3 , $t1<br>sw $t3, x的偏移量($sp)</td>
+</tr>
+<tr>
+<td>x := y + z</td>
+<td style="text-align:left">lw $t1, y的偏移量($sp)<br>lw $t2, z的偏移量($sp)<br>add $t3 , $t1,$t2<br>sw $t3, x的偏移量($sp)</td>
+</tr>
+<tr>
+<td>x := y - z</td>
+<td style="text-align:left">l w $t1, y的偏移量($sp)<br>l w $t2, z的偏移量($sp)<br>sub $t3 , $t1,$t2<br>sw $t3, x的偏移量($sp)</td>
+</tr>
+<tr>
+<td>x := y * z</td>
+<td style="text-align:left">l w $t1, y的偏移量($sp)<br>l w $t2, z的偏移量($sp)<br>mul $t3 , $t1,$t2<br>sw $t3, x的偏移量($sp)</td>
+</tr>
+<tr>
+<td>x := y / z</td>
+<td style="text-align:left">l w $t1, y的偏移量($sp)<br>l w $t2, z的偏移量($sp)<br>mul $t3 , $t1,$t2<br>div $t1,$t2<br>mflo $t3<br>sw $t3, x的偏移量($sp)</td>
+</tr>
+<tr>
+<td>RETURN x</td>
+<td style="text-align:left">move $v0, x的偏移量($sp)jr $ra</td>
+</tr>
+<tr>
+<td>IF x==y GOTO z</td>
+<td style="text-align:left">l w $t1, x的偏移量($sp)<br>l w $t2, y的偏移量($sp)<br>beq $t1,$t2 ,z</td>
+</tr>
+<tr>
+<td>IF x!=y GOTO z</td>
+<td style="text-align:left">l w $t1, x的偏移量($sp)<br>l w $t2, y的偏移量($sp)<br>bne $t1,$t2 ,z</td>
+</tr>
+<tr>
+<td>IF x&gt;y GOTO z</td>
+<td style="text-align:left">l w $t1, x的偏移量($sp)<br>l w $t2, y的偏移量($sp)<br>bgt $t1,$t2 ,z</td>
+</tr>
+<tr>
+<td>IF x&gt;=y GOTO z</td>
+<td style="text-align:left">l w $t1, x的偏移量($sp)<br>l w $t2, y的偏移量($sp)<br>bge $t1,$t2 ,z</td>
+</tr>
+<tr>
+<td>IF x&lt;y GOTO z</td>
+<td style="text-align:left">l w $t1, x的偏移量($sp)<br>l w $t2, y的偏移量($sp)<br>ble $t1,$t2 ,z</td>
+</tr>
+<tr>
+<td>IF x&lt;=y GOTO z</td>
+<td style="text-align:left">l w $t1, x的偏移量($sp)<br>l w $t2, y的偏移量($sp)<br>blt $t1,$t2 ,z</td>
+</tr>
+<tr>
+<td>X:=CALL f</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>对于函数调用 <code>X:=CALL f</code>，需要完成开辟活动记录的空间、参数的传递和保存返回地址等，函数调用返回后，需要恢复返回地址，读取函数返回值以及释放活动记录空间（活动记录的空间布局没有一个统一的标准，可根据自己的理解保存好数据，并能正确使用即可）</p>
+<p>通常，使用4个寄存器完成参数的传递，多余4个的参数使用活动记录空间，这里做了简单处理，所有参数都使用活动记录空间，具体步骤：</p>
+<ul>
+<li>首先根据保存在函数调用指令中的 offset，找到符号表中的函数定义点，获取函数的参数个数i，这样就可得到在 <code>X:=CALL f</code> 之前的 i 个 ARG 形式的中间代码，获得 i 个实参值所存放的单元，取出后送到形式参数的单元中</li>
+<li>根据符号表记录的活动记录大小，开辟活动记录空间和保存返回地址</li>
+<li>使用 <code>jal f</code> 转到函数f处</li>
+<li>释放活动记录空间和恢复返回地址</li>
+<li>使用 <code>sw $v0 , x</code> 的偏移量 <code>($sp)</code> 获取返回值送到 X 的存储单元中</li>
+</ul>
+<p><strong>TAC 转化为 MIPS32</strong></p>
+<p>这就是本实验最复杂的步骤了，首先需要一个函数来读取记录中间变量的文件：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">string <span class="title">Load_Inter</span><span class="params">(<span class="keyword">const</span> string&amp; filename)</span></span>&#123;</span><br><span class="line">    string lines;</span><br><span class="line">    string temp_line;</span><br><span class="line">    <span class="function">ifstream <span class="title">in</span><span class="params">(filename)</span></span>;</span><br><span class="line">    <span class="keyword">if</span>(in)&#123;</span><br><span class="line">        <span class="keyword">while</span> (<span class="built_in">getline</span>(in,temp_line))&#123;</span><br><span class="line">            <span class="keyword">if</span> (temp_line == <span class="string">&quot; &quot;</span>)</span><br><span class="line">                <span class="keyword">continue</span>;</span><br><span class="line">            lines.<span class="built_in">append</span>(temp_line);</span><br><span class="line">            lines.<span class="built_in">append</span>(<span class="string">&quot;\n&quot;</span>);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    in.<span class="built_in">close</span>();</span><br><span class="line">    <span class="keyword">return</span> lines;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>另一个函数来记录所有变量到 <code>variables</code> 中：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">vector&lt;string&gt; variables; <span class="comment">/* 变量数组 */</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">Load_Var</span><span class="params">(string Inter)</span></span>&#123; <span class="comment">/* 传入参数为中间代码字符串 */</span></span><br><span class="line">    <span class="function">regex <span class="title">temp_re</span><span class="params">(<span class="string">&quot;temp\\d+&quot;</span>)</span></span>; <span class="comment">/* 正则表达式&#123;temp+任意数字&#125; */</span></span><br><span class="line">    <span class="function">regex <span class="title">var_re</span><span class="params">(<span class="string">&quot;var\\d+&quot;</span>)</span></span>;</span><br><span class="line">    smatch result;</span><br><span class="line">    string temp_line;</span><br><span class="line">    </span><br><span class="line">    string::const_iterator iter = Inter.<span class="built_in">begin</span>();</span><br><span class="line">    string::const_iterator iterEnd = Inter.<span class="built_in">end</span>();</span><br><span class="line">    <span class="keyword">while</span> (<span class="built_in">regex_search</span>(iter,iterEnd,result,temp_re))&#123; <span class="comment">/* 匹配regex规则 */</span></span><br><span class="line">        temp_line = result[<span class="number">0</span>];</span><br><span class="line">        variables.<span class="built_in">emplace_back</span>(temp_line); <span class="comment">/* 记录到变量数组中 */</span></span><br><span class="line">        iter = result[<span class="number">0</span>].second; <span class="comment">/* 更新搜索起始位置,搜索剩下的字符串 */</span></span><br><span class="line">    &#125;</span><br><span class="line">    iter = Inter.<span class="built_in">begin</span>();</span><br><span class="line">    iterEnd = Inter.<span class="built_in">end</span>();</span><br><span class="line">    <span class="keyword">while</span> (<span class="built_in">regex_search</span>(iter,iterEnd,result,var_re))&#123;</span><br><span class="line">        temp_line = result[<span class="number">0</span>];</span><br><span class="line">        variables.<span class="built_in">emplace_back</span>(temp_line);</span><br><span class="line">        iter = result[<span class="number">0</span>].second;</span><br><span class="line">    &#125; </span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>所有临时变量均分配在寄存器中</li>
+</ul>
+<p>最后需要一个函数来逐行进行翻译，我们把这个函数拆分为多段来分析：</p>
+<p>将每行 string 按空格存成数组：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">vector&lt;string&gt; line;</span><br><span class="line">string temp_res;</span><br><span class="line"><span class="function">stringstream <span class="title">input</span><span class="params">(temp_str)</span></span>; </span><br><span class="line"><span class="keyword">while</span> (input&gt;&gt;temp_res) <span class="comment">/* 可以理解为队列,只能从头节点取出值,新数据接在尾节点 */</span></span><br><span class="line">    line.<span class="built_in">emplace_back</span>(temp_res); </span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span>(line.<span class="built_in">size</span>()==<span class="number">0</span>)&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="string">&quot; &quot;</span>; <span class="comment">/* 规避&#x27;\n&#x27;的影响 */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>stringstream</code> 类相当于一个管道（队列），可以用它来分割字符串</li>
+</ul>
+<p>处理简单指令：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">size_t</span> func_argn;</span><br><span class="line"><span class="keyword">size_t</span> func_param;</span><br><span class="line"></span><br><span class="line">string temp_return;</span><br><span class="line"><span class="keyword">if</span>(line[<span class="number">0</span>] == <span class="string">&quot;LABEL&quot;</span>)&#123; <span class="comment">/* 标记跳转 */</span></span><br><span class="line">    <span class="keyword">return</span> line[<span class="number">1</span>]+<span class="string">&quot;:&quot;</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">if</span> (line[<span class="number">0</span>] == <span class="string">&quot;FUNCTION&quot;</span>)&#123; <span class="comment">/* 标记函数 */</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">const</span> <span class="keyword">auto</span> &amp; reg : regs) <span class="comment">/* 重置reg_ok和table */</span></span><br><span class="line">        reg_ok[reg] = <span class="number">1</span>;</span><br><span class="line">    table.<span class="built_in">clear</span>();</span><br><span class="line">    func_param = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">return</span> line[<span class="number">1</span>]+<span class="string">&quot;:&quot;</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">if</span> (line[<span class="number">0</span>] == <span class="string">&quot;RETURN&quot;</span>)&#123; <span class="comment">/* 标记返回 */</span></span><br><span class="line">    func_argn = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">return</span> <span class="string">&quot;\tmove $v0,&quot;</span>+<span class="built_in">Get_R</span>(line[<span class="number">1</span>])+<span class="string">&quot;\n\tjr $ra&quot;</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">if</span> (line[<span class="number">0</span>] == <span class="string">&quot;GOTO&quot;</span>)&#123; <span class="comment">/* 执行跳转 */</span></span><br><span class="line">    <span class="keyword">return</span> <span class="string">&quot;\tj &quot;</span>+line[<span class="number">1</span>];</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>中间代码转化为 MIPS 的过程以函数为单位，读取到一个新的函数标签时，应该重置 <code>reg_ok</code> 和 <code>table</code></li>
+<li>当一个函数调用其子函数时，程序会将寄存器信息保存在栈中，我们不用担心覆盖寄存器带来的影响</li>
+</ul>
+<p>处理函数参数：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">string params[] = &#123;<span class="string">&quot;a0&quot;</span>,<span class="string">&quot;a1&quot;</span>,<span class="string">&quot;a2&quot;</span>,<span class="string">&quot;a3&quot;</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> (line[<span class="number">0</span>] == <span class="string">&quot;ARG&quot;</span>)&#123; <span class="comment">/* 为函数参数分配寄存器 */</span></span><br><span class="line">    func_argn++;</span><br><span class="line">    <span class="keyword">return</span> <span class="string">&quot;\tmove $&quot;</span>+params[func_argn<span class="number">-1</span>]+<span class="string">&quot;,&quot;</span>+<span class="built_in">Get_R</span>(line.<span class="built_in">back</span>());</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">if</span> (line[<span class="number">0</span>] == <span class="string">&quot;PARAM&quot;</span>)&#123; <span class="comment">/* 声明函数参数的寄存器 */</span></span><br><span class="line">    func_param++;</span><br><span class="line">    table[line.<span class="built_in">back</span>()] = params[func_param<span class="number">-1</span>]; <span class="comment">/* 永久记录对应的&#123;var,params&#125; */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>函数传参使用 <code>a0-a3</code>（规定函数参数不超过4个）</li>
+<li>全局变量 <code>func_argn</code> 和 <code>func_param</code> 用于记录当前参数的标号</li>
+</ul>
+<p>处理函数调用：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (line[<span class="number">0</span>] == <span class="string">&quot;CALL&quot;</span>)&#123; <span class="comment">/* 函数调用 */</span></span><br><span class="line">    func_argn = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">string</span>(<span class="string">&quot;&quot;</span>)+<span class="string">&quot;\taddi $sp,$sp,-60\n\tsw $ra,0($sp)\n\tsw $t0,4($sp)\n\tsw $t1,8($sp)\n\tsw $t2,12($sp)\n\tsw $t3,16($sp)\n&quot;</span>+ \</span><br><span class="line">        <span class="string">&quot;\tsw $t4,20($sp)\n\tsw $t5,24($sp)\n\tsw $t6,28($sp)\n\tsw $t7,32($sp)\n\tsw $t8,36($sp)\n\tsw $t9,40($sp)\n&quot;</span>+ \</span><br><span class="line">        <span class="string">&quot;\tsw $a0,44($sp)\n\tsw $a1,48($sp)\n\tsw $a3,52($sp)\n\tsw $a4,56($sp)\n&quot;</span>+ \</span><br><span class="line">        <span class="string">&quot;\tjal &quot;</span>+line.<span class="built_in">back</span>()+<span class="string">&quot;\n&quot;</span>+ \</span><br><span class="line">        <span class="string">&quot;\tlw $ra,0($sp)\n\tlw $t0,4($sp)\n\tlw $t1,8($sp)\n\tlw $t2,12($sp)\n\tlw $t3,16($sp)\n&quot;</span>+ \</span><br><span class="line">        <span class="string">&quot;\tlw $t4,20($sp)\n\tlw $t5,24($sp)\n\tlw $t6,28($sp)\n\tlw $t7,32($sp)\n\tlw $t8,36($sp)\n\tlw $t9,40($sp)\n&quot;</span>+ \</span><br><span class="line">        <span class="string">&quot;\tlw $a0,44($sp)\n\tlw $a1,48($sp)\n\tlw $a3,52($sp)\n\tlw $a4,56($sp)\n&quot;</span>+ \</span><br><span class="line">        <span class="string">&quot;\taddi $sp,$sp,60&quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>调用前保存寄存器，调用后恢复寄存器（<code>t1-t9 a0-a3</code>）</li>
+</ul>
+<p>IF 判断语句：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (line[<span class="number">0</span>] == <span class="string">&quot;IF&quot;</span>) &#123;</span><br><span class="line">    <span class="keyword">if</span> (line[<span class="number">2</span>] == <span class="string">&quot;==&quot;</span>)&#123;</span><br><span class="line">        temp_return = <span class="string">&quot;\tbeq &quot;</span>;</span><br><span class="line">        temp_return += Get_R(line[<span class="number">1</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">        temp_return += Get_R(line[<span class="number">3</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">        temp_return += line.back();</span><br><span class="line">        <span class="keyword">return</span> temp_return;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (line[<span class="number">2</span>] == <span class="string">&quot;!=&quot;</span>)&#123;</span><br><span class="line">        temp_return = <span class="string">&quot;\tbne &quot;</span>;</span><br><span class="line">        temp_return += Get_R(line[<span class="number">1</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">        temp_return += Get_R(line[<span class="number">3</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">        temp_return += line.back();</span><br><span class="line">        <span class="keyword">return</span> temp_return;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (line[<span class="number">2</span>] == <span class="string">&quot;&gt;&quot;</span>)&#123;</span><br><span class="line">        temp_return = <span class="string">&quot;\tbgt &quot;</span>;</span><br><span class="line">        temp_return += Get_R(line[<span class="number">1</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">        temp_return += Get_R(line[<span class="number">3</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">        temp_return += line.back();</span><br><span class="line">        <span class="keyword">return</span> temp_return;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (line[<span class="number">2</span>] == <span class="string">&quot;&lt;&quot;</span>)&#123;</span><br><span class="line">        temp_return = <span class="string">&quot;\tblt &quot;</span>;</span><br><span class="line">        temp_return += Get_R(line[<span class="number">1</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">        temp_return += Get_R(line[<span class="number">3</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">        temp_return += line.back();</span><br><span class="line">        <span class="keyword">return</span> temp_return;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (line[<span class="number">2</span>] == <span class="string">&quot;&gt;=&quot;</span>)&#123;</span><br><span class="line">        temp_return = <span class="string">&quot;\tbge &quot;</span>;</span><br><span class="line">        temp_return += Get_R(line[<span class="number">1</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">        temp_return += Get_R(line[<span class="number">3</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">        temp_return += line.back();</span><br><span class="line">        <span class="keyword">return</span> temp_return;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (line[<span class="number">2</span>] == <span class="string">&quot;&lt;=&quot;</span>)&#123;</span><br><span class="line">        temp_return = <span class="string">&quot;\tble &quot;</span>;</span><br><span class="line">        temp_return += Get_R(line[<span class="number">1</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">        temp_return += Get_R(line[<span class="number">3</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">        temp_return += line.back();</span><br><span class="line">        <span class="keyword">return</span> temp_return;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>根据不同的条件，使用对应的汇编代码即可</li>
+</ul>
+<p>赋值语句：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (line[<span class="number">1</span>] == <span class="string">&quot;:=&quot;</span>) &#123;</span><br><span class="line">    <span class="keyword">if</span> (line.size() == <span class="number">3</span>)&#123; <span class="comment">/* 对应简单赋值语句 */</span></span><br><span class="line">        <span class="keyword">if</span> (line[<span class="number">2</span>][<span class="number">0</span>] == <span class="string">&#x27;#&#x27;</span>)&#123; <span class="comment">// 立即数</span></span><br><span class="line">            <span class="keyword">return</span> <span class="string">&quot;\tli &quot;</span> + Get_R(line[<span class="number">0</span>]) + <span class="string">&quot;,&quot;</span>+line.back().substr(<span class="number">1</span>);</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span>&#123;</span><br><span class="line">            temp_return = <span class="string">&quot;\tmove &quot;</span>; <span class="comment">// 寄存器</span></span><br><span class="line">            temp_return += Get_R(line[<span class="number">0</span>])+<span class="string">&#x27;,&#x27;</span>;</span><br><span class="line">            temp_return += Get_R(line[<span class="number">2</span>]);</span><br><span class="line">            <span class="keyword">return</span> temp_return;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (line.size() == <span class="number">5</span>)&#123; <span class="comment">/* 对应带有运算的赋值语句 */</span></span><br><span class="line">        <span class="keyword">if</span> (line[<span class="number">3</span>] == <span class="string">&quot;+&quot;</span>)&#123;</span><br><span class="line">            <span class="keyword">if</span> (line[<span class="number">2</span>][<span class="number">0</span>] == <span class="string">&#x27;#&#x27;</span>)&#123; <span class="comment">// 立即数</span></span><br><span class="line">                temp_return = <span class="string">&quot;\taddi &quot;</span>;</span><br><span class="line">                temp_return += Get_R(line[<span class="number">0</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">                temp_return += Get_R(line[<span class="number">2</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">                temp_return += line.back().substr(<span class="number">1</span>);</span><br><span class="line">                <span class="keyword">return</span> temp_return;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">else</span>&#123;</span><br><span class="line">                temp_return = <span class="string">&quot;\tadd &quot;</span>; <span class="comment">// 寄存器</span></span><br><span class="line">                temp_return += Get_R(line[<span class="number">0</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">                temp_return += Get_R(line[<span class="number">2</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">                temp_return += Get_R(line.back());</span><br><span class="line">                <span class="keyword">return</span> temp_return;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> (line[<span class="number">3</span>] == <span class="string">&quot;-&quot;</span>)&#123;</span><br><span class="line">            <span class="keyword">if</span> (line[<span class="number">2</span>][<span class="number">0</span>] == <span class="string">&#x27;#&#x27;</span>)&#123; <span class="comment">// sub不支持使用立即数</span></span><br><span class="line">                temp_return = <span class="string">&quot;&quot;</span>;</span><br><span class="line">                <span class="keyword">return</span> temp_return;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">else</span>&#123;</span><br><span class="line">                temp_return = <span class="string">&quot;\tsub &quot;</span>; <span class="comment">// 寄存器</span></span><br><span class="line">                temp_return += Get_R(line[<span class="number">0</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">                temp_return += Get_R(line[<span class="number">2</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">                temp_return += Get_R(line.back());</span><br><span class="line">                <span class="keyword">return</span> temp_return;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> (line[<span class="number">3</span>] == <span class="string">&quot;*&quot;</span>)&#123;</span><br><span class="line">            temp_return = <span class="string">&quot;\tmul &quot;</span>;</span><br><span class="line">            temp_return += Get_R(line[<span class="number">0</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">            temp_return += Get_R(line[<span class="number">2</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">            temp_return += Get_R(line.back());</span><br><span class="line">            <span class="keyword">return</span> temp_return;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> (line[<span class="number">3</span>] == <span class="string">&quot;/&quot;</span>)&#123;</span><br><span class="line">            temp_return = <span class="string">&quot;\tdiv &quot;</span>;</span><br><span class="line">            temp_return += Get_R(line[<span class="number">2</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">            temp_return += Get_R(line.back()) + <span class="string">&quot;\n\tmflo &quot;</span>;</span><br><span class="line">            temp_return += Get_R(line[<span class="number">0</span>]);</span><br><span class="line">            <span class="keyword">return</span> temp_return;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> (line[<span class="number">3</span>] == <span class="string">&quot;&lt;&quot;</span>)&#123; <span class="comment">/* 左移 */</span></span><br><span class="line">            temp_return = <span class="string">&quot;\tslt &quot;</span>;</span><br><span class="line">            temp_return += Get_R(line[<span class="number">0</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">            temp_return += Get_R(line[<span class="number">2</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">            temp_return += Get_R(line.back());</span><br><span class="line">            <span class="keyword">return</span> temp_return;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> (line[<span class="number">3</span>] == <span class="string">&quot;&gt;&quot;</span>)&#123; <span class="comment">/* 右移 */</span></span><br><span class="line">            temp_return = <span class="string">&quot;\tslt &quot;</span>;</span><br><span class="line">            temp_return += Get_R(line[<span class="number">0</span>])+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">            temp_return += Get_R(line.back())+<span class="string">&quot;,&quot;</span>;</span><br><span class="line">            temp_return += Get_R(line[<span class="number">2</span>]);</span><br><span class="line">            <span class="keyword">return</span> temp_return;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125; </span><br><span class="line">    <span class="keyword">if</span> (line[<span class="number">2</span>] == <span class="string">&quot;CALL&quot;</span>) <span class="comment">/* 对应带有函数调用的赋值语句 */</span></span><br><span class="line">    &#123;</span><br><span class="line">        func_argn = <span class="number">0</span>;</span><br><span class="line">        <span class="keyword">return</span> <span class="built_in">string</span>(<span class="string">&quot;&quot;</span>)+<span class="string">&quot;\taddi $sp,$sp,-60\n\tsw $ra,0($sp)\n\tsw $t0,4($sp)\n\tsw $t1,8($sp)\n\tsw $t2,12($sp)\n\tsw $t3,16($sp)\n&quot;</span>+ \</span><br><span class="line">            <span class="string">&quot;\tsw $t4,20($sp)\n\tsw $t5,24($sp)\n\tsw $t6,28($sp)\n\tsw $t7,32($sp)\n\tsw $t8,36($sp)\n\tsw $t9,40($sp)\n&quot;</span>+ \</span><br><span class="line">            <span class="string">&quot;\tsw $a0,44($sp)\n\tsw $a1,48($sp)\n\tsw $a2,52($sp)\n\tsw $a3,56($sp)\n&quot;</span>+ \</span><br><span class="line">            <span class="string">&quot;\tjal &quot;</span>+line.back()+<span class="string">&quot;\n&quot;</span>+ \</span><br><span class="line">            <span class="string">&quot;\tlw $ra,0($sp)\n\tlw $t0,4($sp)\n\tlw $t1,8($sp)\n\tlw $t2,12($sp)\n\tlw $t3,16($sp)\n&quot;</span>+ \</span><br><span class="line">            <span class="string">&quot;\tlw $t4,20($sp)\n\tlw $t5,24($sp)\n\tlw $t6,28($sp)\n\tlw $t7,32($sp)\n\tlw $t8,36($sp)\n\tlw $t9,40($sp)\n&quot;</span>+ \</span><br><span class="line">            <span class="string">&quot;\tlw $a0,44($sp)\n\tlw $a1,48($sp)\n\tlw $a2,52($sp)\n\tlw $a3,56($sp)\n&quot;</span>+ \</span><br><span class="line">            <span class="string">&quot;\taddi $sp,$sp,60\n\tmove &quot;</span>+Get_R(line[<span class="number">0</span>])+<span class="string">&quot;, $v0&quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>根据不同的条件，使用对应的汇编代码即可</li>
+</ul>
+<p>最后需要一个函数组织并输出 <code>demo.s</code> 汇编文件：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">write_to_txt</span><span class="params">(<span class="keyword">const</span> <span class="built_in">vector</span>&lt;<span class="built_in">string</span>&gt;&amp; obj)</span></span>&#123;</span><br><span class="line">    <span class="function">ofstream <span class="title">out</span><span class="params">(<span class="string">&quot;./demo.s&quot;</span>)</span></span>;</span><br><span class="line">    <span class="built_in">string</span> temp =<span class="string">&quot;.data\n&quot;</span></span><br><span class="line">                <span class="string">&quot;_prompt: .asciiz \&quot;Enter an integer:\&quot;\n&quot;</span></span><br><span class="line">                <span class="string">&quot;_ret: .asciiz \&quot;\\n\&quot;\n&quot;</span></span><br><span class="line">                <span class="string">&quot;.globl main\n&quot;</span></span><br><span class="line">                <span class="string">&quot;.text\n&quot;</span>;</span><br><span class="line">    out&lt;&lt;temp;</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">auto</span> &amp; it:obj)</span><br><span class="line">        out&lt;&lt;it&lt;&lt;<span class="built_in">endl</span>;</span><br><span class="line">    out.close();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>编译与结果</strong></p>
+<p>编译命令：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">g++ main.cpp -o test4</span><br></pre></td></tr></table></figure>
+<p>测试文件：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">fast</span><span class="params">(<span class="keyword">int</span> n)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> a1 = <span class="number">14</span>;</span><br><span class="line">	<span class="keyword">int</span> a2 = <span class="number">15</span>;</span><br><span class="line">	<span class="keyword">int</span> a3 = <span class="number">16</span>;</span><br><span class="line">	<span class="keyword">int</span> a4;</span><br><span class="line">	<span class="keyword">int</span> i;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span>(i=<span class="number">0</span>;i&lt;n;i++)&#123;</span><br><span class="line">		a4 = (a1+a2)*a3;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> n = <span class="number">5</span>;</span><br><span class="line">	fast(n);</span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>中间代码：</p>
+<figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line"><span class="attribute">FUNCTION</span> fast :</span><br><span class="line">  <span class="attribute">PARAM</span> var<span class="number">2</span></span><br><span class="line">  <span class="attribute">temp1</span> := #<span class="number">14</span></span><br><span class="line">  <span class="attribute">var3</span> := temp<span class="number">1</span></span><br><span class="line">  <span class="attribute">temp2</span> := #<span class="number">15</span></span><br><span class="line">  <span class="attribute">var4</span> := temp<span class="number">2</span></span><br><span class="line">  <span class="attribute">temp3</span> := #<span class="number">16</span></span><br><span class="line">  <span class="attribute">var5</span> := temp<span class="number">3</span></span><br><span class="line">  <span class="attribute">temp4</span> := #<span class="number">0</span></span><br><span class="line">  <span class="attribute">var7</span> := temp<span class="number">4</span></span><br><span class="line"><span class="attribute">LABEL</span> label<span class="number">4</span> :</span><br><span class="line">  <span class="attribute">IF</span> var<span class="number">7</span> &lt; var<span class="number">2</span> GOTO label<span class="number">3</span></span><br><span class="line">  <span class="attribute">GOTO</span> label<span class="number">2</span></span><br><span class="line"><span class="attribute">LABEL</span> label<span class="number">3</span> :</span><br><span class="line">  <span class="attribute">temp5</span> := var<span class="number">3</span> + var<span class="number">4</span></span><br><span class="line">  <span class="attribute">temp6</span> := temp<span class="number">5</span> * var<span class="number">5</span></span><br><span class="line">  <span class="attribute">var6</span> := temp<span class="number">6</span></span><br><span class="line">  <span class="attribute">var7</span> := var<span class="number">7</span> + <span class="number">1</span></span><br><span class="line">  <span class="attribute">GOTO</span> label<span class="number">4</span></span><br><span class="line"><span class="attribute">LABEL</span> label<span class="number">2</span> :</span><br><span class="line">  <span class="attribute">temp7</span> := #<span class="number">0</span></span><br><span class="line">  <span class="attribute">RETURN</span> temp<span class="number">7</span></span><br><span class="line"><span class="attribute">LABEL</span> label<span class="number">1</span> :</span><br><span class="line"></span><br><span class="line"><span class="attribute">FUNCTION</span> main :</span><br><span class="line">  <span class="attribute">temp8</span> := #<span class="number">5</span></span><br><span class="line">  <span class="attribute">var9</span> := temp<span class="number">8</span></span><br><span class="line">  <span class="attribute">ARG</span> var<span class="number">9</span></span><br><span class="line">  <span class="attribute">temp9</span> := CALL fast</span><br><span class="line">  <span class="attribute">temp10</span> := #<span class="number">0</span></span><br><span class="line">  <span class="attribute">RETURN</span> temp<span class="number">10</span></span><br><span class="line"><span class="attribute">LABEL</span> label<span class="number">5</span> :</span><br></pre></td></tr></table></figure>
+<p>汇编代码：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br></pre></td><td class="code"><pre><span class="line">.data</span><br><span class="line">_prompt: .asciiz &quot;Enter an integer:&quot;</span><br><span class="line">_ret: .asciiz &quot;\n&quot;</span><br><span class="line">.globl main</span><br><span class="line">.text</span><br><span class="line">fast:</span><br><span class="line">	li $t1,14</span><br><span class="line">	move $t2,$t1</span><br><span class="line">	li $t1,15</span><br><span class="line">	move $t3,$t1</span><br><span class="line">	li $t1,16</span><br><span class="line">	move $t4,$t1</span><br><span class="line">	li $t1,0</span><br><span class="line">	move $t5,$t1</span><br><span class="line">label4:</span><br><span class="line">	blt $t5,$a0,label3</span><br><span class="line">	j label2</span><br><span class="line">label3:</span><br><span class="line">	add $t1,$t2,$t3</span><br><span class="line">	mul $t6,$t1,$t4</span><br><span class="line">	move $t1,$t6</span><br><span class="line">	add $t5,$t5,$t6</span><br><span class="line">	j label4</span><br><span class="line">label2:</span><br><span class="line">	li $t7,0</span><br><span class="line">	move $v0,$t7</span><br><span class="line">	jr $ra</span><br><span class="line">label1:</span><br><span class="line">main:</span><br><span class="line">	li $t1,5</span><br><span class="line">	move $t2,$t1</span><br><span class="line">	move $a0,$t2</span><br><span class="line">	addi $sp,$sp,-60</span><br><span class="line">	sw $ra,0($sp)</span><br><span class="line">	sw $t0,4($sp)</span><br><span class="line">	sw $t1,8($sp)</span><br><span class="line">	sw $t2,12($sp)</span><br><span class="line">	sw $t3,16($sp)</span><br><span class="line">	sw $t4,20($sp)</span><br><span class="line">	sw $t5,24($sp)</span><br><span class="line">	sw $t6,28($sp)</span><br><span class="line">	sw $t7,32($sp)</span><br><span class="line">	sw $t8,36($sp)</span><br><span class="line">	sw $t9,40($sp)</span><br><span class="line">	sw $a0,44($sp)</span><br><span class="line">	sw $a1,48($sp)</span><br><span class="line">	sw $a2,52($sp)</span><br><span class="line">	sw $a3,56($sp)</span><br><span class="line">	jal fast</span><br><span class="line">	lw $ra,0($sp)</span><br><span class="line">	lw $t0,4($sp)</span><br><span class="line">	lw $t1,8($sp)</span><br><span class="line">	lw $t2,12($sp)</span><br><span class="line">	lw $t3,16($sp)</span><br><span class="line">	lw $t4,20($sp)</span><br><span class="line">	lw $t5,24($sp)</span><br><span class="line">	lw $t6,28($sp)</span><br><span class="line">	lw $t7,32($sp)</span><br><span class="line">	lw $t8,36($sp)</span><br><span class="line">	lw $t9,40($sp)</span><br><span class="line">	lw $a0,44($sp)</span><br><span class="line">	lw $a1,48($sp)</span><br><span class="line">	lw $a2,52($sp)</span><br><span class="line">	lw $a3,56($sp)</span><br><span class="line">	addi $sp,$sp,60</span><br><span class="line">	move $t1, $v0</span><br><span class="line">	li $t1,0</span><br><span class="line">	move $v0,$t1</span><br><span class="line">	jr $ra</span><br><span class="line">label5:</span><br></pre></td></tr></table></figure>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/miscellaneous/" rel="tag"><i class="fa fa-tag"></i> miscellaneous</a>
+              <a href="/tags/labs/" rel="tag"><i class="fa fa-tag"></i> labs</a>
+              <a href="/tags/Compilers-Principles/" rel="tag"><i class="fa fa-tag"></i> Compilers Principles</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/03/21/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86-Lab3/" rel="prev" title="编译原理-Lab3">
+      <i class="fa fa-chevron-left"></i> 编译原理-Lab3
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%80%E4%B8%AA%E4%BB%BB%E5%8A%A1"><span class="nav-number">1.</span> <span class="nav-text">第一个任务</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">229</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">136</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">3m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">46:12</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
