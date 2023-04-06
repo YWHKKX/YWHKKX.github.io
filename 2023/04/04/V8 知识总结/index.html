@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="V8 指针技术标记指针 Tagged Pointer 是一个指针（内存地址），它具有与其关联的附加数据：  大多数体系结构都是字节可寻址的（最小的可寻址单元是字节），但是某些类型的数据通常会与数据的大小对齐，这种差异使指针的一些最低有效位未被使用，它们可以用于标签-通常用作位字段（每个位是一个单独的标签），只要使用该指针的代码在访问前将这些位屏蔽掉即可 相反，在某些操作系统中，虚拟地址的宽度比整个">
+<meta property="og:type" content="article">
+<meta property="og:title" content="V8 知识总结">
+<meta property="og:url" content="http://example.com/2023/04/04/V8%20%E7%9F%A5%E8%AF%86%E6%80%BB%E7%BB%93/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="V8 指针技术标记指针 Tagged Pointer 是一个指针（内存地址），它具有与其关联的附加数据：  大多数体系结构都是字节可寻址的（最小的可寻址单元是字节），但是某些类型的数据通常会与数据的大小对齐，这种差异使指针的一些最低有效位未被使用，它们可以用于标签-通常用作位字段（每个位是一个单独的标签），只要使用该指针的代码在访问前将这些位屏蔽掉即可 相反，在某些操作系统中，虚拟地址的宽度比整个">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2023/04/04/V8%20%E7%9F%A5%E8%AF%86%E6%80%BB%E7%BB%93/1669786173114.png">
+<meta property="og:image" content="http://example.com/2023/04/04/V8%20%E7%9F%A5%E8%AF%86%E6%80%BB%E7%BB%93/1680348222104.png">
+<meta property="og:image" content="http://example.com/2023/04/04/V8%20%E7%9F%A5%E8%AF%86%E6%80%BB%E7%BB%93/1680536613127.png">
+<meta property="article:published_time" content="2023-04-04T06:03:06.000Z">
+<meta property="article:modified_time" content="2023-04-04T06:04:55.471Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="V8">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2023/04/04/V8%20%E7%9F%A5%E8%AF%86%E6%80%BB%E7%BB%93/1669786173114.png">
+
+<link rel="canonical" href="http://example.com/2023/04/04/V8%20%E7%9F%A5%E8%AF%86%E6%80%BB%E7%BB%93/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>V8 知识总结 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/04/04/V8%20%E7%9F%A5%E8%AF%86%E6%80%BB%E7%BB%93/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          V8 知识总结
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-04-04 14:03:06 / Modified: 14:04:55" itemprop="dateCreated datePublished" datetime="2023-04-04T14:03:06+08:00">2023-04-04</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>14k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>13 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="V8-指针技术"><a href="#V8-指针技术" class="headerlink" title="V8 指针技术"></a>V8 指针技术</h2><p><strong>标记指针</strong></p>
+<p>Tagged Pointer 是一个指针（内存地址），它具有与其关联的附加数据：</p>
+<ul>
+<li>大多数体系结构都是字节可寻址的（最小的可寻址单元是字节），但是某些类型的数据通常会与数据的大小对齐，这种差异使指针的一些最低有效位未被使用，它们可以用于标签-通常用作位字段（每个位是一个单独的标签），只要使用该指针的代码在访问前将这些位屏蔽掉即可</li>
+<li>相反，在某些操作系统中，虚拟地址的宽度比整个体系结构的宽度窄，从而使最高有效位可用于标签（注意，某些处理器特别禁止在处理器级别使用此类标记指针，尤其是 x86-64，这要求操作系统使用规范形式的地址，且最高有效位全为0或全为1）</li>
+</ul>
+<p>V8 在堆中按字对齐的地址分配对象，这使得它可以使用最低有效位进行标记：</p>
+<ul>
+<li>在 32 位架构中，V8使用最低有效位去区分小整数 Smis 和堆对象指针</li>
+<li>对于堆指针，V8使用第二低有效位去区分强引用和弱引用</li>
+</ul>
+<p><strong>指针压缩</strong></p>
+<p>V8 使用了指针压缩的技术，仅在内存中存储指针的下部32位，并将基本高32位存储在特定寄存器中（V8 中的 JavaScript 的对象，数组，数字或者字符串都用对象表示，并且分配在 V8 堆区，这使得我们可以用一个指向对象的指针表示任何值）</p>
+<p>如果将V8堆（heap）放在其他地方的连续4GB地址空间（所有指针的高位32位都相同），那么一个从 base 开始的无符号32位偏移量将唯一标识一个指针：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">            |----- <span class="number">32</span> bits -----|----- <span class="number">32</span> bits -------|</span><br><span class="line">Pointer:    |________base_______|______offset___[w][<span class="number">1</span>]|</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">         	|----- <span class="number">32</span> bits -----|----- <span class="number">32</span> bits -------|</span><br><span class="line">Smi:     	|sssssssssssssssssss|____int31_value___[<span class="number">0</span>]|</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这里 <code>s</code> 是 <code>Smi</code> 有效载荷的符号值</li>
+<li>如果再有使用符号扩展表示，我们就可以仅用64位字的一位算数移位来压缩和解压 <code>Smis</code></li>
+</ul>
+<h2 id="V8-对象管理"><a href="#V8-对象管理" class="headerlink" title="V8 对象管理"></a>V8 对象管理</h2><p><strong>JS 对象的基础属性</strong></p>
+<p>一，prototype 原型：</p>
+<ul>
+<li>js 中每个数据类型都是对象（除了 null 和 undefined），而每个对象都继承自另外一个对象，后者称为“原型”（prototype）对象（只有 null 除外，它没有自己的原型对象）</li>
+<li>为了解决构造函数的对象实例之间无法共享属性的缺点，js 提供了 prototype 属性 </li>
+</ul>
+<p>案例1：</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">Person</span>(<span class="params">name,height</span>)</span>&#123;</span><br><span class="line">    <span class="built_in">this</span>.name=name;</span><br><span class="line">    <span class="built_in">this</span>.height=height;</span><br><span class="line">&#125;</span><br><span class="line">Person.prototype.hobby=<span class="function"><span class="keyword">function</span>(<span class="params"></span>)</span>&#123;</span><br><span class="line"><span class="keyword">return</span> <span class="string">&#x27;watching movies&#x27;</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">var</span> boy=<span class="keyword">new</span> Person(<span class="string">&#x27;keith&#x27;</span>,<span class="number">180</span>);</span><br><span class="line"><span class="keyword">var</span> girl=<span class="keyword">new</span> Person(<span class="string">&#x27;rascal&#x27;</span>,<span class="number">153</span>);</span><br><span class="line"><span class="built_in">console</span>.log(boy.name); <span class="comment">// &#x27;keith&#x27;</span></span><br><span class="line"><span class="built_in">console</span>.log(girl.name); <span class="comment">// &#x27;rascal&#x27;</span></span><br><span class="line"><span class="built_in">console</span>.log(boy.hobby===girl.hobby); <span class="comment">// true</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>对象 boy 和对象 girl 共享同一个 hobby 方法</li>
+<li>当某个对象实例没有该属性和方法时，就会到原型对象上去查找（会一直向上寻找，直到最顶层的 <code>Object.prototype</code> 还是找不到，则返回 <code>undefined</code>）</li>
+<li>如果实例对象自身有某个属性或方法，就不会去原型对象上查找 </li>
+</ul>
+<p>二，constructor 构造函数：</p>
+<ul>
+<li>该属性描述的就是其构造函数，默认指向 prototype 对象所在的构造函数（返回创建该对象的函数的引用） </li>
+<li>此属性的值是对函数本身的引用，而不是一个包含函数名称的字符串</li>
+</ul>
+<p>案例2：</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">A</span>(<span class="params"></span>)</span>&#123;&#125;; <span class="comment">/* 构造函数 */</span></span><br><span class="line"><span class="keyword">var</span> a=<span class="keyword">new</span> A();</span><br><span class="line"><span class="built_in">console</span>.log(a.constructor); <span class="comment">// A()</span></span><br><span class="line"><span class="built_in">console</span>.log(a.constructor===A.prototype.constructor); <span class="comment">// true</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>a 是构造函数 A 的实例对象，但是 a 自身没有 constructor 属性，因此该属性是从原型链读取的 </li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">d8&gt; %DebugPrint(a);</span><br><span class="line">DebugPrint: <span class="number">0x20e90004c6d5</span>: [JS_OBJECT_TYPE]</span><br><span class="line"> - <span class="built_in">map</span>: <span class="number">0x20e9001dace5</span> &lt;Map[<span class="number">52</span>](HOLEY_ELEMENTS)&gt; [FastProperties]</span><br><span class="line"> - prototype: <span class="number">0x20e90004c64d</span> &lt;Object <span class="built_in">map</span> = <span class="number">0x20e9001dad55</span>&gt;</span><br><span class="line"> - elements: <span class="number">0x20e900000219</span> &lt;FixedArray[<span class="number">0</span>]&gt; [HOLEY_ELEMENTS]</span><br><span class="line"> - properties: <span class="number">0x20e900000219</span> &lt;FixedArray[<span class="number">0</span>]&gt;</span><br><span class="line"> - All own properties (excluding elements): &#123;&#125;</span><br><span class="line"><span class="number">0x20e9001dace5</span>: [Map] in OldSpace</span><br><span class="line"> - type: JS_OBJECT_TYPE</span><br><span class="line"> - instance size: <span class="number">52</span></span><br><span class="line"> - inobject properties: <span class="number">10</span></span><br><span class="line"> - elements kind: HOLEY_ELEMENTS</span><br><span class="line"> - unused property fields: <span class="number">10</span></span><br><span class="line"> - <span class="keyword">enum</span> length: invalid</span><br><span class="line"> - stable_map</span><br><span class="line"> - back pointer: <span class="number">0x20e900000251</span> &lt;undefined&gt;</span><br><span class="line"> - prototype_validity cell: <span class="number">0x20e900000ac5</span> &lt;Cell value= <span class="number">1</span>&gt;</span><br><span class="line"> - instance descriptors (own) #<span class="number">0</span>: <span class="number">0x20e900000295</span> &lt;DescriptorArray[<span class="number">0</span>]&gt;</span><br><span class="line"> - prototype: <span class="number">0x20e90004c64d</span> &lt;Object <span class="built_in">map</span> = <span class="number">0x20e9001dad55</span>&gt;</span><br><span class="line"> - constructor: <span class="number">0x20e9001dac1d</span> &lt;JSFunction A (sfi = <span class="number">0x20e9001daae9</span>)&gt;</span><br><span class="line"> - dependent code: <span class="number">0x20e900000229</span> &lt;Other heap object (WEAK_ARRAY_LIST_TYPE)&gt;</span><br><span class="line"> - construction counter: <span class="number">6</span></span><br></pre></td></tr></table></figure>
+<p>案例3：</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">Tree</span>(<span class="params">name</span>) </span>&#123; <span class="comment">/* 构造函数 */</span></span><br><span class="line">    <span class="built_in">this</span>.name = name;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">var</span> theTree = <span class="keyword">new</span> Tree(<span class="string">&#x27;Redwood&#x27;</span>);</span><br><span class="line"><span class="built_in">console</span>.log(<span class="string">&#x27;theTree.constructor is &#x27;</span> + theTree.constructor);</span><br><span class="line"><span class="built_in">console</span>.log(<span class="keyword">typeof</span>(theTree.constructor))</span><br></pre></td></tr></table></figure>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">theTree.constructor is <span class="function"><span class="keyword">function</span> <span class="title">Tree</span>(<span class="params">name</span>) </span>&#123;</span><br><span class="line">    <span class="built_in">this</span>.name = name;</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">function</span></span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>注意：<code>theTree.constructor</code> 的类型为函数，而不是字符串</li>
+</ul>
+<p>三，map 映射：</p>
+<p>对象的映射 <code>map</code> 是一种特殊的属性，其中包含以下信息：</p>
+<ul>
+<li>对象的动态类型，即 <code>String Uint8Array HeapNumber ...</code></li>
+<li>对象的大小（以字节为单位）</li>
+<li>对象的属性及其存储位置</li>
+<li>数组元素的类型（例如：未装箱的双精度或标记的指针）</li>
+<li>对象的原型</li>
+</ul>
+<p><code>Map</code> 将提供属性值在相应区域中的确切位置（本质上，映射定义了应如何访问对象）：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">0x1dfe0019b715</span>: [Map] in OldSpace</span><br><span class="line"> - type: JS_OBJECT_TYPE</span><br><span class="line"> - instance size: <span class="number">52</span></span><br><span class="line"> - inobject properties: <span class="number">10</span></span><br><span class="line"> - elements kind: HOLEY_ELEMENTS</span><br><span class="line"> - unused property fields: <span class="number">1</span></span><br><span class="line"> - <span class="class"><span class="keyword">enum</span> <span class="title">length</span>:</span> invalid</span><br><span class="line"> - stable_map</span><br><span class="line"> - back pointer: <span class="number">0x1dfe0019b6d5</span> &lt;Map[<span class="number">52</span>](HOLEY_ELEMENTS)&gt;</span><br><span class="line"> - prototype_validity cell: <span class="number">0x1dfe0019b635</span> &lt;Cell value= <span class="number">0</span>&gt;</span><br><span class="line"> - instance descriptors (own) #<span class="number">12</span>: <span class="number">0x1dfe0004dde1</span> &lt;DescriptorArray[<span class="number">12</span>]&gt;</span><br><span class="line"> - prototype: <span class="number">0x1dfe0004d6c9</span> &lt;Object <span class="built_in">map</span> = <span class="number">0x1dfe0019b5e5</span>&gt;</span><br><span class="line"> - constructor: <span class="number">0x1dfe0019a005</span> &lt;JSFunction Foo (sfi = <span class="number">0x1dfe00199f45</span>)&gt;</span><br><span class="line"> - dependent code: <span class="number">0x1dfe000021e1</span> &lt;Other heap object (WEAK_ARRAY_LIST_TYPE)&gt;</span><br><span class="line"> - construction counter: <span class="number">6</span></span><br></pre></td></tr></table></figure>
+<p>四，element 索引属性，property 命名属性：</p>
+<ul>
+<li>element 用数字进行索引（类似于数组的索引）</li>
+<li>property 用字符串进行索引（类似于键值对的索引）</li>
+</ul>
+<p>案例4：</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">Foo</span>(<span class="params">properties, elements</span>) </span>&#123; <span class="comment">/* 构造函数 */</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">let</span> i = <span class="number">0</span>; i &lt; elements; i++) &#123;<span class="built_in">this</span>[i] = <span class="string">`element<span class="subst">$&#123;i&#125;</span>`</span>&#125;</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">let</span> i = <span class="number">0</span>; i &lt; properties; i++) &#123;<span class="built_in">this</span>[<span class="string">`property<span class="subst">$&#123;i&#125;</span>`</span>] = <span class="string">`property<span class="subst">$&#123;i&#125;</span>`</span>&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">const</span> foo = <span class="keyword">new</span> Foo(<span class="number">12</span>, <span class="number">12</span>)</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">const</span> key <span class="keyword">in</span> foo) &#123;</span><br><span class="line">    <span class="built_in">console</span>.log(<span class="string">`key:<span class="subst">$&#123;key&#125;</span>, value:<span class="subst">$&#123;foo[key]&#125;</span>`</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>尝试在 GDB 中打印信息</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br></pre></td><td class="code"><pre><span class="line">d8&gt; <span class="function">function <span class="title">Foo</span><span class="params">(properties, elements)</span> </span>&#123;<span class="keyword">for</span> (let i = <span class="number">0</span>; i &lt; elements; i++) &#123;<span class="keyword">this</span>[i] = `element$&#123;i&#125;`&#125;<span class="keyword">for</span> (let i = <span class="number">0</span>; i &lt; properties; i++) &#123;<span class="keyword">this</span>[`property$&#123;i&#125;`] = `property$&#123;i&#125;`&#125;&#125;</span><br><span class="line">undefined</span><br><span class="line">d8&gt;  <span class="keyword">const</span> foo = <span class="keyword">new</span> Foo(<span class="number">12</span>, <span class="number">12</span>)</span><br><span class="line">undefined</span><br><span class="line">d8&gt; %DebugPrint(foo);</span><br><span class="line">DebugPrint: <span class="number">0x34af0004ed89</span>: [JS_OBJECT_TYPE]</span><br><span class="line"> - <span class="built_in">map</span>: <span class="number">0x34af001dcff5</span> &lt;Map[<span class="number">52</span>](HOLEY_ELEMENTS)&gt; [FastProperties]</span><br><span class="line"> - prototype: <span class="number">0x34af0004ed1d</span> &lt;Object <span class="built_in">map</span> = <span class="number">0x34af001dcec5</span>&gt;</span><br><span class="line"> - elements: <span class="number">0x34af0004edd1</span> &lt;FixedArray[<span class="number">17</span>]&gt; [HOLEY_ELEMENTS]</span><br><span class="line"> - properties: <span class="number">0x34af0004f4a1</span> &lt;PropertyArray[<span class="number">3</span>]&gt;</span><br><span class="line"> - All own properties (excluding elements): &#123;</span><br><span class="line">    <span class="number">0x34af001dcc71</span>: [String] in OldSpace: #property0: <span class="number">0x34af0004ef19</span> &lt;String[<span class="number">9</span>]: <span class="string">&quot;property0&quot;</span>&gt; (<span class="keyword">const</span> data field <span class="number">0</span>), location: in-object</span><br><span class="line">    <span class="number">0x34af001dccd5</span>: [String] in OldSpace: #property1: <span class="number">0x34af0004ef65</span> &lt;String[<span class="number">9</span>]: <span class="string">&quot;property1&quot;</span>&gt; (<span class="keyword">const</span> data field <span class="number">1</span>), location: in-object</span><br><span class="line">    <span class="number">0x34af001dcd15</span>: [String] in OldSpace: #property2: <span class="number">0x34af0004efbd</span> &lt;String[<span class="number">9</span>]: <span class="string">&quot;property2&quot;</span>&gt; (<span class="keyword">const</span> data field <span class="number">2</span>), location: in-object</span><br><span class="line">    <span class="number">0x34af001dcd55</span>: [String] in OldSpace: #property3: <span class="number">0x34af0004f021</span> &lt;String[<span class="number">9</span>]: <span class="string">&quot;property3&quot;</span>&gt; (<span class="keyword">const</span> data field <span class="number">3</span>), location: in-object</span><br><span class="line">    <span class="number">0x34af001dcd95</span>: [String] in OldSpace: #property4: <span class="number">0x34af0004f091</span> &lt;String[<span class="number">9</span>]: <span class="string">&quot;property4&quot;</span>&gt; (<span class="keyword">const</span> data field <span class="number">4</span>), location: in-object</span><br><span class="line">    <span class="number">0x34af001dcdd5</span>: [String] in OldSpace: #property5: <span class="number">0x34af0004f10d</span> &lt;String[<span class="number">9</span>]: <span class="string">&quot;property5&quot;</span>&gt; (<span class="keyword">const</span> data field <span class="number">5</span>), location: in-object</span><br><span class="line">    <span class="number">0x34af001dce15</span>: [String] in OldSpace: #property6: <span class="number">0x34af0004f195</span> &lt;String[<span class="number">9</span>]: <span class="string">&quot;property6&quot;</span>&gt; (<span class="keyword">const</span> data field <span class="number">6</span>), location: in-object</span><br><span class="line">    <span class="number">0x34af001dcead</span>: [String] in OldSpace: #property7: <span class="number">0x34af0004f229</span> &lt;String[<span class="number">9</span>]: <span class="string">&quot;property7&quot;</span>&gt; (<span class="keyword">const</span> data field <span class="number">7</span>), location: in-object</span><br><span class="line">    <span class="number">0x34af001dcf1d</span>: [String] in OldSpace: #property8: <span class="number">0x34af0004f301</span> &lt;String[<span class="number">9</span>]: <span class="string">&quot;property8&quot;</span>&gt; (<span class="keyword">const</span> data field <span class="number">8</span>), location: in-object</span><br><span class="line">    <span class="number">0x34af001dcf5d</span>: [String] in OldSpace: #property9: <span class="number">0x34af0004f3b9</span> &lt;String[<span class="number">9</span>]: <span class="string">&quot;property9&quot;</span>&gt; (<span class="keyword">const</span> data field <span class="number">9</span>), location: in-object</span><br><span class="line">    <span class="number">0x34af001dcf9d</span>: [String] in OldSpace: #property10: <span class="number">0x34af0004f3e9</span> &lt;String[<span class="number">10</span>]: <span class="string">&quot;property10&quot;</span>&gt; (<span class="keyword">const</span> data field <span class="number">10</span>), location: properties[<span class="number">0</span>]</span><br><span class="line">    <span class="number">0x34af001dcfdd</span>: [String] in OldSpace: #property11: <span class="number">0x34af0004f4cd</span> &lt;String[<span class="number">10</span>]: <span class="string">&quot;property11&quot;</span>&gt; (<span class="keyword">const</span> data field <span class="number">11</span>), location: properties[<span class="number">1</span>]</span><br><span class="line"> &#125;</span><br><span class="line"> - elements: <span class="number">0x34af0004edd1</span> &lt;FixedArray[<span class="number">17</span>]&gt; &#123;</span><br><span class="line">           <span class="number">0</span>: <span class="number">0x34af0004edbd</span> &lt;String[<span class="number">8</span>]: <span class="string">&quot;element0&quot;</span>&gt;</span><br><span class="line">           <span class="number">1</span>: <span class="number">0x34af0004ee1d</span> &lt;String[<span class="number">8</span>]: <span class="string">&quot;element1&quot;</span>&gt;</span><br><span class="line">           <span class="number">2</span>: <span class="number">0x34af0004ee31</span> &lt;String[<span class="number">8</span>]: <span class="string">&quot;element2&quot;</span>&gt;</span><br><span class="line">           <span class="number">3</span>: <span class="number">0x34af0004ee45</span> &lt;String[<span class="number">8</span>]: <span class="string">&quot;element3&quot;</span>&gt;</span><br><span class="line">           <span class="number">4</span>: <span class="number">0x34af0004ee59</span> &lt;String[<span class="number">8</span>]: <span class="string">&quot;element4&quot;</span>&gt;</span><br><span class="line">           <span class="number">5</span>: <span class="number">0x34af0004ee6d</span> &lt;String[<span class="number">8</span>]: <span class="string">&quot;element5&quot;</span>&gt;</span><br><span class="line">           <span class="number">6</span>: <span class="number">0x34af0004ee81</span> &lt;String[<span class="number">8</span>]: <span class="string">&quot;element6&quot;</span>&gt;</span><br><span class="line">           <span class="number">7</span>: <span class="number">0x34af0004ee95</span> &lt;String[<span class="number">8</span>]: <span class="string">&quot;element7&quot;</span>&gt;</span><br><span class="line">           <span class="number">8</span>: <span class="number">0x34af0004eea9</span> &lt;String[<span class="number">8</span>]: <span class="string">&quot;element8&quot;</span>&gt;</span><br><span class="line">           <span class="number">9</span>: <span class="number">0x34af0004eebd</span> &lt;String[<span class="number">8</span>]: <span class="string">&quot;element9&quot;</span>&gt;</span><br><span class="line">          <span class="number">10</span>: <span class="number">0x34af0004eed1</span> &lt;String[<span class="number">9</span>]: <span class="string">&quot;element10&quot;</span>&gt;</span><br><span class="line">          <span class="number">11</span>: <span class="number">0x34af0004eee9</span> &lt;String[<span class="number">9</span>]: <span class="string">&quot;element11&quot;</span>&gt;</span><br><span class="line">       <span class="number">12</span><span class="number">-16</span>: <span class="number">0x34af0000026d</span> &lt;the_hole&gt;</span><br><span class="line"> &#125;</span><br><span class="line"><span class="number">0x34af001dcff5</span>: [Map] in OldSpace</span><br><span class="line"> - type: JS_OBJECT_TYPE</span><br><span class="line"> - instance size: <span class="number">52</span></span><br><span class="line"> - inobject properties: <span class="number">10</span></span><br><span class="line"> - elements kind: HOLEY_ELEMENTS</span><br><span class="line"> - unused property fields: <span class="number">1</span></span><br><span class="line"> - <span class="keyword">enum</span> length: invalid</span><br><span class="line"> - stable_map</span><br><span class="line"> - back pointer: <span class="number">0x34af001dcfb5</span> &lt;Map[<span class="number">52</span>](HOLEY_ELEMENTS)&gt;</span><br><span class="line"> - prototype_validity cell: <span class="number">0x34af001dcf15</span> &lt;Cell value= <span class="number">0</span>&gt;</span><br><span class="line"> - instance descriptors (own) #<span class="number">12</span>: <span class="number">0x34af0004f401</span> &lt;DescriptorArray[<span class="number">12</span>]&gt;</span><br><span class="line"> - prototype: <span class="number">0x34af0004ed1d</span> &lt;Object <span class="built_in">map</span> = <span class="number">0x34af001dcec5</span>&gt;</span><br><span class="line"> - constructor: <span class="number">0x34af001dc8d1</span> &lt;JSFunction Foo (sfi = <span class="number">0x34af001dc811</span>)&gt;</span><br><span class="line"> - dependent code: <span class="number">0x34af00000229</span> &lt;Other heap object (WEAK_ARRAY_LIST_TYPE)&gt;</span><br><span class="line"> - construction counter: <span class="number">6</span></span><br><span class="line"></span><br><span class="line">&#123;<span class="number">0</span>: <span class="string">&quot;element0&quot;</span>, <span class="number">1</span>: <span class="string">&quot;element1&quot;</span>, <span class="number">2</span>: <span class="string">&quot;element2&quot;</span>, <span class="number">3</span>: <span class="string">&quot;element3&quot;</span>, <span class="number">4</span>: <span class="string">&quot;element4&quot;</span>, <span class="number">5</span>: <span class="string">&quot;element5&quot;</span>, <span class="number">6</span>: <span class="string">&quot;element6&quot;</span>, <span class="number">7</span>: <span class="string">&quot;element7&quot;</span>, <span class="number">8</span>: <span class="string">&quot;element8&quot;</span>, <span class="number">9</span>: <span class="string">&quot;element9&quot;</span>, <span class="number">10</span>: <span class="string">&quot;element10&quot;</span>, <span class="number">11</span>: <span class="string">&quot;element11&quot;</span>, property0: <span class="string">&quot;property0&quot;</span>, property1: <span class="string">&quot;property1&quot;</span>, property2: <span class="string">&quot;property2&quot;</span>, property3: <span class="string">&quot;property3&quot;</span>, property4: <span class="string">&quot;property4&quot;</span>, property5: <span class="string">&quot;property5&quot;</span>, property6: <span class="string">&quot;property6&quot;</span>, property7: <span class="string">&quot;property7&quot;</span>, property8: <span class="string">&quot;property8&quot;</span>, property9: <span class="string">&quot;property9&quot;</span>, property10: <span class="string">&quot;property10&quot;</span>, property11: <span class="string">&quot;property11&quot;</span>&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>先打印对象 <code>JS_OBJECT_TYPE</code> 的信息：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; x/<span class="number">20</span>xw <span class="number">0x34af0004ed89</span><span class="number">-1</span> <span class="comment">/* JS_OBJECT_TYPE */</span></span><br><span class="line"><span class="number">0x34af0004ed88</span>:	<span class="number">0x001dcff5</span>	<span class="number">0x0004f4a1</span>	<span class="number">0x0004edd1</span>	<span class="number">0x0004ef19</span></span><br><span class="line"><span class="number">0x34af0004ed98</span>:	<span class="number">0x0004ef65</span>	<span class="number">0x0004efbd</span>	<span class="number">0x0004f021</span>	<span class="number">0x0004f091</span></span><br><span class="line"><span class="number">0x34af0004eda8</span>:	<span class="number">0x0004f10d</span>	<span class="number">0x0004f195</span>	<span class="number">0x0004f229</span>	<span class="number">0x0004f301</span></span><br><span class="line"><span class="number">0x34af0004edb8</span>:	<span class="number">0x0004f3b9</span>	<span class="number">0x0000059d</span>	<span class="number">0x00000003</span>	<span class="number">0x00000008</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>前3个数据分别为 <code>map properties elements</code> 的地址低4字节</li>
+<li>接下来10个数据就是 [<code>property0</code>：<code>property9</code>]</li>
+<li>注意：<ul>
+<li>V8 使用了标记指针，因此在打印前需要先把指针还原</li>
+<li>V8 使用了指针压缩的技术，仅在内存中存储指针的下部32位，并将基本高32位存储在特定寄存器中</li>
+</ul>
+</li>
+</ul>
+<p>指针 <code>properties</code> 和 <code>elements</code> 与 V8 的两种属性有关：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">function <span class="title">Foo</span><span class="params">(properties, elements)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (let i = <span class="number">0</span>; i &lt; elements; i++) &#123;<span class="keyword">this</span>[i] = `element$&#123;i&#125;`&#125;</span><br><span class="line">    <span class="keyword">for</span> (let i = <span class="number">0</span>; i &lt; properties; i++) &#123;<span class="keyword">this</span>[`property$&#123;i&#125;`] = `property$&#123;i&#125;`&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>第一个 for 循环定义了 <code>elements</code> 个数组索引属性（Array-indexed Properties） </li>
+<li>第二个 for 循环定义了 <code>properties</code> 个命名属性（Named Properties） </li>
+</ul>
+<p>V8 遍历时一般会先遍历前者，前后两者在底层存储在两个单独的数据结构中，分别用 <code>elements</code> 和 <code>properties</code> 两个指针指向它们</p>
+<img src="/2023/04/04/V8%20%E7%9F%A5%E8%AF%86%E6%80%BB%E7%BB%93/1669786173114.png" class width="1669786173114"> 
+<ul>
+<li>PS：V8 有一种策略，如果命名属性少于等于10个时，命名属性会直接存储到对象本身，而无需先通过 properties 指针查询（直接存储到对象本身的属性被称为对象内属性 In-object Properties）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; x/<span class="number">20</span>xw <span class="number">0x34af0004edd1</span><span class="number">-1</span> <span class="comment">/* elements */</span></span><br><span class="line"><span class="number">0x34af0004edd0</span>:	<span class="number">0x00000089</span>	<span class="number">0x00000022</span>	<span class="number">0x0004edbd</span>	<span class="number">0x0004ee1d</span></span><br><span class="line"><span class="number">0x34af0004ede0</span>:	<span class="number">0x0004ee31</span>	<span class="number">0x0004ee45</span>	<span class="number">0x0004ee59</span>	<span class="number">0x0004ee6d</span></span><br><span class="line"><span class="number">0x34af0004edf0</span>:	<span class="number">0x0004ee81</span>	<span class="number">0x0004ee95</span>	<span class="number">0x0004eea9</span>	<span class="number">0x0004eebd</span></span><br><span class="line"><span class="number">0x34af0004ee00</span>:	<span class="number">0x0004eed1</span>	<span class="number">0x0004eee9</span>	<span class="number">0x0000026d</span>	<span class="number">0x0000026d</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>从第3个指针开始，就是：[<code>element0</code>：<code>element11</code>]</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; x/<span class="number">20</span>xw <span class="number">0x34af0004f4a1</span><span class="number">-1</span> <span class="comment">/* properties */</span></span><br><span class="line"><span class="number">0x34af0004f4a0</span>:	<span class="number">0x000009d5</span>	<span class="number">0x00000006</span>	<span class="number">0x0004f3e9</span>	<span class="number">0x0004f4cd</span></span><br><span class="line"><span class="number">0x34af0004f4b0</span>:	<span class="number">0x00000251</span>	<span class="number">0x00000895</span>	<span class="number">0x970f2656</span>	<span class="number">0x0000000a</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>从第3个指针开始，就是：[<code>property10</code>：<code>property11</code>]（前10个都是对象内属性）</li>
+</ul>
+<p><strong>JS 函数对象</strong></p>
+<p>JavaScript 函数是第一类对象（first-class object），被称为一等公民</p>
+<p>函数与对象共存，我们也可以认为函数就是其他任意类的对象（对象有的功能，函数也会拥有）</p>
+<ul>
+<li>可以通过字面量来创建</li>
+</ul>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> test = <span class="function"><span class="keyword">function</span> <span class="title">testFunction</span>(<span class="params"></span>) </span>&#123;&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>可以被赋值变量，数组项，或是其他对象的属性</li>
+</ul>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> testFunction = &#123;&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>可以作为参数传递给其他函数</li>
+</ul>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">call</span>(<span class="params">testFunction</span>)</span>&#123;</span><br><span class="line">    testFunction();</span><br><span class="line">&#125;</span><br><span class="line">call(<span class="function"><span class="keyword">function</span> (<span class="params"></span>)</span>&#123;&#125;)</span><br></pre></td></tr></table></figure>
+<ul>
+<li>可以作为函数的返回值</li>
+</ul>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">returnFunction</span>(<span class="params"></span>) </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="function"><span class="keyword">function</span>(<span class="params"></span>)</span>&#123;&#125;;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>能够具有动态创建和分配的属性（这里和函数指针有所不同）</li>
+</ul>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> testFunction = <span class="function"><span class="keyword">function</span>(<span class="params"></span>)</span>&#123;&#125;;</span><br><span class="line">testFunction.test = <span class="string">&quot;Hello&quot;</span>;</span><br></pre></td></tr></table></figure>
+<p>在编译阶段 V8 解析到函数声明和函数表达式（变量声明）时：</p>
+<ul>
+<li>函数声明，将其转换为内存中的函数对象，并放到作用域中</li>
+<li>变量声明，将其值设置为 <code>undefined</code>，并当道作用域中</li>
+</ul>
+<h2 id="V8-内存管理"><a href="#V8-内存管理" class="headerlink" title="V8 内存管理"></a>V8 内存管理</h2><p>V8会为每个 service worker 开启一个新的进程</p>
+<p>在V8进程中，一个正在运行的程序总是由一些分配的内存来表示，这称为常驻集（Resident Set），可以进一步划分以下不同的部分： </p>
+<img src="/2023/04/04/V8%20%E7%9F%A5%E8%AF%86%E6%80%BB%E7%BB%93/1680348222104.png" class width="1680348222104"> 
+<p><strong>堆 Heap</strong></p>
+<p>堆是V8存储对象和动态数据的地方，又可以分为以下几个区域：</p>
+<ul>
+<li>新空间 New space：<ul>
+<li>存储新对象的地方，并且大部分对象的声明周期都很短 </li>
+<li>这片空间由 Scavenger(Minor GC) 来管理</li>
+<li>新生代空间的大小可以由 <code>--min_semi_space_size</code> (初始值) 和 <code>--max_semi_space_size</code> (最大值) 两个V8标志来控制 </li>
+</ul>
+</li>
+<li>老空间 Old space：<ul>
+<li>存储的是在新生代空间中经过了两次 Minor GC 后存活下来的数据 </li>
+<li>这片空间由 Major GC(Mark-Sweep &amp; Mark-Compact) 来管理</li>
+<li>老生代空间的大小可以 <code>--initial_old_space_size</code> (初始值) 和 <code>--max_old_space_size</code> (最大值) 两个V8标志来控制</li>
+</ul>
+</li>
+<li>大对象空间 Large object space<ul>
+<li>大于其他空间大小限制的对象存储的地方，每个对象都有自己的内存区域</li>
+<li>大对象是不会被垃圾回收的</li>
+</ul>
+</li>
+<li>代码空间 Code-space<ul>
+<li>即时（JIT）编译器存储编译代码块的地方</li>
+<li>这是唯一有可执行内存的空间（尽管代码可能被分配在“大对象空间”中，它们也是可执行的） </li>
+</ul>
+</li>
+<li>单元空间 Cell space、属性单元空间 Property cell space、映射空间 Map space<ul>
+<li>这些空间分别包含 Cell，PropertyCell 和 Map</li>
+<li>这些空间中的每一个都包含相同大小的对象，并且对它们指向的对象类型有一些限制，这简化了收集</li>
+<li>每个空间都由一组页组成（使用 mmap 从操作系统分配的连续内存块）</li>
+</ul>
+</li>
+</ul>
+<p><strong>栈 Stack</strong></p>
+<p>每个V8进程有一个栈，这里存储静态数据，包括方法/函数框架、原语值和指向对象的指针</p>
+<p>栈内存限制可以使用 <code>--stack_size</code> V8 标志设置</p>
+<p>栈中保存的数据：</p>
+<ul>
+<li>全局作用域保存在栈上的全局框架（Global frame）中</li>
+<li>所有局部变量（包括参数和返回值）都保存在栈的函数框块中</li>
+<li>像 <code>int string</code> 这样的基元类型都直接存储在栈上</li>
+<li>每个函数调用都作为帧块添加到堆栈内存中：<ul>
+<li>当前函数调用的函数将被推到栈的顶部</li>
+<li>当函数返回时，它的框架帧块将被移除</li>
+</ul>
+</li>
+</ul>
+<p>一旦主进程完成，堆上的对象就不再有来自栈的指针，成为 <strong>孤立对象</strong>（即不再直接或间接从 Stack 中引用的对象），除非显式复制，否则其他对象中的所有对象引用都是使用引用指针完成的</p>
+<p>孤立对象将会被 V8 垃圾收集给回收</p>
+<h2 id="V8-垃圾收集"><a href="#V8-垃圾收集" class="headerlink" title="V8 垃圾收集"></a>V8 垃圾收集</h2><p>在 JavaScript 中，根据对象存活的周期分为两种类型：</p>
+<ul>
+<li>生存时间较短的对象：<ul>
+<li>对象经过一次垃圾回收之后，不在需要被使用的对象，就被释放回收</li>
+</ul>
+</li>
+<li>生存时间较长的对象：<ul>
+<li>对象经过多次垃圾回收之后，还继续存活</li>
+<li>对于不同存活时间的对象，V8 使用分代回收的方法来处理，V8 将堆分为两个部分，新空间和老空间</li>
+</ul>
+</li>
+</ul>
+<p>V8 通过垃圾收集来管理堆内存，释放孤立对象（即不再直接或间接从堆栈中引用的对象）使用的内存，以便为创建新对象腾出空间</p>
+<p>V8 垃圾回收器是分代的（堆中的对象按其年龄分组并在不同阶段清除），V8 有两个阶段和三种不同的垃圾收集算法</p>
+<ul>
+<li>Minor GC：针对新生代，使用 Scavenger 和 Cheney’s algorithm 两种算法 </li>
+<li>Major GC：针对老生代，使用 Mark-Sweep-Compact 算法 </li>
+</ul>
+<p>新生代：存放生存时间短的对象 </p>
+<ul>
+<li>容量小，<code>1~8M</code></li>
+<li>使用副垃圾回收器（Minor GC）</li>
+<li>使用 Scavenge 算法，将新生代区域分成两部分（对象区域 <code>from-space</code>，空闲区域 <code>to-space</code>），详细步骤如下：<ul>
+<li>对象区域放新加入的对象</li>
+<li>对象区域快满的时候，执行垃圾清理（先标记，再清理）</li>
+<li>把活动对象复制到空闲区域，并且排序（空闲区域就没有内存碎片了）</li>
+<li>复制完之后，把对象区域和空闲区域进行翻转</li>
+<li>重复执行上面的步骤</li>
+<li>经过两次垃圾回收后还存在的对象，移动到老生代中</li>
+</ul>
+</li>
+</ul>
+<p>老生代：存放生存时间久的对象 </p>
+<ul>
+<li>容量大（对象占用空间大，对象存活时间长）</li>
+<li>使用主垃圾回收器（Major GC）</li>
+<li>使用标记 - 清除算法（Mark-Sweep） <ul>
+<li>标记：从根元素开始，找到活动对象，找不到的就是垃圾</li>
+<li>清理：直接清理垃圾（会产生垃圾碎片）</li>
+</ul>
+</li>
+<li>使用标记 - 整理算法（Mark-Compact） <ul>
+<li>标记：从根元素开始，找到活动对象，找不到的就是垃圾</li>
+<li>整理：把活动对象向同一端移动，另一端直接清理（不会产生垃圾碎片）</li>
+</ul>
+</li>
+</ul>
+<h2 id="V8-编译流水线"><a href="#V8-编译流水线" class="headerlink" title="V8 编译流水线"></a>V8 编译流水线</h2><p><strong>宿主环境</strong></p>
+<p>V8 引擎需要一个宿主环境才可以执行JS代码，这个宿主环境可以是浏览器、Node.js 进程，也可以是其他的定制开发环境</p>
+<ul>
+<li>浏览器为 V8 提供了基础的消息循环系统、全局变量、web API</li>
+<li>V8 只需提供 ECMAScript 定义的一些对象和核心函数，这包括了 Object、Function、String</li>
+<li>V8 还提供了垃圾回收器、协程等基础内容，不过这些功能依然需要宿主环境的配合才能完整执行</li>
+</ul>
+<p>Node.js 也是 V8 的另外一种宿主环境，它提供了不同的宿主对象和宿主的 API，但是整个流程依然是相同的，比如 Node.js 也会提供一套消息循环系统，也会提供一个运行时的主线程</p>
+<p><strong>构造事件循环系统</strong></p>
+<p>V8 需要一个主线程，用来执行 JavaScript 和执行垃圾回收等工作</p>
+<p>V8 是寄生在宿主环境中的，它并没有自己的主线程，而是使用宿主所提供的主线程，V8 所执行的代码都是在宿主的主线程上执行的</p>
+<p>如果只有一个主线程依然是不行的，因为线程执行完一段代码后就会自动退出，为了让线程在执行完代码之后继续运行，需要添加一个循环语句，在循环语句中监听下个事件，不断地获取新事件并执行：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">while</span>(<span class="number">1</span>)&#123;</span><br><span class="line">    Task task = GetNewTask();</span><br><span class="line">    RunTask(task);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>类似于 Linux 内核中的进程调度器</li>
+</ul>
+<p>如果主线程正在执行一个任务，这时候又来了一个新任务，那么这种情况下就需要引入一个 <strong>消息队列</strong>：</p>
+<ul>
+<li>让下载完成的事件暂存到消息队列中，等当前的任务执行结束之后，再从消息队列中取出正在排队的任务</li>
+<li>当执行完一个任务之后，我们的事件循环系统会重复这个过程，继续从消息队列中取出并执行下个任务</li>
+</ul>
+<p><strong>生成字节码</strong></p>
+<p>对 JavaScript 代码进行解析 (Parser)，并生成为 AST 和作用域信息，之后 AST 和作用域信息被输入到一个称为 Ignition 的解释器中，并将其转化为字节码</p>
+<p>然后再根据情况解释执行字节码或者直接将字节码编译成二进制代码然后执行</p>
+<p><strong>执行字节码</strong></p>
+<p>V8 使用 Ignition 解释器来解释执行字节码：</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">add</span>(<span class="params">x, y</span>) </span>&#123;</span><br><span class="line">    <span class="keyword">var</span> z = x+y</span><br><span class="line">    <span class="keyword">return</span> z</span><br><span class="line">&#125;</span><br><span class="line"><span class="built_in">console</span>.log(add(<span class="number">1</span>, <span class="number">2</span>))</span><br></pre></td></tr></table></figure>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">StackCheck</span><br><span class="line">Ldar a1 # 将寄存器中的某个值加载到累加器中</span><br><span class="line">Add a0, [0] # a0寄存器的值和累加器中的值相加,再存入累加器中</span><br><span class="line">Star r0 # 把累加器中的值保存到某个寄存器中,将累加器的值保存到r0</span><br><span class="line">LdaSmi [2] # 将小整数加载到寄存器中</span><br><span class="line">Star r1 # 将累加器中的值保存在r1中</span><br><span class="line">Ldar r0 # 将r0的值加载进累加器</span><br><span class="line">Return # 结束执行,并将累加器中的值返回</span><br></pre></td></tr></table></figure>
+<ul>
+<li>解释器就是模拟物理机器来执行字节码的</li>
+<li>比如可以实现如取指令、解析指令、执行指令、存储数据等 </li>
+</ul>
+<p>通常有两种类型的解释器，基于栈 (Stack-based) 和基于寄存器 (Register-based)：</p>
+<ul>
+<li>基于栈的解释器使用栈来保存函数参数、中间运算结果、变量</li>
+<li>基于寄存器的虚拟机则支持寄存器的指令操作，使用寄存器来保存参数、中间计算结果</li>
+</ul>
+<p><strong>编译字节码</strong></p>
+<p>字节码虽然可以直接解释执行，但是耗时较长，为了优化代码执行速度，V8 在解释器内增加了一个监控机器人，在解释执行字节码的过程中，如果发现某一段代码被重复执行多次，那么监控机器人会将这段代码标记为 <strong>热点代码</strong></p>
+<ul>
+<li>当某段代码被标记为热点代码后，V8 就会将这段字节码丢给优化编译器 TurboFan</li>
+<li>优化编译器会在后台将字节码编译成二进制代码，然后再对编译后的二进制代码进行优化操作，优化后的二进制机器代码的执行效率会得到大幅提升</li>
+<li>如果下面再执行到这段代码时，那么 V8 会优先选择优化之后的二进制代码，这样代码的执行速度就会大幅提升</li>
+</ul>
+<p>不过，和静态语言不同的是，JavaScript 是一种非常灵活的动态语言，对象的结构和属性是可以在运行时任意修改的，而经过优化过的代码只能针对某种固定的结构，一旦在执行过程中， 对象的结构被动态修改了，那么优化之后的代码势必会变成无效的代码，这时候优化编译器就需要执行 <strong>反优化</strong> 操作，经过反优化的代码，下次执行时就会回退到解释器解释执行</p>
+<p><strong>编译流水线流程图</strong></p>
+<img src="/2023/04/04/V8%20%E7%9F%A5%E8%AF%86%E6%80%BB%E7%BB%93/1680536613127.png" class width="1680536613127"> 
+<p>整个编译流水线的流程依次为：</p>
+<ul>
+<li>准备基础环境<ul>
+<li>全局执行上下文：全局作用、全局变量、内置函数</li>
+<li>初始化内存中的堆和栈结构</li>
+<li>初始化消息循环系统：消息驱动器和消息队列</li>
+</ul>
+</li>
+<li>结构化 JavaScript 源代码<ul>
+<li>生成抽象语法树 AST</li>
+<li>生成相关作用域</li>
+</ul>
+</li>
+<li>生成字节码<ul>
+<li>字节码是介于 AST 和机器码的中间代码</li>
+<li>解释器可以直接执行</li>
+<li>编译器需要将其编译为二进制的机器码再执行</li>
+</ul>
+</li>
+<li>标记热点代码<ul>
+<li>解释器：按照顺序执行字节码，并输出执行结果</li>
+<li>监控机器人：如果发现某段代码被重复多次执行，将其标记为热点代码</li>
+</ul>
+</li>
+<li>优化热点代码<ul>
+<li>优化编译器将热点代码编译为机器码</li>
+<li>对编译后的机器码进行优化</li>
+<li>再次执行到这段代码时，将优先执行优化后的代码</li>
+</ul>
+</li>
+<li>反优化<ul>
+<li><code>JavaScript</code> 对象在运行时可能会被改变，这段优化后的热点代码就失效了</li>
+<li>进行反优化操作，给到解释器解释执行</li>
+</ul>
+</li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/V8/" rel="tag"><i class="fa fa-tag"></i> V8</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/03/31/Haskell%20%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/" rel="prev" title="Haskell 基础知识">
+      <i class="fa fa-chevron-left"></i> Haskell 基础知识
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2023/04/06/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86pwn2/" rel="next" title="编译原理pwn2">
+      编译原理pwn2 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#V8-%E6%8C%87%E9%92%88%E6%8A%80%E6%9C%AF"><span class="nav-number">1.</span> <span class="nav-text">V8 指针技术</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#V8-%E5%AF%B9%E8%B1%A1%E7%AE%A1%E7%90%86"><span class="nav-number">2.</span> <span class="nav-text">V8 对象管理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#V8-%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86"><span class="nav-number">3.</span> <span class="nav-text">V8 内存管理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#V8-%E5%9E%83%E5%9C%BE%E6%94%B6%E9%9B%86"><span class="nav-number">4.</span> <span class="nav-text">V8 垃圾收集</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#V8-%E7%BC%96%E8%AF%91%E6%B5%81%E6%B0%B4%E7%BA%BF"><span class="nav-number">5.</span> <span class="nav-text">V8 编译流水线</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">236</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">137</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">3.2m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">47:44</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
