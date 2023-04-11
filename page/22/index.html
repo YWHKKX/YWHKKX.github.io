@@ -156,6 +156,150 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/02/09/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUnsortedbin%20Attack/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/02/09/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUnsortedbin%20Attack/" class="post-title-link" itemprop="url">Ptmalloc算法：Unsortedbin Attack</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-02-09 17:20:59" itemprop="dateCreated datePublished" datetime="2022-02-09T17:20:59+08:00">2022-02-09</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-02-22 00:03:48" itemprop="dateModified" datetime="2022-02-22T00:03:48+08:00">2022-02-22</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/SourceCodeAnalysis/" itemprop="url" rel="index"><span itemprop="name">SourceCodeAnalysis</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>3.5k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>3 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="Ptmalloc算法：Unsortedbin-Attack"><a href="#Ptmalloc算法：Unsortedbin-Attack" class="headerlink" title="Ptmalloc算法：Unsortedbin Attack"></a>Ptmalloc算法：Unsortedbin Attack</h2><p>Unsortedbin Attack，也是堆中较为常见的利用手段，可以用来 <strong>泄露地址</strong> 和 <strong>WAA</strong></p>
+<p>概念：利用ptmalloc算法中，Unsortedbin的机制进行攻击</p>
+<hr>
+<h2 id="Unsorted-Chunk"><a href="#Unsorted-Chunk" class="headerlink" title="Unsorted Chunk"></a>Unsorted Chunk</h2><p>Unsorted Chunk就是暂时没有被程序处理的chunk</p>
+<p>来源：</p>
+<ul>
+<li>当一个较大的chunk被分割成两半后，剩下的部分大于MINSIZE</li>
+<li>释放一个不属于fastbin的chunk，并且该chunk不和top chunk紧邻</li>
+<li>当进行malloc_consolidate时，合并后的chunk会优先成为Unsorted Chunk(不与top chunk相邻)</li>
+</ul>
+<p>这些Unsorted Chunk会以双向链表的形式构成<strong>Unsorted Bin</strong></p>
+<h2 id="Unsorted-Bin"><a href="#Unsorted-Bin" class="headerlink" title="Unsorted Bin"></a>Unsorted Bin</h2><p>Unsorted Bin就是专门用于管理Unsorted Chunk的数据结构，可以存储不同大小的chunk，有且只有一条</p>
+<p>使用：</p>
+<ul>
+<li>采用的遍历顺序是FIFO：先被释放的chunk，将会优先被申请（ 先进先出队列）</li>
+<li>在程序 malloc 时，如果在 fastbin，small bin 中找不到对应大小的 chunk，就会尝试从 Unsorted Bin 中寻找 chunk，如果取出来的 chunk 大小刚好满足，就会直接返回给用户，否则就会把这些 chunk 分别插入到对应的 bin 中</li>
+</ul>
+<h2 id="Unsorted-Bin-Leak"><a href="#Unsorted-Bin-Leak" class="headerlink" title="Unsorted Bin Leak"></a>Unsorted Bin Leak</h2><p><strong>原理：</strong></p>
+<p>低libc版本的Unsorted Bin有一个特点：</p>
+<ul>
+<li>第一个chunk的BK指针：指向“main_arena+xx”</li>
+<li>最后一个chunk的FD指针：指向“main_arena+xx”</li>
+</ul>
+<p>而“main_arena+xx”距离“libc_base”的偏移是固定的，所以可以通过泄露“main_arena+xx”来计算“libc_base”</p>
+<p><strong>案例：</strong></p>
+<img src="/2022/02/09/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUnsortedbin%20Attack/1643553960726-1645459421128.png" class width="1643553960726"> 
+<p><strong>利用：</strong></p>
+<p>如果程序拥有“打印模块”和UAF漏洞，则可以直接打印该地址</p>
+<p>除此之外，很难泄露“main_arena+xx”</p>
+<h2 id="Unsorted-Bin-Attack"><a href="#Unsorted-Bin-Attack" class="headerlink" title="Unsorted Bin Attack"></a>Unsorted Bin Attack</h2><p><strong>原理：</strong></p>
+<p>当将一个 unsorted bin 取出的时候，会将 <code>bck-&gt;fd</code> 的位置写入本 Unsorted Chunk 的位置</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* remove from unsorted list */</span></span><br><span class="line"><span class="keyword">if</span> (__glibc_unlikely (bck-&gt;fd != victim))</span><br><span class="line">    malloc_printerr (<span class="string">&quot;malloc(): corrupted unsorted chunks 3&quot;</span>);</span><br><span class="line">unsorted_chunks (av)-&gt;bk = bck;</span><br><span class="line">bck-&gt;fd = unsorted_chunks (av);</span><br></pre></td></tr></table></figure>
+<p>换而言之，如果我们控制了 bk 的值，我们就能将 <code>unsorted_chunks (av)</code> 写到任意地址 </p>
+<ul>
+<li><code>unsorted bin</code> 也是以链表的方式进行组织的，和 <code>fast bin</code> 不同的是其分配方式是<code>FIFO</code>，即一个chunk放入<code>unsorted bin</code>链时将该堆块插入链表头，而从这个链取堆块的时候是从尾部开始的，因此<code>unsorted bin</code>遍历堆块的时候使用的是<code>bk</code>指针</li>
+</ul>
+<p>通常 Unsorted Bin Attack 就是为了 Fastbin Attack 提供“\x7f”的</p>
+<p><strong>案例：</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;malloc.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> size=<span class="number">0x100</span>;</span><br><span class="line">    <span class="keyword">char</span> *p=<span class="built_in">malloc</span>(size);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,p); <span class="comment">/* sleep函数为程序打断点使用，无其他作用 */</span></span><br><span class="line">    <span class="built_in">free</span>(p);</span><br><span class="line">    sleep(<span class="number">0</span>); <span class="comment">//第一步</span></span><br><span class="line">	</span><br><span class="line">    *(<span class="keyword">long</span>*)(p+<span class="number">8</span>)=<span class="number">0x601100</span>; <span class="comment">//0x601100是我们的攻击目标</span></span><br><span class="line">    sleep(<span class="number">0</span>); <span class="comment">//第二步</span></span><br><span class="line"> </span><br><span class="line">    <span class="keyword">char</span> *r=<span class="built_in">malloc</span>(size);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>,r);</span><br><span class="line">    sleep(<span class="number">0</span>); <span class="comment">//第三步</span></span><br><span class="line">	</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>第一步：</p>
+<img src="/2022/02/09/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUnsortedbin%20Attack/1645458941319.png" class width="1645458941319"> 
+<p>chunkP是 Unsortedbin 中唯一的chunk</p>
+<p>第二步：</p>
+<img src="/2022/02/09/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUnsortedbin%20Attack/1645459165903.png" class width="1645459165903"> 
+<img src="/2022/02/09/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUnsortedbin%20Attack/1645459056200.png" class width="1645459056200"> 
+<p>chunkP的BK指针被改为“0x601100”</p>
+<p>第三步：</p>
+<img src="/2022/02/09/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUnsortedbin%20Attack/1645459178671.png" class width="1645459178671"> 
+<p>chunkP被申请后，Unsortedbin 中没有chunk了，但是“0x601100”中被写入“main_arena+xx”</p>
+<img src="/2022/02/09/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUnsortedbin%20Attack/1645459348592.png" class width="1645459348592"> 
+<p>如果“0x601110-0x3”是我们的攻击目标的话，那么“0x601110-0x3”的指定偏移用于表示size的地址处就被我们写入了0x7f的数值</p>
+<img src="/2022/02/09/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUnsortedbin%20Attack/1645459389280.png" class width="1645459389280"> 
+<h2 id="版本对Unsorted-Bin-Attack的影响"><a href="#版本对Unsorted-Bin-Attack的影响" class="headerlink" title="版本对Unsorted Bin Attack的影响"></a>版本对Unsorted Bin Attack的影响</h2><p><strong>glibc2.23</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> (;;)</span><br><span class="line">   &#123;</span><br><span class="line">     <span class="keyword">int</span> iters = <span class="number">0</span>;</span><br><span class="line">     <span class="keyword">while</span> ((victim = unsorted_chunks (av)-&gt;bk) != unsorted_chunks (av))</span><br><span class="line">     &#123;</span><br><span class="line">         bck = victim-&gt;bk;</span><br><span class="line">         <span class="keyword">if</span> (__builtin_expect (victim-&gt;size &lt;= <span class="number">2</span> * SIZE_SZ, <span class="number">0</span>)</span><br><span class="line">             || __builtin_expect (victim-&gt;size &gt; av-&gt;system_mem, <span class="number">0</span>))</span><br><span class="line">           malloc_printerr (check_action, <span class="string">&quot;malloc(): memory corruption&quot;</span>,</span><br><span class="line">                            chunk2mem (victim), av);</span><br><span class="line">           <span class="comment">/* remove from unsorted list */</span></span><br><span class="line">         unsorted_chunks (av)-&gt;bk = bck;</span><br><span class="line">         bck-&gt;fd = unsorted_chunks (av);</span><br><span class="line">     &#125;</span><br></pre></td></tr></table></figure>
+<p>只检查了“victim-&gt;size”，形同虚设，可以直接打Unsorted Bin Attack</p>
+<p><strong>glibc2.29</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> (;;)</span><br><span class="line">    &#123;</span><br><span class="line">      <span class="keyword">int</span> iters = <span class="number">0</span>;</span><br><span class="line">      <span class="keyword">while</span> ((victim = unsorted_chunks (av)-&gt;bk) != unsorted_chunks (av))</span><br><span class="line">      &#123;</span><br><span class="line">          bck = victim-&gt;bk;</span><br><span class="line">          size = chunksize (victim);</span><br><span class="line">          mchunkptr next = chunk_at_offset (victim, size);</span><br><span class="line"> </span><br><span class="line">          <span class="keyword">if</span> (__glibc_unlikely (size &lt;= <span class="number">2</span> * SIZE_SZ)</span><br><span class="line">              || __glibc_unlikely (size &gt; av-&gt;system_mem))</span><br><span class="line">            malloc_printerr (<span class="string">&quot;malloc(): invalid size (unsorted)&quot;</span>);</span><br><span class="line">          <span class="keyword">if</span> (__glibc_unlikely (chunksize_nomask (next) &lt; <span class="number">2</span> * SIZE_SZ)</span><br><span class="line">              || __glibc_unlikely (chunksize_nomask (next) &gt; av-&gt;system_mem))</span><br><span class="line">            malloc_printerr (<span class="string">&quot;malloc(): invalid next size (unsorted)&quot;</span>);</span><br><span class="line">          <span class="keyword">if</span> (__glibc_unlikely ((prev_size (next) &amp; ~(SIZE_BITS)) != size))</span><br><span class="line">            malloc_printerr (<span class="string">&quot;malloc(): mismatching next-&gt;prev_size (unsorted)&quot;</span>);</span><br><span class="line">          <span class="keyword">if</span> (__glibc_unlikely (bck-&gt;fd != victim)</span><br><span class="line">              || __glibc_unlikely (victim-&gt;fd != unsorted_chunks (av)))</span><br><span class="line">            malloc_printerr (<span class="string">&quot;malloc(): unsorted double linked list corrupted&quot;</span>);</span><br><span class="line">          <span class="keyword">if</span> (__glibc_unlikely (prev_inuse (next)))</span><br><span class="line">            malloc_printerr (<span class="string">&quot;malloc(): invalid next-&gt;prev_inuse (unsorted)&quot;</span>);</span><br><span class="line">          unsorted_chunks (av)-&gt;bk = bck;</span><br><span class="line">          bck-&gt;fd = unsorted_chunks (av);</span><br><span class="line">      &#125;</span><br></pre></td></tr></table></figure>
+<p>直接把“victim的全家”都给检查了，基本上不能打Unsorted Bin Attack</p>
+<p>其实也有办法打Unsorted Bin Attack，以后遇到再说</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/02/09/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ATcache%20Attack/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1738,178 +1882,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/18/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUnlink%E6%94%BB%E5%87%BB/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/01/18/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUnlink%E6%94%BB%E5%87%BB/" class="post-title-link" itemprop="url">Ptmalloc算法：Unlink攻击</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2022-01-18 13:24:43" itemprop="dateCreated datePublished" datetime="2022-01-18T13:24:43+08:00">2022-01-18</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-03-11 19:23:10" itemprop="dateModified" datetime="2022-03-11T19:23:10+08:00">2022-03-11</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/SourceCodeAnalysis/" itemprop="url" rel="index"><span itemprop="name">SourceCodeAnalysis</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>3.6k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>3 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="Ptmalloc算法：Unlink攻击"><a href="#Ptmalloc算法：Unlink攻击" class="headerlink" title="Ptmalloc算法：Unlink攻击"></a>Ptmalloc算法：Unlink攻击</h2><p>我们在利用 unlink 所造成的漏洞时，其实就是对 chunk 进行内存布局，然后借助 unlink 操作来达成修改指针（某个chunk的fd指针）的效果</p>
-<p>这个指针可以修改为任何地址（fake pointer），那些下一次对该chunk进行操作时，就会向“fake pointer”中写入数据，以实现<strong>WAA</strong></p>
-<hr>
-<h2 id="Unlink流程"><a href="#Unlink流程" class="headerlink" title="Unlink流程"></a>Unlink流程</h2><p>unlink是一个宏操作，用于将某一个空闲chunk从其所处的双向链表中脱链 </p>
-<p>阉割版代码：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">unlink</span><span class="params">(malloc_chunk *P, malloc_chunk *BK, malloc_chunk *FD)</span></span></span><br><span class="line"><span class="function"></span>&#123;	<span class="comment">//p是某个结构体“malloc_chunk”的地址，*p就是结构体本身（进行了降阶）</span></span><br><span class="line">    FD = P-&gt;fd;		<span class="comment">//FD就是指向下一个结构体的指针</span></span><br><span class="line">    BK = P-&gt;bk;		<span class="comment">//BK就是指向上一个结构体的指针</span></span><br><span class="line">    <span class="keyword">if</span> (__builtin_expect (FD-&gt;bk != P || BK-&gt;fd != P, <span class="number">0</span>))</span><br><span class="line">        malloc_printerr(check_action,<span class="string">&quot;corrupted double-linked list&quot;</span>,P);</span><br><span class="line">    <span class="keyword">else</span></span><br><span class="line">    &#123;	</span><br><span class="line">        FD-&gt;bk = BK;	<span class="comment">//FD-&gt;bk：下一个结构体中的last</span></span><br><span class="line">        BK-&gt;fd = FD;	</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>流程图：</p>
-<img src="/2022/01/18/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUnlink%E6%94%BB%E5%87%BB/1639014959836-1642863211161-1646985088125.png" class width="1639014959836">
-<p> 在程序进行unlink操作时，还有一个检查：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 由于&#x27;P&#x27;已经在双向链表中，所以有两个地方记录其大小，所以检查一下其大小是否一致(size检查)</span></span><br><span class="line"><span class="keyword">if</span> (__builtin_expect (chunksize(P) != prev_size (next_chunk(P)), <span class="number">0</span>))</span><br><span class="line">    malloc_printerr (<span class="string">&quot;corrupted size vs. prev_size&quot;</span>);        </span><br><span class="line"></span><br><span class="line"><span class="comment">// 检查 fd 和 bk 指针(双向链表完整性检查)</span></span><br><span class="line"><span class="keyword">if</span> (__builtin_expect (FD-&gt;bk != P || BK-&gt;fd != P, <span class="number">0</span>))</span><br><span class="line">    malloc_printerr (check_action, <span class="string">&quot;corrupted double-linked list&quot;</span>, P, AV);  </span><br><span class="line"></span><br><span class="line"> <span class="comment">// 检查 largebin 中 next_size 双向链表完整性检查 </span></span><br><span class="line"><span class="keyword">if</span> (__builtin_expect (P-&gt;fd_nextsize-&gt;bk_nextsize != P, <span class="number">0</span>) || __builtin_expect (P-&gt;bk_nextsize-&gt;fd_nextsize != P, <span class="number">0</span>))    </span><br><span class="line">    malloc_printerr (check_action,<span class="string">&quot;corrupted double-linked list (not small)&quot;</span>, P, AV);</span><br></pre></td></tr></table></figure>
-<p>简单来说就是：</p>
-<p>chunkP的下一个chunk的上一个chunk是不是chunkP</p>
-<p>chunkP的上一个chunk的下一个chunk是不是chunkP</p>
-<h2 id="Unlink攻击原理"><a href="#Unlink攻击原理" class="headerlink" title="Unlink攻击原理"></a>Unlink攻击原理</h2><p>unlink 操作虽然有检查，但并不是那么“智能”，程序只会 <strong>根据地址的相对位置</strong> 来推测此位置大概是什么数据，比如，程序会认为 chunk_head+0x8 的位置为 presize， <strong>而不会去检查 chunk 本身的“完整性”</strong> ，我们就可以利用这一点来欺骗检查程序</p>
-<img src="/2022/01/18/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9AUnlink%E6%94%BB%E5%87%BB/1639131511591-1639312964843-1642863211162-1646985088126.png" class title="1639131511591-1639312964843"> 
-<p>buf[0] 中装有 chunk 的首地址，修改 fake chunk-&gt;FD 为 buf[0] - 0x18（buf[-3]），修改 fake chunk-&gt;BK 为 buf[0] - 0x10（buf[-2]）</p>
-<p>假设程序要对 fake chunk 进行 unlink 操作，而 FD，BK 中指向的地址显然不合法，看看程序是怎么检查的：</p>
-<ul>
-<li>检查chunkP的下一个chunk的上一个chunk是不是chunkP，先获取FD指针指向的chunk，然后检查该chunk的BK指针是不是chunkP：fake chunk 的FD指针指向 buf[-3]，而程序会把 buf[-3]+0x18 处当做它的BK指针（指向 buf[0]），符合检查</li>
-<li>检查chunkP的上一个chunk的下一个chunk是不是chunkP，先获取BK指针指向的chunk，然后检查该chunk的FD指针是不是chunkP：fake chunk 的BK指针指向 buf[-2]，而程序会把  buf[-2]+0x10 处当做它的FD指针（指向 buf[0]），符合检查</li>
-</ul>
-<p>这只是一种伪造方法，核心点：程序只会根据地址的相对位置获取数据</p>
-<h2 id="Unlink利用姿势"><a href="#Unlink利用姿势" class="headerlink" title="Unlink利用姿势"></a>Unlink利用姿势</h2><p><strong>一，针对 chunk_list ，劫持修改模块（两个chunk合并后unlink）</strong></p>
-<p>这种攻击的套路比较固定：</p>
-<ul>
-<li>申请两个大小相同的chunk（大小不同也可以，我这里为了方便描述就这样规定）</li>
-<li>找寻并泄露 chunk_list 的地址（chunk_list 就是存放chunk数据区地址的数组）</li>
-<li>在chunk1内部进行伪造：<ul>
-<li>伪造 presize 为“0”</li>
-<li>伪造 size 为“chunk1-&gt;size - 0x10”</li>
-<li>伪造 FD 为“chunk_list - 0x18”</li>
-<li>伪造 BK 为“chunk_list - 0x10”</li>
-</ul>
-</li>
-<li>通过 off-by-one 溢出1字节覆盖 chunk2-&gt;size</li>
-<li>释放 chunk2</li>
-</ul>
-<p>此后Unlink攻击完成，在 unsortedbin 中存储的地址变为“chunk_list - 0x18”，并且在 chunk_list 中残留的chunk1数据区地址也变为“chunk_list - 0x18”</p>
-<p>接下来可以用修改模块进行 hook，GOT劫持，也可以把chunk申请到“chunk_list - 0x18”上</p>
-<p><strong>二，针对 heap ，实现 overlapping（三个chunk合并后unlink）</strong></p>
-<p>这种攻击可以直接在 heap 中打：</p>
-<ul>
-<li>申请三个chunk</li>
-<li>找寻并泄露 chunk1_head 的地址（chunk1的首地址）</li>
-<li>在chunk1内部进行伪造：<ul>
-<li>伪造 presize 为“0”</li>
-<li>伪造 size 为“fake-&gt;size+1”（使其可以索引到chunk3）</li>
-<li>伪造 FD 为“chunk1_head + 0x18”</li>
-<li>伪造 BK 为“chunk1_head + 0x20” </li>
-<li>伪造 FD+0x10（BK+0x8）为“chunk1_head + 0x10”（fake chunk首地址）</li>
-</ul>
-</li>
-<li>在chunk2内部最后一个空间写入“fake-&gt;size”（原本chunk3-&gt;presize的位置，使其可以索引到 fake chunk）</li>
-<li>通过 off-by-one 溢出1字节覆盖 chunk3-&gt;size</li>
-<li>释放 chunk3</li>
-</ul>
-<p>注意：“fake-&gt;size”的大小为“chunk1-&gt;size + chunk2-&gt;size - 0x10 ”</p>
-<h2 id="libc版本限制"><a href="#libc版本限制" class="headerlink" title="libc版本限制"></a>libc版本限制</h2><p>glibc-2.23：</p>
-<ul>
-<li>基本的unlink检查</li>
-</ul>
-<p>绕过：用上述操作就可以绕过</p>
-<p>glibc-2.27：</p>
-<ul>
-<li>基本的unlink检查</li>
-<li>对“下一个chunk的pre_size”的检查</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (__builtin_expect (chunksize(P) != prev_size (next_chunk(P)), <span class="number">0</span>))</span><br><span class="line">    malloc_printerr (<span class="string">&quot;corrupted size vs. pre_size&quot;</span>);</span><br></pre></td></tr></table></figure>
-<p>标准的是申请三个堆 chunk0 chunk1 chunk2（控制 chunk1 为“buf[-3]”） </p>
-<ul>
-<li><p>释放 chunk0，chunk1 的 prev_size 位置会留下 chunk0 的大小</p>
-</li>
-<li><p>释放 chunk2 glibc 会通过 prev_size 向上索引到 chunk0</p>
-</li>
-<li><p>chunk0 会被检测，这里 “chunk0的size” 会和 “chunk1的prev_size” 比较</p>
-</li>
-</ul>
-<p>注意：chunk2 需要申请一个 chunk3，防止 chunk2 释放后与“top chunk”合并</p>
-<p>绕过：需要多伪造一个“fake_chunk0”，并通过“fake_chunk1”索引到“fake_chunk0”</p>
-<p>glibc-2.29：</p>
-<ul>
-<li>基本的unlink检查</li>
-<li>对“上一个chunk的pre_size”的检查</li>
-<li>在unlink之前：检查 “chunk0的size” 和 “chunk2的prev_size” 是否相等 </li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (!prev_inuse(p))&#123;</span><br><span class="line">	prevsize = prev_size(p);</span><br><span class="line">    size += prevsize;</span><br><span class="line">    p = chunk_at_offset(p, -((<span class="keyword">long</span>)prevsize));</span><br><span class="line">    <span class="keyword">if</span> (__glibc_unlikely (chunksize(p) != prevsize))</span><br><span class="line">        malloc_printerr (<span class="string">&quot;corrupted size vs. pre_size while consolidating&quot;</span>);</span><br><span class="line">    unlink_chunk (av,p); <span class="comment">//unlink的主体操作</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>​        // 这里还没有搞清楚，以后遇到题目了再补充</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -1981,7 +1953,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">238</span>
+          <span class="site-state-item-count">239</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -1994,7 +1966,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">138</span>
+        <span class="site-state-item-count">139</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -2035,7 +2007,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">48:09</span>
+    <span title="Reading time total">48:18</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
