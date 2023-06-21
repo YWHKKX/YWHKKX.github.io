@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="SycLang 出题思路 本题目提供了中间代码和编译器前端，要求将中间代码逆向回C，自行编译后解出 flag（当然也可以直接通过中间代码分析 flag） 首先，本程序有3个陷阱： 12345678910111213#!tempa :&#x3D; &amp;#123;#8&amp;#125;*&amp;#123;var16&lt;+64&gt;&amp;#125;  var12&lt;+32&gt; :&#x3D; var22(@exp.key[0]">
+<meta property="og:type" content="article">
+<meta property="og:title" content="SycLang出题思路">
+<meta property="og:url" content="http://example.com/2023/06/21/SycLang%E5%87%BA%E9%A2%98%E6%80%9D%E8%B7%AF/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="SycLang 出题思路 本题目提供了中间代码和编译器前端，要求将中间代码逆向回C，自行编译后解出 flag（当然也可以直接通过中间代码分析 flag） 首先，本程序有3个陷阱： 12345678910111213#!tempa :&#x3D; &amp;#123;#8&amp;#125;*&amp;#123;var16&lt;+64&gt;&amp;#125;  var12&lt;+32&gt; :&#x3D; var22(@exp.key[0]">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2023/06/21/SycLang%E5%87%BA%E9%A2%98%E6%80%9D%E8%B7%AF/page1.png">
+<meta property="og:image" content="http://example.com/2023/06/21/SycLang%E5%87%BA%E9%A2%98%E6%80%9D%E8%B7%AF/page2.png">
+<meta property="og:image" content="http://example.com/2023/06/21/SycLang%E5%87%BA%E9%A2%98%E6%80%9D%E8%B7%AF/page3.png">
+<meta property="article:published_time" content="2023-06-21T02:13:16.000Z">
+<meta property="article:modified_time" content="2023-06-21T02:16:54.760Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="Compilers Principles">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2023/06/21/SycLang%E5%87%BA%E9%A2%98%E6%80%9D%E8%B7%AF/page1.png">
+
+<link rel="canonical" href="http://example.com/2023/06/21/SycLang%E5%87%BA%E9%A2%98%E6%80%9D%E8%B7%AF/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>SycLang出题思路 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/06/21/SycLang%E5%87%BA%E9%A2%98%E6%80%9D%E8%B7%AF/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          SycLang出题思路
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-06-21 10:13:16 / Modified: 10:16:54" itemprop="dateCreated datePublished" datetime="2023-06-21T10:13:16+08:00">2023-06-21</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/CTF-Challenge/" itemprop="url" rel="index"><span itemprop="name">CTF Challenge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>10k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>9 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>SycLang 出题思路</strong></p>
+<p>本题目提供了中间代码和编译器前端，要求将中间代码逆向回C，自行编译后解出 flag（当然也可以直接通过中间代码分析 flag）</p>
+<p>首先，本程序有3个陷阱：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">#!tempa := &#123;#8&#125;*&#123;var16&lt;+64&gt;&#125;</span><br><span class="line">  var12&lt;+32&gt; := var22(@exp.key[0])&lt;+8&gt;&lt;+488&gt;&lt;+tempa&gt;</span><br><span class="line">  temp84 := #1</span><br><span class="line">  temp85 := var15&lt;+56&gt; + temp84</span><br><span class="line">  var18&lt;+80&gt; := temp85</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var18&lt;+80&gt;&#125;</span><br><span class="line">  var13&lt;+40&gt; := var22(@exp.key[0])&lt;+8&gt;&lt;+488&gt;&lt;+tempa&gt;</span><br><span class="line">  temp86 := #0</span><br><span class="line">  var13&lt;+40&gt; := temp86</span><br><span class="line">  temp87 := var12&lt;+32&gt; ^ var13&lt;+40&gt;</span><br><span class="line">  var14&lt;+48&gt; := temp87</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var16&lt;+64&gt;&#125;</span><br><span class="line">  var22(@exp.key[0])&lt;+8&gt;&lt;+488&gt;&lt;+tempa&gt; := var14&lt;+48&gt;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>var13&lt;+40&gt;</code> 在异或前会赋值“0”，因此对 <code>e1.key(var22(@exp.key[0])&lt;+8&gt;&lt;+488&gt;&lt;+tempa&gt;)</code> 的异或加密失效</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br></pre></td><td class="code"><pre><span class="line">LABEL label59 :</span><br><span class="line">  temp89 := #0</span><br><span class="line">  var24(@exp.L[0])&lt;+200&gt;&lt;+1256&gt; := temp89</span><br><span class="line">  temp91 := #12</span><br><span class="line">  var24(@exp.R[0])&lt;+264&gt;&lt;+1256&gt; := temp91</span><br><span class="line">  temp93 := #0</span><br><span class="line">  </span><br><span class="line">  ......</span><br><span class="line">  </span><br><span class="line">  var24(@exp.key[23])&lt;+192&gt;&lt;+1256&gt; := temp195</span><br><span class="line">  temp196 := #23</span><br><span class="line">  var15&lt;+56&gt; := temp196</span><br><span class="line">LABEL label118 :</span><br><span class="line">  temp198 := #0</span><br><span class="line">  IF var15&lt;+56&gt; &gt; temp198 GOTO label117</span><br><span class="line">  GOTO label116</span><br><span class="line">LABEL label117 :</span><br><span class="line">  var18&lt;+80&gt; := var15&lt;+56&gt;</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var18&lt;+80&gt;&#125;</span><br><span class="line">  var19&lt;+88&gt; := var24(@exp.key[0])&lt;+8&gt;&lt;+1256&gt;&lt;+tempa&gt;</span><br><span class="line">  temp199 := #1</span><br><span class="line">  temp200 := var15&lt;+56&gt; - temp199</span><br><span class="line">  var16&lt;+64&gt; := temp200</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var16&lt;+64&gt;&#125;</span><br><span class="line">  var17&lt;+72&gt; := var24(@exp.key[0])&lt;+8&gt;&lt;+1256&gt;&lt;+tempa&gt;</span><br><span class="line">  temp201 := var19&lt;+88&gt; - var17&lt;+72&gt;</span><br><span class="line">  var21&lt;+104&gt; := temp201</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var15&lt;+56&gt;&#125;</span><br><span class="line">  var24(@exp.key[0])&lt;+8&gt;&lt;+1256&gt;&lt;+tempa&gt; := var21&lt;+104&gt;</span><br><span class="line">  temp197 := #1</span><br><span class="line">  var15&lt;+56&gt; := var15&lt;+56&gt; - temp197</span><br><span class="line">  GOTO label118</span><br><span class="line">LABEL label116 :</span><br><span class="line">  temp202 := #0</span><br><span class="line">  var15&lt;+56&gt; := temp202</span><br><span class="line">LABEL label126 :</span><br><span class="line">  temp204 := #8</span><br><span class="line">  IF var15&lt;+56&gt; &lt; temp204 GOTO label125</span><br><span class="line">  GOTO label124</span><br><span class="line">LABEL label125 :</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var15&lt;+56&gt;&#125;</span><br><span class="line">  var16&lt;+64&gt; := var24(@exp.L[0])&lt;+200&gt;&lt;+1256&gt;&lt;+tempa&gt;</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var15&lt;+56&gt;&#125;</span><br><span class="line">  var18&lt;+80&gt; := var24(@exp.R[0])&lt;+264&gt;&lt;+1256&gt;&lt;+tempa&gt;</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var15&lt;+56&gt;&#125;</span><br><span class="line">  var20&lt;+96&gt; := var24(@exp.X[0])&lt;+328&gt;&lt;+1256&gt;&lt;+tempa&gt;</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var16&lt;+64&gt;&#125;</span><br><span class="line">  var17&lt;+72&gt; := var24(@exp.key[0])&lt;+8&gt;&lt;+1256&gt;&lt;+tempa&gt;</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var18&lt;+80&gt;&#125;</span><br><span class="line">  var19&lt;+88&gt; := var24(@exp.key[0])&lt;+8&gt;&lt;+1256&gt;&lt;+tempa&gt;</span><br><span class="line">  var17&lt;+72&gt; := var17&lt;+72&gt; + var20&lt;+96&gt;</span><br><span class="line">  var19&lt;+88&gt; := var19&lt;+88&gt; - var20&lt;+96&gt;</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var16&lt;+64&gt;&#125;</span><br><span class="line">  var24(@exp.key[0])&lt;+8&gt;&lt;+1256&gt;&lt;+tempa&gt; := var17&lt;+72&gt;</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var18&lt;+80&gt;&#125;</span><br><span class="line">  var24(@exp.key[0])&lt;+8&gt;&lt;+1256&gt;&lt;+tempa&gt; := var19&lt;+88&gt;</span><br><span class="line">  temp203 := #1</span><br><span class="line">  var15&lt;+56&gt; := var15&lt;+56&gt; + temp203</span><br><span class="line">  GOTO label126</span><br><span class="line">LABEL label124 :</span><br><span class="line">  temp207 := #1</span><br><span class="line">  var15&lt;+56&gt; := temp207</span><br><span class="line">LABEL label137 :</span><br><span class="line">  temp209 := #24</span><br><span class="line">  IF var15&lt;+56&gt; &lt; temp209 GOTO label136</span><br><span class="line">  GOTO label135</span><br><span class="line">LABEL label136 :</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var15&lt;+56&gt;&#125;</span><br><span class="line">  var17&lt;+72&gt; := var24(@exp.key[0])&lt;+8&gt;&lt;+1256&gt;&lt;+tempa&gt;</span><br><span class="line">  temp210 := #1</span><br><span class="line">  temp211 := var15&lt;+56&gt; - temp210</span><br><span class="line">  var16&lt;+64&gt; := temp211</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var16&lt;+64&gt;&#125;</span><br><span class="line">  var20&lt;+96&gt; := var24(@exp.key[0])&lt;+8&gt;&lt;+1256&gt;&lt;+tempa&gt;</span><br><span class="line">  var17&lt;+72&gt; := var17&lt;+72&gt; + var20&lt;+96&gt;</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var15&lt;+56&gt;&#125;</span><br><span class="line">  var24(@exp.key[0])&lt;+8&gt;&lt;+1256&gt;&lt;+tempa&gt; := var17&lt;+72&gt;</span><br><span class="line">  temp208 := #1</span><br><span class="line">  var15&lt;+56&gt; := var15&lt;+56&gt; + temp208</span><br><span class="line">  GOTO label137</span><br></pre></td></tr></table></figure>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">LABEL label168 :</span><br><span class="line">  temp263 := #24</span><br><span class="line">  IF var15&lt;+56&gt; &lt; temp263 GOTO label167</span><br><span class="line">  GOTO label166</span><br><span class="line">LABEL label167 :</span><br><span class="line">  var16&lt;+64&gt; := var15&lt;+56&gt;</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var16&lt;+64&gt;&#125;</span><br><span class="line">  var17&lt;+72&gt; := var23(@exp.key[0])&lt;+8&gt;&lt;+872&gt;&lt;+tempa&gt;</span><br><span class="line">  var18&lt;+80&gt; := var15&lt;+56&gt;</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var18&lt;+80&gt;&#125;</span><br><span class="line">  var19&lt;+88&gt; := var24(@exp.key[0])&lt;+8&gt;&lt;+1256&gt;&lt;+tempa&gt;</span><br><span class="line">  temp264 := var17&lt;+72&gt; ^ var19&lt;+88&gt;</span><br><span class="line">  var21&lt;+104&gt; := temp264</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var15&lt;+56&gt;&#125;</span><br><span class="line">  var23(@exp.key[0])&lt;+8&gt;&lt;+872&gt;&lt;+tempa&gt; := var21&lt;+104&gt;</span><br><span class="line">  temp262 := #1</span><br><span class="line">  var15&lt;+56&gt; := var15&lt;+56&gt; + temp262</span><br><span class="line">  GOTO label168</span><br></pre></td></tr></table></figure>
+<ul>
+<li>对 <code>e3.key(var24(@exp.key[0])&lt;+8&gt;&lt;+1256&gt;&lt;+tempa&gt;)</code> 的前缀和差分加密会导致 <code>e3.key</code> 全为 “0”，进而对 <code>e2.key(var23(@exp.key[0])&lt;+8&gt;&lt;+872&gt;&lt;+tempa&gt;)</code> 的异或加密失效</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br></pre></td><td class="code"><pre><span class="line">LABEL label271 :</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var15&lt;+56&gt;&#125;</span><br><span class="line">  var16&lt;+64&gt; := var25(@exp.L[0])&lt;+200&gt;&lt;+1640&gt;&lt;+tempa&gt;</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var15&lt;+56&gt;&#125;</span><br><span class="line">  var18&lt;+80&gt; := var25(@exp.R[0])&lt;+264&gt;&lt;+1640&gt;&lt;+tempa&gt;</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var15&lt;+56&gt;&#125;</span><br><span class="line">  var20&lt;+96&gt; := var25(@exp.X[0])&lt;+328&gt;&lt;+1640&gt;&lt;+tempa&gt;</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var16&lt;+64&gt;&#125;</span><br><span class="line">  var17&lt;+72&gt; := var25(@exp.key[0])&lt;+8&gt;&lt;+1640&gt;&lt;+tempa&gt;</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var18&lt;+80&gt;&#125;</span><br><span class="line">  var19&lt;+88&gt; := var25(@exp.key[0])&lt;+8&gt;&lt;+1640&gt;&lt;+tempa&gt;</span><br><span class="line">  var17&lt;+72&gt; := var17&lt;+72&gt; - var20&lt;+96&gt;</span><br><span class="line">  var19&lt;+88&gt; := var19&lt;+88&gt; + var20&lt;+96&gt;</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var16&lt;+64&gt;&#125;</span><br><span class="line">  var25(@exp.key[0])&lt;+8&gt;&lt;+1640&gt;&lt;+tempa&gt; := var17&lt;+72&gt;</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var18&lt;+80&gt;&#125;</span><br><span class="line">  var25(@exp.key[0])&lt;+8&gt;&lt;+1640&gt;&lt;+tempa&gt; := var19&lt;+88&gt;</span><br><span class="line">  temp369 := #1</span><br><span class="line">  var15&lt;+56&gt; := var15&lt;+56&gt; + temp369</span><br><span class="line">  GOTO label272</span><br><span class="line">LABEL label270 :</span><br><span class="line">  temp373 := #1</span><br><span class="line">  var15&lt;+56&gt; := temp373</span><br><span class="line">LABEL label283 :</span><br><span class="line">  temp375 := #24</span><br><span class="line">  IF var15&lt;+56&gt; &lt; temp375 GOTO label282</span><br><span class="line">  GOTO label281</span><br><span class="line">LABEL label282 :</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var15&lt;+56&gt;&#125;</span><br><span class="line">  var17&lt;+72&gt; := var25(@exp.key[0])&lt;+8&gt;&lt;+1640&gt;&lt;+tempa&gt;</span><br><span class="line">  temp376 := #1</span><br><span class="line">  temp377 := var15&lt;+56&gt; - temp376</span><br><span class="line">  var16&lt;+64&gt; := temp377</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var16&lt;+64&gt;&#125;</span><br><span class="line">  var20&lt;+96&gt; := var25(@exp.key[0])&lt;+8&gt;&lt;+1640&gt;&lt;+tempa&gt;</span><br><span class="line">  var17&lt;+72&gt; := var17&lt;+72&gt; + var20&lt;+96&gt;</span><br><span class="line">#!tempa := &#123;#8&#125;*&#123;var15&lt;+56&gt;&#125;</span><br><span class="line">  var25(@exp.key[0])&lt;+8&gt;&lt;+1640&gt;&lt;+tempa&gt; := var17&lt;+72&gt;</span><br><span class="line">  temp374 := #1</span><br><span class="line">  var15&lt;+56&gt; := var15&lt;+56&gt; + temp374</span><br><span class="line">  GOTO label283</span><br></pre></td></tr></table></figure>
+<ul>
+<li>对 <code>e4.key(var25(@exp.key[0])&lt;+8&gt;&lt;+1640&gt;&lt;+tempa&gt;)</code> 的前缀和差分加密最后会得到一个 fake flag</li>
+</ul>
+<p>程序有效部分的核心逻辑如下：</p>
+<ul>
+<li>程序读取 flag 存入 <code>e1.key</code> 进行第一次前缀和差分，区间修改的操作数在 <code>e1.L，e1.R，e1.X</code> 中（已知）</li>
+<li>将第一轮计算的结果间隔取8个存入 <code>e2.X</code>，当做第二次前缀和差分的操作数</li>
+<li>第二次使用 <code>e1.L，e1.R，e2.X</code> 对 <code>e2.key</code>（已知）进行前缀和差分</li>
+<li>最后对比 <code>e1.key</code> 和 <code>e2.key</code> 完全相同则 success</li>
+</ul>
+<p>前缀和差分相当于对 <code>[L，R)</code> 的所有数字 +X：</p>
+<ul>
+<li>由于第一次前缀和的操作数已知，得到结果 <code>e1.key[i]</code> 为 <code>INPUT[i] + C[i]</code></li>
+<li>由于第二次前缀和差分需要用到第一次前缀和差分的结果，此时的 <code>X[i]</code> 已经变成 <code>INPUT[i*3] + C[i*3]</code>，结果 <code>e2.key[i]</code> 表达为 <code>INPUT[j1] + INPUT[j2] ...... INPUT[jn] + C[j]</code></li>
+<li>由于 <code>e2.key</code> 的初始值已知，常数 <code>C[j]</code> 可通过 <code>e1.L，e1.R，e1.X</code> 算出，加密后的 <code>e1.key[i]</code> 可以由含有 <code>INPUT[j]</code> 的式子来表示，加密后的 <code>e2.key[i]</code> 也可以用含有 <code>INPUT[j]</code> 的式子来表示，两者结合可以得到 24 组一次方程</li>
+</ul>
+<p>通过中间代码提取出来的C代码样例如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span>(i=<span class="number">0</span>;i&lt;<span class="number">24</span>;i++)&#123;</span><br><span class="line">    key1 = <span class="number">0</span>;</span><br><span class="line">    x = i;</span><br><span class="line">    key1 = flag[x];</span><br><span class="line">    y = <span class="number">23</span> - i;</span><br><span class="line">    e1.key[y] = key1;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span>(i=<span class="number">23</span>;i&gt;<span class="number">0</span>;i--)&#123;</span><br><span class="line">    y = i;</span><br><span class="line">    ky = e1.key[y];</span><br><span class="line">    x = i - <span class="number">1</span>;</span><br><span class="line">    kx = e1.key[x]; </span><br><span class="line">    kz = ky - kx;</span><br><span class="line">    e1.key[i] = kz; </span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">e1.L[<span class="number">0</span>] = <span class="number">0</span>;</span><br><span class="line">e1.R[<span class="number">0</span>] = <span class="number">8</span>;</span><br><span class="line">e1.X[<span class="number">0</span>] = <span class="number">11</span>;</span><br><span class="line">e1.L[<span class="number">1</span>] = <span class="number">15</span>;</span><br><span class="line">e1.R[<span class="number">1</span>] = <span class="number">23</span>;</span><br><span class="line">e1.X[<span class="number">1</span>] = <span class="number">0</span><span class="number">-13</span>;</span><br><span class="line">e1.L[<span class="number">2</span>] = <span class="number">2</span>;</span><br><span class="line">e1.R[<span class="number">2</span>] = <span class="number">11</span>;</span><br><span class="line">e1.X[<span class="number">2</span>] = <span class="number">17</span>;</span><br><span class="line">e1.L[<span class="number">3</span>] = <span class="number">10</span>;</span><br><span class="line">e1.R[<span class="number">3</span>] = <span class="number">20</span>;</span><br><span class="line">e1.X[<span class="number">3</span>] = <span class="number">0</span><span class="number">-19</span>;</span><br><span class="line">e1.L[<span class="number">4</span>] = <span class="number">6</span>;</span><br><span class="line">e1.R[<span class="number">4</span>] = <span class="number">13</span>;</span><br><span class="line">e1.X[<span class="number">4</span>] = <span class="number">23</span>;</span><br><span class="line">e1.L[<span class="number">5</span>] = <span class="number">9</span>;</span><br><span class="line">e1.R[<span class="number">5</span>] = <span class="number">21</span>;</span><br><span class="line">e1.X[<span class="number">5</span>] = <span class="number">0</span><span class="number">-29</span>;</span><br><span class="line">e1.L[<span class="number">6</span>] = <span class="number">1</span>;</span><br><span class="line">e1.R[<span class="number">6</span>] = <span class="number">19</span>;</span><br><span class="line">e1.X[<span class="number">6</span>] = <span class="number">31</span>;</span><br><span class="line">e1.L[<span class="number">7</span>] = <span class="number">4</span>;</span><br><span class="line">e1.R[<span class="number">7</span>] = <span class="number">17</span>;</span><br><span class="line">e1.X[<span class="number">7</span>] = <span class="number">0</span><span class="number">-37</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span>(i=<span class="number">0</span>;i&lt;<span class="number">8</span>;i++)&#123;</span><br><span class="line">    x = e1.L[i];</span><br><span class="line">    y = e1.R[i];</span><br><span class="line">    z = e1.X[i];</span><br><span class="line">    kx = e1.key[x];</span><br><span class="line">    ky = e1.key[y];</span><br><span class="line">    kx += z;</span><br><span class="line">    ky -= z; </span><br><span class="line">    e1.key[x] = kx;</span><br><span class="line">    e1.key[y] = ky;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span>(i=<span class="number">1</span>;i&lt;<span class="number">24</span>;i++)&#123;</span><br><span class="line">    kx = e1.key[i];</span><br><span class="line">    x = i<span class="number">-1</span>;</span><br><span class="line">    z = e1.key[x];</span><br><span class="line">    kx += z;</span><br><span class="line">    e1.key[i] = kx;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">e2.key[<span class="number">0</span>]=<span class="number">252</span>;</span><br><span class="line">e2.key[<span class="number">1</span>]=<span class="number">352</span>;</span><br><span class="line">e2.key[<span class="number">2</span>]=<span class="number">484</span>;</span><br><span class="line">e2.key[<span class="number">3</span>]=<span class="number">470</span>;</span><br><span class="line">e2.key[<span class="number">4</span>]=<span class="number">496</span>;</span><br><span class="line">e2.key[<span class="number">5</span>]=<span class="number">487</span>;</span><br><span class="line">e2.key[<span class="number">6</span>]=<span class="number">539</span>;</span><br><span class="line">e2.key[<span class="number">7</span>]=<span class="number">585</span>;</span><br><span class="line">e2.key[<span class="number">8</span>]=<span class="number">447</span>;</span><br><span class="line">e2.key[<span class="number">9</span>]=<span class="number">474</span>;</span><br><span class="line">e2.key[<span class="number">10</span>]=<span class="number">577</span>;</span><br><span class="line">e2.key[<span class="number">11</span>]=<span class="number">454</span>;</span><br><span class="line">e2.key[<span class="number">12</span>]=<span class="number">466</span>;</span><br><span class="line">e2.key[<span class="number">13</span>]=<span class="number">345</span>;</span><br><span class="line">e2.key[<span class="number">14</span>]=<span class="number">344</span>;</span><br><span class="line">e2.key[<span class="number">15</span>]=<span class="number">486</span>;</span><br><span class="line">e2.key[<span class="number">16</span>]=<span class="number">501</span>;</span><br><span class="line">e2.key[<span class="number">17</span>]=<span class="number">423</span>;</span><br><span class="line">e2.key[<span class="number">18</span>]=<span class="number">490</span>;</span><br><span class="line">e2.key[<span class="number">19</span>]=<span class="number">375</span>;</span><br><span class="line">e2.key[<span class="number">20</span>]=<span class="number">257</span>;</span><br><span class="line">e2.key[<span class="number">21</span>]=<span class="number">203</span>;</span><br><span class="line">e2.key[<span class="number">22</span>]=<span class="number">265</span>;</span><br><span class="line">e2.key[<span class="number">23</span>]=<span class="number">125</span>; </span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span>(i=<span class="number">0</span>;i&lt;<span class="number">8</span>;i++)&#123;</span><br><span class="line">    x = i + i + i;</span><br><span class="line">    kx = e1.key[x];</span><br><span class="line">    e2.X[i] = kx;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span>(i=<span class="number">23</span>;i&gt;<span class="number">0</span>;i--)&#123;</span><br><span class="line">    y = i;</span><br><span class="line">    ky = e2.key[y];</span><br><span class="line">    x = i;</span><br><span class="line">    x -= <span class="number">1</span>;</span><br><span class="line">    kx = e2.key[x];</span><br><span class="line">    kz = ky - kx;</span><br><span class="line">    e2.key[i] = kz; </span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span>(i=<span class="number">0</span>;i&lt;<span class="number">8</span>;i++)&#123;</span><br><span class="line">    x = e1.L[i];</span><br><span class="line">    y = e1.R[i];</span><br><span class="line">    z = e2.X[i];</span><br><span class="line">    kx = e2.key[x];</span><br><span class="line">    ky = e2.key[y];</span><br><span class="line">    kx -= z;</span><br><span class="line">    ky += z; </span><br><span class="line">    e2.key[x] = kx;</span><br><span class="line">    e2.key[y] = ky;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span>(i=<span class="number">1</span>;i&lt;<span class="number">24</span>;i++)&#123;</span><br><span class="line">    kx = e2.key[i];</span><br><span class="line">    x = i<span class="number">-1</span>;</span><br><span class="line">    z = e2.key[x];</span><br><span class="line">    kx += z;</span><br><span class="line">    e2.key[i] = kx;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>下面是公式推导的过程：</p>
+<img src="/2023/06/21/SycLang%E5%87%BA%E9%A2%98%E6%80%9D%E8%B7%AF/page1.png" class title="page1">     
+<img src="/2023/06/21/SycLang%E5%87%BA%E9%A2%98%E6%80%9D%E8%B7%AF/page2.png" class title="page2">    
+<img src="/2023/06/21/SycLang%E5%87%BA%E9%A2%98%E6%80%9D%E8%B7%AF/page3.png" class title="page3">    
+<p>通过 z3 即可求解 flag：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># -*- coding:utf-8 -*-</span></span><br><span class="line"><span class="keyword">from</span> z3 <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">s = []</span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">24</span>):</span><br><span class="line">    s.append(Int(<span class="string">&#x27;S&#x27;</span>+<span class="built_in">str</span>(i)))</span><br><span class="line">x = Solver()</span><br><span class="line"></span><br><span class="line"><span class="comment"># 0</span></span><br><span class="line">x.add(s[<span class="number">0</span>]+s[<span class="number">0</span>]+<span class="number">22</span> == <span class="number">252</span>)</span><br><span class="line"><span class="comment"># 1</span></span><br><span class="line">x.add(s[<span class="number">0</span>]+s[<span class="number">18</span>]+s[<span class="number">1</span>]+<span class="number">23</span> == <span class="number">352</span>)</span><br><span class="line"><span class="comment"># 2</span></span><br><span class="line">x.add(s[<span class="number">0</span>]+s[<span class="number">18</span>]+s[<span class="number">6</span>]+s[<span class="number">2</span>]+<span class="number">85</span> == <span class="number">484</span>)</span><br><span class="line"><span class="comment"># 3</span></span><br><span class="line">x.add(s[<span class="number">0</span>]+s[<span class="number">18</span>]+s[<span class="number">6</span>]+s[<span class="number">3</span>]+<span class="number">85</span> == <span class="number">470</span>)</span><br><span class="line"><span class="comment"># 4</span></span><br><span class="line">x.add(s[<span class="number">0</span>]+s[<span class="number">18</span>]+s[<span class="number">6</span>]+s[<span class="number">21</span>]+s[<span class="number">4</span>]+<span class="number">35</span> == <span class="number">496</span>)</span><br><span class="line"><span class="comment"># 5</span></span><br><span class="line">x.add(s[<span class="number">0</span>]+s[<span class="number">18</span>]+s[<span class="number">6</span>]+s[<span class="number">21</span>]+s[<span class="number">5</span>]+<span class="number">35</span> == <span class="number">487</span>)</span><br><span class="line"><span class="comment"># 6</span></span><br><span class="line">x.add(s[<span class="number">0</span>]+s[<span class="number">18</span>]+s[<span class="number">6</span>]+s[<span class="number">21</span>]+s[<span class="number">12</span>]+s[<span class="number">6</span>]+<span class="number">27</span> == <span class="number">539</span>)</span><br><span class="line"><span class="comment"># 7</span></span><br><span class="line">x.add(s[<span class="number">0</span>]+s[<span class="number">18</span>]+s[<span class="number">6</span>]+s[<span class="number">21</span>]+s[<span class="number">12</span>]+s[<span class="number">7</span>]+<span class="number">27</span> == <span class="number">585</span>)</span><br><span class="line"><span class="comment"># 8</span></span><br><span class="line">x.add(s[<span class="number">18</span>]+s[<span class="number">6</span>]+s[<span class="number">21</span>]+s[<span class="number">12</span>]+s[<span class="number">8</span>]+<span class="number">5</span> == <span class="number">447</span>)</span><br><span class="line"><span class="comment"># 9</span></span><br><span class="line">x.add(s[<span class="number">18</span>]+s[<span class="number">6</span>]+s[<span class="number">21</span>]+s[<span class="number">12</span>]+s[<span class="number">15</span>]+s[<span class="number">9</span>]-<span class="number">91</span> == <span class="number">474</span>)</span><br><span class="line"><span class="comment"># 10</span></span><br><span class="line">x.add(s[<span class="number">18</span>]+s[<span class="number">6</span>]+s[<span class="number">21</span>]+s[<span class="number">12</span>]+s[<span class="number">15</span>]+s[<span class="number">9</span>]+s[<span class="number">10</span>]-<span class="number">105</span> == <span class="number">577</span>)</span><br><span class="line"><span class="comment"># 11</span></span><br><span class="line">x.add(s[<span class="number">18</span>]+s[<span class="number">21</span>]+s[<span class="number">12</span>]+s[<span class="number">15</span>]+s[<span class="number">9</span>]+s[<span class="number">11</span>]-<span class="number">167</span> == <span class="number">454</span>)</span><br><span class="line"><span class="comment"># 12</span></span><br><span class="line">x.add(s[<span class="number">18</span>]+s[<span class="number">21</span>]+s[<span class="number">12</span>]+s[<span class="number">15</span>]+s[<span class="number">9</span>]+s[<span class="number">12</span>]-<span class="number">167</span> == <span class="number">466</span>)</span><br><span class="line"><span class="comment"># 13</span></span><br><span class="line">x.add(s[<span class="number">18</span>]+s[<span class="number">21</span>]+s[<span class="number">15</span>]+s[<span class="number">9</span>]+s[<span class="number">13</span>]-<span class="number">159</span> == <span class="number">345</span>)</span><br><span class="line"><span class="comment"># 14</span></span><br><span class="line">x.add(s[<span class="number">18</span>]+s[<span class="number">21</span>]+s[<span class="number">15</span>]+s[<span class="number">9</span>]+s[<span class="number">14</span>]-<span class="number">159</span> == <span class="number">344</span>)</span><br><span class="line"><span class="comment"># 15</span></span><br><span class="line">x.add(s[<span class="number">18</span>]+s[<span class="number">21</span>]+s[<span class="number">15</span>]+s[<span class="number">9</span>]+s[<span class="number">3</span>]+s[<span class="number">15</span>]-<span class="number">113</span> == <span class="number">486</span>)</span><br><span class="line"><span class="comment"># 16</span></span><br><span class="line">x.add(s[<span class="number">18</span>]+s[<span class="number">21</span>]+s[<span class="number">15</span>]+s[<span class="number">9</span>]+s[<span class="number">3</span>]+s[<span class="number">16</span>]-<span class="number">113</span> == <span class="number">501</span>)</span><br><span class="line"><span class="comment"># 17</span></span><br><span class="line">x.add(s[<span class="number">18</span>]+s[<span class="number">15</span>]+s[<span class="number">9</span>]+s[<span class="number">3</span>]+s[<span class="number">17</span>]-<span class="number">63</span> == <span class="number">423</span>)</span><br><span class="line"><span class="comment"># 18</span></span><br><span class="line">x.add(s[<span class="number">18</span>]+s[<span class="number">15</span>]+s[<span class="number">9</span>]+s[<span class="number">3</span>]+s[<span class="number">18</span>]-<span class="number">63</span> == <span class="number">490</span>)</span><br><span class="line"><span class="comment"># 19</span></span><br><span class="line">x.add(s[<span class="number">15</span>]+s[<span class="number">9</span>]+s[<span class="number">3</span>]+s[<span class="number">19</span>]-<span class="number">64</span> == <span class="number">375</span>)</span><br><span class="line"><span class="comment"># 20</span></span><br><span class="line">x.add(s[<span class="number">15</span>]+s[<span class="number">3</span>]+s[<span class="number">20</span>]-<span class="number">50</span> == <span class="number">257</span>)</span><br><span class="line"><span class="comment"># 21</span></span><br><span class="line">x.add(s[<span class="number">3</span>]+s[<span class="number">21</span>]+<span class="number">46</span> == <span class="number">203</span>)</span><br><span class="line"><span class="comment"># 22</span></span><br><span class="line">x.add(s[<span class="number">3</span>]+s[<span class="number">22</span>]+<span class="number">46</span> == <span class="number">265</span>)</span><br><span class="line"><span class="comment"># 23</span></span><br><span class="line">x.add(s[<span class="number">23</span>] == <span class="number">125</span>)</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span>(x.check()==sat):</span><br><span class="line">    model = x.model()</span><br><span class="line">    <span class="built_in">print</span>(model)</span><br><span class="line"></span><br><span class="line">model = x.model()</span><br><span class="line"></span><br><span class="line">flag = [<span class="number">0</span>]*<span class="number">24</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">str</span>(model).split(<span class="string">&#x27;,&#x27;</span>):</span><br><span class="line">    pos, val = i.split(<span class="string">&#x27;=&#x27;</span>)[:<span class="number">2</span>]</span><br><span class="line">    pos = <span class="built_in">int</span>(<span class="string">&#x27;&#x27;</span>.join([i <span class="keyword">for</span> i <span class="keyword">in</span> pos <span class="keyword">if</span> i.isdigit()]))</span><br><span class="line">    val = <span class="built_in">int</span>(<span class="string">&#x27;&#x27;</span>.join([i <span class="keyword">for</span> i <span class="keyword">in</span> val <span class="keyword">if</span> i.isdigit()]))</span><br><span class="line">    flag[pos] = <span class="built_in">chr</span>(val)</span><br><span class="line"></span><br><span class="line">flag = <span class="string">&#x27;&#x27;</span>.join(flag)</span><br><span class="line"></span><br><span class="line"><span class="built_in">print</span>(flag)</span><br></pre></td></tr></table></figure>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/Compilers-Principles/" rel="tag"><i class="fa fa-tag"></i> Compilers Principles</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/06/21/Compiler%E5%87%BA%E9%A2%98%E6%80%9D%E8%B7%AF/" rel="prev" title="Compiler出题思路">
+      <i class="fa fa-chevron-left"></i> Compiler出题思路
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">266</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">13</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">144</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">3.6m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">54:03</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
