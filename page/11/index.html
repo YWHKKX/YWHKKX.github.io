@@ -156,6 +156,157 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/10/23/Linux-Lab9-Kernel%20Development%20on%20ARM/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/10/23/Linux-Lab9-Kernel%20Development%20on%20ARM/" class="post-title-link" itemprop="url">Linux-Lab9-Kernel Development on ARM</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-10-23 14:19:41 / Modified: 14:21:00" itemprop="dateCreated datePublished" datetime="2022-10-23T14:19:41+08:00">2022-10-23</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>2.3k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>2 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>Kernel Development on ARM</strong></p>
+<p>实验目标：</p>
+<ul>
+<li>了解片上系统 System on a Chip（SoC）的含义</li>
+<li>熟悉使用 ARM 作为受支持架构的嵌入式世界</li>
+<li>了解主板支持包的含义（BSP）</li>
+<li>以 i.MX6UL 平台为例，使用 Qemu 编译和引导 ARM 内核</li>
+<li>使用设备树熟悉硬件描述</li>
+</ul>
+<p>片上系统 System on a Chip 是将整个系统集成到其上的集成电路（IC）</p>
+<p>通常在 SoC 上可以找到的组件包括中央处理单元（CPU）、内存、输入/输出端口、存储设备以及更复杂的模块，如音频数字接口、神经处理单元（NPU）或图形处理单元（GPU）</p>
+<p>SoC 可用于各种最常见的应用，包括：</p>
+<ul>
+<li>消费类电子产品（电视机、手机、视频游戏机）</li>
+<li>工业计算机（医学成像等）</li>
+<li>汽车</li>
+<li>家电</li>
+</ul>
+<p>对于 SoCs，最好使用 ARM 架构，使用的标准指令集架构是 RISC-V（精简指令集计算机，Reduced Instruction Set Computer-RISC）</p>
+<p>ARM 平台的简化视图如下图所示：</p>
+<img src="/2022/10/23/Linux-Lab9-Kernel%20Development%20on%20ARM/1666408197853.png" class width="1666408197853"> 
+<ul>
+<li>一或者多个 CPU</li>
+<li>一个系统总线</li>
+<li>时钟和复位模块（PLL，OSC，复位控制器）</li>
+<li>中断控制器</li>
+<li>定时器</li>
+<li>内存控制器</li>
+<li>外设控制器</li>
+</ul>
+<p>以下是 i.MX6UL 平台的完整框图：</p>
+<img src="/2022/10/23/Linux-Lab9-Kernel%20Development%20on%20ARM/1666504277105.png" class width="1666504277105"> 
+<p><strong>Board Support package</strong></p>
+<p>Board Support Package（BSP）是允许演示特定硬件平台功能的最小软件包集：</p>
+<ul>
+<li>工具链 Toolchain：为ARM平台生成可执行代码的交叉编译器</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">sudo apt-get install gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf # for arm32</span><br><span class="line">sudo apt-get install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu     # for arm64</span><br></pre></td></tr></table></figure>
+<ul>
+<li>BootLoader 引导加载程序</li>
+<li>Linux 内核映像、设备树文件和驱动程序</li>
+<li>Rootfs 根文件系统 </li>
+</ul>
+<p><strong>Device tree</strong></p>
+<p>设备树 DT 是用于描述系统中硬件设备的树结构，树中的每个节点描述一个设备，因此称为设备节点，引入 DT 是为了提供一种发现 “non-discoverable 不可发现” 的硬件的方法</p>
+<p>设备树存储在设备树源（.dts）中，并编译为设备树 blob（.dtb）</p>
+<ul>
+<li>一个节点可能包含以该格式排列的多个属性，名称是一个字符串，值可以是字节，字符串，字符串数组</li>
+<li>下面是一个示例：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">/ &#123;</span><br><span class="line">     node@<span class="number">0</span> &#123;</span><br><span class="line">          empty-property;</span><br><span class="line">          <span class="built_in">string</span>-property = <span class="string">&quot;string value&quot;</span>;</span><br><span class="line">          <span class="built_in">string</span>-<span class="built_in">list</span>-property = <span class="string">&quot;string value 1&quot;</span>, <span class="string">&quot;string value 2&quot;</span>;</span><br><span class="line">          <span class="keyword">int</span>-<span class="built_in">list</span>-property = &lt;value1 value2&gt;;</span><br><span class="line"></span><br><span class="line">          child-node@<span class="number">0</span> &#123;</span><br><span class="line">                  child-empty-property;</span><br><span class="line">                  child-<span class="built_in">string</span>-property = <span class="string">&quot;string value&quot;</span>;</span><br><span class="line">                  child-node-reference = &lt;&amp;child-node1&gt;;</span><br><span class="line">          &#125;;</span><br><span class="line"></span><br><span class="line">          child-node1: child-node@<span class="number">1</span> &#123;</span><br><span class="line">                  child-empty-property;</span><br><span class="line">                  child-<span class="built_in">string</span>-property = <span class="string">&quot;string value&quot;</span>;</span><br><span class="line">          &#125;;</span><br><span class="line">   &#125;;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p><strong>Rootfs</strong></p>
+<p>根文件系统是挂载在文件层次结构顶部的文件系统，它至少应包含允许系统引导到 shell 的关键文件</p>
+<ul>
+<li>我们将使用 Yocto 根图像，为了下载一个 rootfs 映像，需要运行：</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span><span class="bash"> <span class="built_in">cd</span> tools/labs/</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> ARCH=arm make core-image-minimal-qemuarm.ext4</span></span><br></pre></td></tr></table></figure>
+<p><strong>Exercises</strong></p>
+<p>要解决练习，您需要执行以下步骤：</p>
+<ul>
+<li>从模板准备 skeletons  </li>
+<li>构建模块</li>
+<li>将模块复制到虚拟机</li>
+<li>启动 VM 并在 VM 中测试模块</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">make clean</span><br><span class="line">LABS=arm_kernel_development make skels</span><br><span class="line">make build</span><br></pre></td></tr></table></figure>
+<p>ARM 内核编译：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span><span class="bash"> ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- make menuconfig</span></span><br><span class="line"><span class="meta">#</span><span class="bash"> <span class="built_in">set</span> FSL_ASRC=n and DRM_MXSFB=n</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- make -j8</span></span><br></pre></td></tr></table></figure>
+<p>内核模块编译：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> modules build</span></span><br><span class="line">tools/labs $ ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- make build</span><br><span class="line"><span class="meta">#</span><span class="bash"> modules copy</span></span><br><span class="line">tools/labs $ ARCH=arm make copy</span><br><span class="line"><span class="meta">#</span><span class="bash"> kernel build</span></span><br><span class="line">tools/labs $ ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- make -j8</span><br></pre></td></tr></table></figure>
+<p>ARM 内核启动：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">qemu-system-arm -M mcimx6ul-evk -cpu cortex-a7 -m 512M -kernel arch/arm/boot/zImage -nographic  -dtb arch/arm/boot/dts/imx6ul-14x14-evk.dtb -append &quot;root=/dev/mmcblk0 rw console=ttymxc0 loglevel=8 earlycon printk&quot; -sd tools/labs/core-image-minimal-qemux86.ext4 </span><br></pre></td></tr></table></figure>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/10/21/Linux-Lab8-Networking/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -2205,151 +2356,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/10/10/Linux-Lab0-Preparation/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/10/10/Linux-Lab0-Preparation/" class="post-title-link" itemprop="url">Linux-Lab0-Preparation</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2022-10-10 00:04:58 / Modified: 00:07:40" itemprop="dateCreated datePublished" datetime="2022-10-10T00:04:58+08:00">2022-10-10</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>2.8k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>3 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>Experimental preparation</strong></p>
-<p>在 Github 上下载对应的实验文件：<a target="_blank" rel="noopener" href="https://github.com/linux-kernel-labs/linux">linux-kernel-labs/linux: Linux kernel source tree (github.com)</a> </p>
-<p>在 <code>tools/labs</code> 目录中输入命令：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">make clean</span><br><span class="line">LABS=kernel_modules make skels</span><br></pre></td></tr></table></figure>
-<p>然后在 <code>skels/kernel_modules</code> 目录中就会有实验文件：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">➜  labs git:(master) ✗ ls skels/kernel_modules/</span><br><span class="line">1-2-test-mod  4-multi-mod  6-cmd-mod    8-kdb</span><br><span class="line">3-error-mod   5-oops-mod   7-list-proc  9-dyndbg</span><br></pre></td></tr></table></figure>
-<p><strong>Booting the virtual machine</strong></p>
-<p>虚拟机基础结构摘要：</p>
-<ul>
-<li><code>~/src/linux</code>：Linux 内核源代码，编译模块需要</li>
-<li><code>~/src/linux/tools/labs/qemu</code>：用于生成和运行 QEMU VM 的脚本和辅助文件</li>
-</ul>
-<p>为了启动虚拟机，我们需要在 <code>~/src/linux/tools/labs</code> 目录中使用 <code>make boot</code> 命令：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">➜  labs git:(master) ✗ make boot </span><br><span class="line">make -C /home/yhellow/linux</span><br><span class="line">make[1]: 进入目录“/home/yhellow/linux”</span><br><span class="line">  SYSTBL  arch/x86/include/generated/asm/syscalls_32.h</span><br><span class="line">  SYSHDR  arch/x86/include/generated/uapi/asm/unistd_32.h</span><br><span class="line">  SYSHDR  arch/x86/include/generated/uapi/asm/unistd_64.h</span><br><span class="line">  SYSHDR  arch/x86/include/generated/uapi/asm/unistd_x32.h</span><br><span class="line">......</span><br></pre></td></tr></table></figure>
-<p>在默认情况下，您不会收到提示或任何图形界面，但您可以使用 minicom 或屏幕连接到虚拟机公开的控制台：</p>
-<ul>
-<li>在 <code>~/src/linux/tools/labs</code> 目录中使用 <code>minicom -D serial.pts</code>：</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">➜  labs git:(master) ✗ minicom -D serial.pts</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Welcome to minicom <span class="number">2.7</span><span class="number">.1</span></span><br><span class="line"></span><br><span class="line">OPTIONS: I18n </span><br><span class="line">Compiled on Dec <span class="number">23</span> <span class="number">2019</span>, <span class="number">02</span>:<span class="number">06</span>:<span class="number">26.</span></span><br><span class="line">Port serial.pts, <span class="number">19</span>:<span class="number">21</span>:<span class="number">44</span></span><br><span class="line"></span><br><span class="line">Press CTRL-A Z <span class="keyword">for</span> help on special keys</span><br></pre></td></tr></table></figure>
-<ul>
-<li>要访问虚拟机，请在登录提示符下输入用户名 root，无需输入密码</li>
-<li>虚拟机将使用 root 帐户的权限启动</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">Poky (Yocto Project Reference Distro) <span class="number">2.3</span> qemux86 /dev/hvc0</span><br><span class="line"></span><br><span class="line">qemux86 login: root                                                 </span><br><span class="line">root@qemux86:~<span class="meta"># whoami                                                          </span></span><br><span class="line">root                                                                            </span><br><span class="line">root@qemux86:~# </span><br></pre></td></tr></table></figure>
-<p><strong>Adding and using a virtual disk</strong></p>
-<p>在目录中，您有一个新的虚拟机磁盘，位于文件 <code>~/src/linux/tools/labs/mydisk.img</code>，我们要将磁盘添加到虚拟机中，并在虚拟机中使用它</p>
-<ul>
-<li>如果没有 <code>mydisk.img</code> 文件，则在如下网站中下载：<a target="_blank" rel="noopener" href="http://elf.cs.pub.ro/so2/res/laboratoare/mydisk.img">mydisk.img</a></li>
-</ul>
-<p>修改 <code>~/src/linux/tools/labs/qemu/Makefile</code>，在对应位置添加如下代码：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">-drive file=$(YOCTO_IMAGE),if=virtio,format=raw \</span><br><span class="line">-drive file=disk1.img,if=virtio,format=raw \</span><br><span class="line">-drive file=disk2.img,if=virtio,format=raw \</span><br><span class="line">-drive file=mydisk.img,if=virtio,format=raw \ # new</span><br></pre></td></tr></table></figure>
-<p>启动虚拟机，创建目录并尝试挂载新磁盘</p>
-<ul>
-<li>已经向 qemu 添加了两个磁盘（<code>disk1.img</code> 和 <code>disk2.img</code>）</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">root@qemux86:~# /dev/vd                                                         </span><br><span class="line">vda  vdb  vdc  vdd </span><br></pre></td></tr></table></figure>
-<ul>
-<li>vda 是根分区，vdb 是 <code>disk1.img</code>，vdc 是 <code>disk2.img</code>，vdd 是 <code>mydisk.img</code></li>
-<li>无需在 <code>/dev</code> 中手动创建新磁盘的条目，因为虚拟机使用 devtmpfs（在 Linux 内核启动早期建立一个初步的 <code>/dev</code>，令一般启动程序不用等待 udev）</li>
-<li>使用 <code>mount</code> 命令进行挂载：</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">mkdir /test</span><br><span class="line">mount /dev/vdd /test</span><br></pre></td></tr></table></figure>
-<ul>
-<li>结果挂载失败了（<code>/test</code> 中并没有出现 <code>mydisk.img</code> 中的文件），我们无法挂载虚拟磁盘的原因是，我们在内核中没有支持格式化的文件系统</li>
-<li>您需要识别 mydisk.img 的文件系统，并编译对该文件系统的内核支持</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">➜  labs git:(master) ✗ file mydisk.img </span><br><span class="line">mydisk.img: BTRFS Filesystem sectorsize 4096, nodesize 4096, leafsize 4096, UUID=df3c665a-363d-46f8-aef0-f9959bad6832, 32768/104857600 bytes used, 1 devices</span><br></pre></td></tr></table></figure>
-<ul>
-<li>您需要在内核中启用 btrfs 支持并重新编译内核映像（退出前记得 save）</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">make menuconfig</span><br><span class="line">----------------------------------------</span><br><span class="line">File systems -&gt; Btrfs filesystem support</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">root@qemux86:~<span class="meta"># mount /dev/vdd /test                                            </span></span><br><span class="line">BTRFS: device fsid df3c665a<span class="number">-363</span>d<span class="number">-46f</span>8-aef0-f9959bad6832 devid <span class="number">1</span> transid <span class="number">9</span> /dev/)</span><br><span class="line"><span class="function">BTRFS <span class="title">info</span> <span class="params">(device vdd)</span>: disk space caching is enabled                          </span></span><br><span class="line"><span class="function">root@qemux86:~<span class="meta"># ls /test                                                        </span></span></span><br><span class="line"><span class="function">README                                                                          </span></span><br><span class="line"><span class="function">root@qemux86:~<span class="meta"># cat /test/README                                                </span></span></span><br><span class="line"><span class="function">Congratulations, you were able to follow instructions!  </span></span><br></pre></td></tr></table></figure>
-<p><strong>GDB spelunking</strong></p>
-<p>使用 gdb 显示创建内核线程 kernel_thread 的函数的源代码</p>
-<ul>
-<li>使用 gdb 查找内存中  jiffies 变量的地址及其内容</li>
-<li>该变量保存自系统启动以来的计时周期数</li>
-</ul>
-<p>要跟踪 jiffies 变量的值，请在 gdb 中使用动态分析，方法是：</p>
-<ul>
-<li>先启动虚拟机</li>
-<li>然后运行 <code>make gdb</code> 命令</li>
-</ul>
-<p>PS：由于我这里的环境有点问题，所以我使用了 <code>gdb vmlinux</code> 外加 <code>target remote :1234</code> 的形式来进行调试（也可以参考一下）</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; x/gx &amp; jiffies</span><br><span class="line"><span class="number">0xc194b500</span> &lt;jiffies_64&gt;:	<span class="number">0x00000000ffff96c2</span></span><br></pre></td></tr></table></figure>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2421,7 +2427,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">271</span>
+          <span class="site-state-item-count">272</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2475,7 +2481,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">55:20</span>
+    <span title="Reading time total">56:01</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
