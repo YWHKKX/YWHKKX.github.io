@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="Flatbuffers 简介 FlatBuffers 是一个开源的、跨平台的、高效的、提供了多种语言接口的序列化工具库，实现了与 Protocal Buffers 类似的序列化格式 FlatBuffers 通过 Scheme 文件定义数据结构，在官方网站 FlatBuffers: Tutorial 中可以找到如下的测试案例： 123456789101112131415161718192021222">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Principles：flatbuffers逆向分析">
+<meta property="og:url" content="http://example.com/2023/08/08/Principles%EF%BC%9Aflatbuffers%E9%80%86%E5%90%91%E5%88%86%E6%9E%90/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="Flatbuffers 简介 FlatBuffers 是一个开源的、跨平台的、高效的、提供了多种语言接口的序列化工具库，实现了与 Protocal Buffers 类似的序列化格式 FlatBuffers 通过 Scheme 文件定义数据结构，在官方网站 FlatBuffers: Tutorial 中可以找到如下的测试案例： 123456789101112131415161718192021222">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2023-08-08T13:40:52.000Z">
+<meta property="article:modified_time" content="2023-08-08T13:42:30.755Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="Principles">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2023/08/08/Principles%EF%BC%9Aflatbuffers%E9%80%86%E5%90%91%E5%88%86%E6%9E%90/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>Principles：flatbuffers逆向分析 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/08/08/Principles%EF%BC%9Aflatbuffers%E9%80%86%E5%90%91%E5%88%86%E6%9E%90/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Principles：flatbuffers逆向分析
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-08-08 21:40:52 / Modified: 21:42:30" itemprop="dateCreated datePublished" datetime="2023-08-08T21:40:52+08:00">2023-08-08</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Principles/" itemprop="url" rel="index"><span itemprop="name">Principles</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>12k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>11 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>Flatbuffers 简介</strong></p>
+<p>FlatBuffers 是一个开源的、跨平台的、高效的、提供了多种语言接口的序列化工具库，实现了与 Protocal Buffers 类似的序列化格式</p>
+<p>FlatBuffers 通过 Scheme 文件定义数据结构，在官方网站 <a target="_blank" rel="noopener" href="https://flatbuffers.dev/flatbuffers_guide_tutorial.html">FlatBuffers: Tutorial</a> 中可以找到如下的测试案例：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">namespace</span> MyGame.Sample;</span><br><span class="line"><span class="class"><span class="keyword">enum</span> <span class="title">Color</span>:</span>byte &#123; Red = <span class="number">0</span>, Green, Blue = <span class="number">2</span> &#125;</span><br><span class="line"><span class="keyword">union</span> Equipment &#123; Weapon &#125; <span class="comment">// Optionally add more tables.</span></span><br><span class="line"> </span><br><span class="line">struct Vec3 &#123;</span><br><span class="line">  x:<span class="keyword">float</span>;</span><br><span class="line">  y:<span class="keyword">float</span>;</span><br><span class="line">  z:<span class="keyword">float</span>;</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line">table Monster &#123;</span><br><span class="line">  pos:Vec3; <span class="comment">// Struct.</span></span><br><span class="line">  mana:<span class="keyword">short</span> = <span class="number">150</span>;</span><br><span class="line">  hp:<span class="keyword">short</span> = <span class="number">100</span>;</span><br><span class="line">  name:<span class="built_in">string</span>;</span><br><span class="line">  friendly:<span class="keyword">bool</span> = <span class="literal">false</span> (deprecated);</span><br><span class="line">  inventory:[ubyte];  <span class="comment">// Vector of scalars.</span></span><br><span class="line">  color:Color = Blue; <span class="comment">// Enum.</span></span><br><span class="line">  weapons:[Weapon];   <span class="comment">// Vector of tables.</span></span><br><span class="line">  equipped:Equipment; <span class="comment">// Union.</span></span><br><span class="line">  path:[Vec3];        <span class="comment">// Vector of structs.</span></span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line">table Weapon &#123;</span><br><span class="line">  name:<span class="built_in">string</span>;</span><br><span class="line">  damage:<span class="keyword">short</span>;</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line">root_type Monster;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>Table：每个字段都有一个名称，一个类型和一个可选的默认值（默认为 0 / NULL）</li>
+<li>Structs：只包含标量或其他结构（没有默认值，其字段也不会被添加或者弃用）</li>
+<li>Types：包括标量类型和非标量类型<ul>
+<li>标量类型的字段有默认值</li>
+<li>非标量的字段 <code>(string/vector/table/enums/structs)</code> 如果没有值的话，默认值为 NULL </li>
+</ul>
+</li>
+<li>Enums：定义一系列命名常量，默认的第一个值是 “0” </li>
+<li>Unions：一个 Unions 中可以放置多种类型，共同使用一个内存区域<ul>
+<li>可以声明一个 Unions 字段，该字段可以包含对这些类型中的任何一个的引用，即这块内存区域只能由其中一种类型使用</li>
+<li>另外还会生成一个带有后缀 <code>_type</code> 的隐藏字段，该字段包含相应的枚举值，从而可以在运行时知道要将哪些类型转换为类型</li>
+</ul>
+</li>
+<li>Root Type：声明了序列化数据的根表 </li>
+</ul>
+<p>参考：<a target="_blank" rel="noopener" href="https://halfrost.com/flatbuffers_schema/">深入浅出 FlatBuffers 之 Schema (halfrost.com)</a> </p>
+<p><strong>Flatbuffers Table</strong></p>
+<p>Table 中每个字段都是可选 optional 的，这种机制可以令 Flatbuffers 前向和后向兼容</p>
+<p>假设当前 schema 如下： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">table &#123; a:<span class="keyword">int</span>; b:<span class="keyword">int</span>; &#125;</span><br></pre></td></tr></table></figure>
+<p>在后添加字段： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">table &#123; a:<span class="keyword">int</span>; b:<span class="keyword">int</span>; c:<span class="keyword">int</span>; &#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>旧的 schema 读取新的数据结构会忽略新字段 c 的存在（不会浪费存储空间），新的 schema 读取旧的数据，将会取到 c 的默认值 </li>
+</ul>
+<p>在前添加字段： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">table &#123; c:<span class="keyword">int</span> a:<span class="keyword">int</span>; b:<span class="keyword">int</span>; &#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在前面添加新字段是不允许的，因为这会使 schema 新旧版本不兼容 </li>
+</ul>
+<p>指定字段 ID 序列：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">table &#123; c:<span class="keyword">int</span> (id: <span class="number">2</span>); a:<span class="keyword">int</span> (id: <span class="number">0</span>); b:<span class="keyword">int</span> (id: <span class="number">1</span>); &#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>可以手动指定 ID 排序/分组，只要顺序与旧版本相同也是可以兼容的</li>
+</ul>
+<p>删除字段：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">table &#123; a:<span class="keyword">int</span> (deprecated); b:<span class="keyword">int</span>; &#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>不能直接从 schema 中删除字段（否则会破坏源代码），可以将需要删除的字段标记为 deprecated</li>
+<li>旧的 schema 读取新的数据结构会获得 a 的默认值（因为它不存在）</li>
+<li>新的 schema 代码不能读取也不能写入 a，它们将忽略该字段</li>
+</ul>
+<p>更改字段：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">table &#123; a:uint; b:uint; &#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>如果旧数据不包含任何负数，这将是安全的，如果包含了负数，这样改变会出现问题 </li>
+<li>不能修改字段名称与字段默认值（否则会破坏所有使用此版本 schema 的代码）</li>
+</ul>
+<p><strong>Flatbuffers Structs</strong></p>
+<p>Structs 只包含标量或其他结构，只要确定以后就不会进行任何更改 </p>
+<p>Structs 使用的内存少于 Table，并且访问速度更快，它们总是以串联方式存储在其父对象中，并且不使用虚表</p>
+<p>Structs 不提供前向/后向兼容性，占用内存更小 </p>
+<p><strong>Flatbuffers 内存布局</strong></p>
+<p>测试样例：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">namespace</span> Test.Sample;</span><br><span class="line"> </span><br><span class="line">table Monster &#123;</span><br><span class="line">  name:<span class="built_in">string</span>;</span><br><span class="line">  weapon:[Weapon];</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">table Weapon &#123;</span><br><span class="line">  key:<span class="built_in">string</span>;</span><br><span class="line">  value:<span class="keyword">int</span>;</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line">root_type Monster;</span><br></pre></td></tr></table></figure>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;flatbuffers.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;test_generated.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;iostream&gt;</span> <span class="comment">// C++ header file for printing</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fstream&gt;</span> <span class="comment">// C++ header file for file access</span></span></span><br><span class="line"> </span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> Test::Sample;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span>&#123;</span><br><span class="line">    <span class="function">flatbuffers::FlatBufferBuilder <span class="title">builder</span><span class="params">(<span class="number">1024</span>)</span></span>;</span><br><span class="line">    <span class="keyword">auto</span> name = builder.<span class="built_in">CreateString</span>(<span class="string">&quot;name&quot;</span>);</span><br><span class="line">    <span class="keyword">auto</span> key1 = builder.<span class="built_in">CreateString</span>(<span class="string">&quot;aaaaaaaa&quot;</span>);</span><br><span class="line">    <span class="keyword">auto</span> key2 = builder.<span class="built_in">CreateString</span>(<span class="string">&quot;bbbbbbbb&quot;</span>);</span><br><span class="line">    <span class="keyword">auto</span> key3 = builder.<span class="built_in">CreateString</span>(<span class="string">&quot;cccccccc&quot;</span>);</span><br><span class="line">    <span class="keyword">auto</span> key4 = builder.<span class="built_in">CreateString</span>(<span class="string">&quot;dddddddd&quot;</span>);</span><br><span class="line">    <span class="keyword">auto</span> value1 = <span class="number">0x31</span>;</span><br><span class="line">    <span class="keyword">auto</span> value2 = <span class="number">0x32</span>;</span><br><span class="line">    <span class="keyword">auto</span> value3 = <span class="number">0x33</span>;</span><br><span class="line">    <span class="keyword">auto</span> value4 = <span class="number">0x34</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">auto</span> weapon1 = <span class="built_in">CreateWeapon</span>(builder,key1,value1);</span><br><span class="line">    <span class="keyword">auto</span> weapon2 = <span class="built_in">CreateWeapon</span>(builder,key2,value2);</span><br><span class="line">    <span class="keyword">auto</span> weapon3 = <span class="built_in">CreateWeapon</span>(builder,key3,value3);</span><br><span class="line">    <span class="keyword">auto</span> weapon4 = <span class="built_in">CreateWeapon</span>(builder,key4,value4);</span><br><span class="line">    std::vector&lt;flatbuffers::Offset&lt;Weapon&gt;&gt; weapons_vector;</span><br><span class="line">    weapons_vector.<span class="built_in">push_back</span>(weapon1);</span><br><span class="line">    weapons_vector.<span class="built_in">push_back</span>(weapon2);</span><br><span class="line">    weapons_vector.<span class="built_in">push_back</span>(weapon3);</span><br><span class="line">    weapons_vector.<span class="built_in">push_back</span>(weapon4);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">auto</span> weapons = builder.<span class="built_in">CreateVector</span>(weapons_vector);</span><br><span class="line">    <span class="keyword">auto</span> monster = <span class="built_in">CreateMonster</span>(builder,name,weapons);</span><br><span class="line"></span><br><span class="line">    builder.<span class="built_in">Finish</span>(monster);</span><br><span class="line">    <span class="keyword">uint8_t</span> *buf = builder.<span class="built_in">GetBufferPointer</span>();</span><br><span class="line">    <span class="keyword">auto</span> size = builder.<span class="built_in">GetSize</span>();</span><br><span class="line">    <span class="function">flatbuffers::Verifier <span class="title">verifier</span><span class="params">(buf, size)</span></span>;</span><br><span class="line">    <span class="keyword">bool</span> ok = verifier.VerifyBuffer&lt;Monster&gt;(<span class="literal">nullptr</span>);</span><br><span class="line">    <span class="keyword">if</span> (ok)&#123;</span><br><span class="line">        <span class="keyword">auto</span> monster_bk = <span class="built_in">GetMonster</span>(buf);</span><br><span class="line">        <span class="keyword">auto</span> name_bk = monster_bk-&gt;<span class="built_in">name</span>()-&gt;<span class="built_in">c_str</span>();</span><br><span class="line">        <span class="keyword">auto</span> weapons_bk = monster_bk-&gt;<span class="built_in">weapon</span>();</span><br><span class="line">        <span class="keyword">auto</span> key1_bk = weapons_bk-&gt;<span class="built_in">Get</span>(<span class="number">0</span>)-&gt;<span class="built_in">key</span>()-&gt;<span class="built_in">str</span>();</span><br><span class="line">        <span class="keyword">auto</span> key2_bk = weapons_bk-&gt;<span class="built_in">Get</span>(<span class="number">1</span>)-&gt;<span class="built_in">key</span>()-&gt;<span class="built_in">str</span>();</span><br><span class="line">        <span class="keyword">auto</span> key3_bk = weapons_bk-&gt;<span class="built_in">Get</span>(<span class="number">2</span>)-&gt;<span class="built_in">key</span>()-&gt;<span class="built_in">str</span>();</span><br><span class="line">        <span class="keyword">auto</span> key4_bk = weapons_bk-&gt;<span class="built_in">Get</span>(<span class="number">3</span>)-&gt;<span class="built_in">key</span>()-&gt;<span class="built_in">str</span>();</span><br><span class="line">        <span class="keyword">auto</span> value1_bk = weapons_bk-&gt;<span class="built_in">Get</span>(<span class="number">0</span>)-&gt;<span class="built_in">value</span>();</span><br><span class="line">        <span class="keyword">auto</span> value2_bk = weapons_bk-&gt;<span class="built_in">Get</span>(<span class="number">1</span>)-&gt;<span class="built_in">value</span>();</span><br><span class="line">        <span class="keyword">auto</span> value3_bk = weapons_bk-&gt;<span class="built_in">Get</span>(<span class="number">2</span>)-&gt;<span class="built_in">value</span>();</span><br><span class="line">        <span class="keyword">auto</span> value4_bk = weapons_bk-&gt;<span class="built_in">Get</span>(<span class="number">3</span>)-&gt;<span class="built_in">value</span>();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>在 <code>CreateMonster</code> 处打断点，然后 GDB 调试打印数据如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x5555555702b0</span> ◂— <span class="number">0x9c00000060</span> <span class="comment">/* &#x27;`&#x27; */</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x5555555702b8</span> ◂— <span class="number">0xa000000006</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│  <span class="number">0x5555555702c0</span> ◂— <span class="number">0x4</span></span><br><span class="line">    ......</span><br><span class="line"><span class="number">6</span>c:<span class="number">0360</span>│  <span class="number">0x555555570600</span> ◂— <span class="number">0xc000800000000</span></span><br><span class="line"><span class="number">6</span>d:<span class="number">0368</span>│  <span class="number">0x555555570608</span> ◂— <span class="number">0xffffffbc00080004</span></span><br><span class="line"><span class="number">6</span>e:<span class="number">0370</span>│  <span class="number">0x555555570610</span> ◂— <span class="number">0x400000094</span></span><br><span class="line"><span class="number">6f</span>:<span class="number">0378</span>│  <span class="number">0x555555570618</span> ◂— <span class="number">0x3c00000004</span></span><br><span class="line"><span class="number">70</span>:<span class="number">0380</span>│  <span class="number">0x555555570620</span> ◂— <span class="number">0x1400000024</span> <span class="comment">/* &#x27;$&#x27; */</span></span><br><span class="line"><span class="number">71</span>:<span class="number">0388</span>│  <span class="number">0x555555570628</span> ◂— <span class="number">0xffffffdc00000004</span></span><br><span class="line"><span class="number">72</span>:<span class="number">0390</span>│  <span class="number">0x555555570630</span> ◂— <span class="number">0x3400000034</span> <span class="comment">/* &#x27;4&#x27; */</span></span><br><span class="line"><span class="number">73</span>:<span class="number">0398</span>│  <span class="number">0x555555570638</span> ◂— <span class="number">0x38ffffffe8</span></span><br><span class="line"><span class="number">74</span>:<span class="number">03</span>a0│  <span class="number">0x555555570640</span> ◂— <span class="number">0xfffffff400000033</span> <span class="comment">/* &#x27;3&#x27; */</span></span><br><span class="line"><span class="number">75</span>:<span class="number">03</span>a8│  <span class="number">0x555555570648</span> ◂— <span class="number">0x320000003c</span> <span class="comment">/* &#x27;&lt;&#x27; */</span></span><br><span class="line"><span class="number">76</span>:<span class="number">03b</span>0│  <span class="number">0x555555570650</span> ◂— <span class="number">0x80004000c0008</span></span><br><span class="line"><span class="number">77</span>:<span class="number">03b</span>8│  <span class="number">0x555555570658</span> ◂— <span class="number">0x3800000008</span></span><br><span class="line"><span class="number">78</span>:<span class="number">03</span>c0│  <span class="number">0x555555570660</span> ◂— <span class="number">0x800000031</span> <span class="comment">/* &#x27;1&#x27; */</span></span><br><span class="line"><span class="number">79</span>:<span class="number">03</span>c8│  <span class="number">0x555555570668</span> ◂— <span class="string">&#x27;dddddddd&#x27;</span></span><br><span class="line"><span class="number">7</span>a:<span class="number">03</span>d0│  <span class="number">0x555555570670</span> ◂— <span class="number">0x800000000</span></span><br><span class="line"><span class="number">7b</span>:<span class="number">03</span>d8│  <span class="number">0x555555570678</span> ◂— <span class="string">&#x27;cccccccc&#x27;</span></span><br><span class="line"><span class="number">7</span>c:<span class="number">03e0</span>│  <span class="number">0x555555570680</span> ◂— <span class="number">0x800000000</span></span><br><span class="line"><span class="number">7</span>d:<span class="number">03e8</span>│  <span class="number">0x555555570688</span> ◂— <span class="string">&#x27;bbbbbbbb&#x27;</span></span><br><span class="line"><span class="number">7</span>e:<span class="number">03f</span>0│  <span class="number">0x555555570690</span> ◂— <span class="number">0x800000000</span></span><br><span class="line"><span class="number">7f</span>:<span class="number">03f</span>8│  <span class="number">0x555555570698</span> ◂— <span class="string">&#x27;aaaaaaaa&#x27;</span></span><br><span class="line"><span class="number">80</span>:<span class="number">0400</span>│     <span class="number">0x5555555706a0</span> ◂— <span class="number">0x400000000</span></span><br><span class="line"><span class="number">81</span>:<span class="number">0408</span>│     <span class="number">0x5555555706a8</span> ◂— <span class="number">0x656d616e</span> <span class="comment">/* &#x27;name&#x27; */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>首先在 Flatbuffers 的缓冲区中，数据是倒序排列的</li>
+<li>从下往上看：在字符串之后，有4字节的 <code>\x00</code> 用于分割 data 和 size，又有4字节的空间用于指示字符串的大小</li>
+<li>位于缓冲区最上方的控制信息是实时更新的</li>
+</ul>
+<p><strong>Flatbuffers 逆向分析</strong></p>
+<p>下面先展示一个 IDA 逆向分析出来的伪代码：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br></pre></td><td class="code"><pre><span class="line">v3 = flatbuffers::AlignOf&lt;<span class="keyword">unsigned</span> <span class="keyword">long</span>&gt;();</span><br><span class="line">flatbuffers::FlatBufferBuilderImpl&lt;<span class="literal">false</span>&gt;::<span class="built_in">FlatBufferBuilderImpl</span>(&amp;builder, <span class="number">0x400</span>uLL, <span class="number">0LL</span>, <span class="number">0</span>, v3);</span><br><span class="line">name.o = flatbuffers::FlatBufferBuilderImpl&lt;<span class="literal">false</span>&gt;::CreateString&lt;flatbuffers::Offset&gt;(&amp;builder, <span class="string">&quot;name&quot;</span>).o;</span><br><span class="line">key1.o = flatbuffers::FlatBufferBuilderImpl&lt;<span class="literal">false</span>&gt;::CreateString&lt;flatbuffers::Offset&gt;(&amp;builder, <span class="string">&quot;aaaaaaaa&quot;</span>).o;</span><br><span class="line">key2.o = flatbuffers::FlatBufferBuilderImpl&lt;<span class="literal">false</span>&gt;::CreateString&lt;flatbuffers::Offset&gt;(&amp;builder, <span class="string">&quot;bbbbbbbb&quot;</span>).o;</span><br><span class="line">key3.o = flatbuffers::FlatBufferBuilderImpl&lt;<span class="literal">false</span>&gt;::CreateString&lt;flatbuffers::Offset&gt;(&amp;builder, <span class="string">&quot;cccccccc&quot;</span>).o;</span><br><span class="line">key4.o = flatbuffers::FlatBufferBuilderImpl&lt;<span class="literal">false</span>&gt;::CreateString&lt;flatbuffers::Offset&gt;(&amp;builder, <span class="string">&quot;dddddddd&quot;</span>).o;</span><br><span class="line">value1 = <span class="number">49</span>;</span><br><span class="line">value2 = <span class="number">50</span>;</span><br><span class="line">value3 = <span class="number">51</span>;</span><br><span class="line">value4 = <span class="number">52</span>;</span><br><span class="line">weapon1.o = Test::Sample::<span class="built_in">CreateWeapon</span>(&amp;builder, key1, <span class="number">49</span>).o;</span><br><span class="line">weapon2.o = Test::Sample::<span class="built_in">CreateWeapon</span>(&amp;builder, key2, <span class="number">50</span>).o;</span><br><span class="line">weapon3.o = Test::Sample::<span class="built_in">CreateWeapon</span>(&amp;builder, key3, <span class="number">51</span>).o;</span><br><span class="line">weapon4.o = Test::Sample::<span class="built_in">CreateWeapon</span>(&amp;builder, key4, <span class="number">52</span>).o;</span><br><span class="line">std::vector&lt;flatbuffers::Offset&lt;Test::Sample::Weapon&gt;&gt;::<span class="built_in">vector</span>(&amp;weapons_vector);</span><br><span class="line">std::vector&lt;flatbuffers::Offset&lt;Test::Sample::Weapon&gt;&gt;::<span class="built_in">push_back</span>(&amp;weapons_vector, &amp;weapon1);</span><br><span class="line">std::vector&lt;flatbuffers::Offset&lt;Test::Sample::Weapon&gt;&gt;::<span class="built_in">push_back</span>(&amp;weapons_vector, &amp;weapon2);</span><br><span class="line">std::vector&lt;flatbuffers::Offset&lt;Test::Sample::Weapon&gt;&gt;::<span class="built_in">push_back</span>(&amp;weapons_vector, &amp;weapon3);</span><br><span class="line">std::vector&lt;flatbuffers::Offset&lt;Test::Sample::Weapon&gt;&gt;::<span class="built_in">push_back</span>(&amp;weapons_vector, &amp;weapon4);</span><br><span class="line">weapons.o = flatbuffers::FlatBufferBuilderImpl&lt;<span class="literal">false</span>&gt;::CreateVector&lt;flatbuffers::Offset&lt;Test::Sample::Weapon&gt;,std::allocator&lt;flatbuffers::Offset&lt;Test::Sample::Weapon&gt;&gt;&gt;(</span><br><span class="line">              &amp;builder,</span><br><span class="line">              &amp;weapons_vector).o;</span><br><span class="line">monster.o = Test::Sample::<span class="built_in">CreateMonster</span>(&amp;builder, name, weapons).o;</span><br><span class="line">flatbuffers::FlatBufferBuilderImpl&lt;<span class="literal">false</span>&gt;::Finish&lt;Test::Sample::Monster&gt;(&amp;builder, monster, <span class="number">0LL</span>);</span><br><span class="line">buf = flatbuffers::FlatBufferBuilderImpl&lt;<span class="literal">false</span>&gt;::<span class="built_in">GetBufferPointer</span>(&amp;builder);</span><br><span class="line">size = flatbuffers::FlatBufferBuilderImpl&lt;<span class="literal">false</span>&gt;::<span class="built_in">GetSize</span>(&amp;builder);</span><br><span class="line">flatbuffers::Verifier::<span class="built_in">Verifier</span>(&amp;verifier, buf, size, <span class="number">0x40</span>u, <span class="number">0xF4240</span>u, <span class="number">1</span>);</span><br><span class="line"><span class="keyword">if</span> ( flatbuffers::Verifier::VerifyBuffer&lt;Test::Sample::Monster&gt;(&amp;verifier, <span class="number">0LL</span>) )</span><br><span class="line">&#123;</span><br><span class="line">  monster_bk = Test::Sample::<span class="built_in">GetMonster</span>(buf);</span><br><span class="line">  v4 = Test::Sample::Monster::<span class="built_in">name</span>(monster_bk);</span><br><span class="line">  name_bk = flatbuffers::String::<span class="built_in">c_str</span>(v4);</span><br><span class="line">  weapons_bk = Test::Sample::Monster::<span class="built_in">weapon</span>(monster_bk);</span><br><span class="line">  v5 = flatbuffers::Vector&lt;flatbuffers::Offset&lt;Test::Sample::Weapon&gt;,<span class="keyword">unsigned</span> <span class="keyword">int</span>&gt;::<span class="built_in">Get</span>(weapons_bk, <span class="number">0</span>);</span><br><span class="line">  v6 = Test::Sample::Weapon::<span class="built_in">key</span>(v5);</span><br><span class="line">  flatbuffers::String::str[abi:cxx11](&amp;key1_bk, v6);</span><br><span class="line">  v7 = flatbuffers::Vector&lt;flatbuffers::Offset&lt;Test::Sample::Weapon&gt;,<span class="keyword">unsigned</span> <span class="keyword">int</span>&gt;::<span class="built_in">Get</span>(weapons_bk, <span class="number">1u</span>);</span><br><span class="line">  v8 = Test::Sample::Weapon::<span class="built_in">key</span>(v7);</span><br><span class="line">  flatbuffers::String::str[abi:cxx11](&amp;key2_bk, v8);</span><br><span class="line">  v9 = flatbuffers::Vector&lt;flatbuffers::Offset&lt;Test::Sample::Weapon&gt;,<span class="keyword">unsigned</span> <span class="keyword">int</span>&gt;::<span class="built_in">Get</span>(weapons_bk, <span class="number">2u</span>);</span><br><span class="line">  v10 = Test::Sample::Weapon::<span class="built_in">key</span>(v9);</span><br><span class="line">  flatbuffers::String::str[abi:cxx11](&amp;key3_bk, v10);</span><br><span class="line">  v11 = flatbuffers::Vector&lt;flatbuffers::Offset&lt;Test::Sample::Weapon&gt;,<span class="keyword">unsigned</span> <span class="keyword">int</span>&gt;::<span class="built_in">Get</span>(weapons_bk, <span class="number">3u</span>);</span><br><span class="line">  v12 = Test::Sample::Weapon::<span class="built_in">key</span>(v11);</span><br><span class="line">  flatbuffers::String::str[abi:cxx11](&amp;key4_bk, v12);</span><br><span class="line">  v13 = flatbuffers::Vector&lt;flatbuffers::Offset&lt;Test::Sample::Weapon&gt;,<span class="keyword">unsigned</span> <span class="keyword">int</span>&gt;::<span class="built_in">Get</span>(weapons_bk, <span class="number">0</span>);</span><br><span class="line">  value1_bk = Test::Sample::Weapon::<span class="built_in">value</span>(v13);</span><br><span class="line">  v14 = flatbuffers::Vector&lt;flatbuffers::Offset&lt;Test::Sample::Weapon&gt;,<span class="keyword">unsigned</span> <span class="keyword">int</span>&gt;::<span class="built_in">Get</span>(weapons_bk, <span class="number">1u</span>);</span><br><span class="line">  value2_bk = Test::Sample::Weapon::<span class="built_in">value</span>(v14);</span><br><span class="line">  v15 = flatbuffers::Vector&lt;flatbuffers::Offset&lt;Test::Sample::Weapon&gt;,<span class="keyword">unsigned</span> <span class="keyword">int</span>&gt;::<span class="built_in">Get</span>(weapons_bk, <span class="number">2u</span>);</span><br><span class="line">  value3_bk = Test::Sample::Weapon::<span class="built_in">value</span>(v15);</span><br><span class="line">  v16 = flatbuffers::Vector&lt;flatbuffers::Offset&lt;Test::Sample::Weapon&gt;,<span class="keyword">unsigned</span> <span class="keyword">int</span>&gt;::<span class="built_in">Get</span>(weapons_bk, <span class="number">3u</span>);</span><br><span class="line">  value4_bk = Test::Sample::Weapon::<span class="built_in">value</span>(v16);</span><br><span class="line">  std::string::~<span class="built_in">string</span>(&amp;key4_bk);</span><br><span class="line">  std::string::~<span class="built_in">string</span>(&amp;key3_bk);</span><br><span class="line">  std::string::~<span class="built_in">string</span>(&amp;key2_bk);</span><br><span class="line">  std::string::~<span class="built_in">string</span>(&amp;key1_bk);</span><br><span class="line">&#125;</span><br><span class="line">std::vector&lt;flatbuffers::Offset&lt;Test::Sample::Weapon&gt;&gt;::~<span class="built_in">vector</span>(&amp;weapons_vector);</span><br><span class="line">flatbuffers::FlatBufferBuilderImpl&lt;<span class="literal">false</span>&gt;::~<span class="built_in">FlatBufferBuilderImpl</span>(&amp;builder);</span><br></pre></td></tr></table></figure>
+<p>这里我们重点分析反序列化的部分：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> flatbuffers::String *__cdecl Test::Sample::Monster::name(<span class="keyword">const</span> Test::Sample::Monster *<span class="keyword">const</span> <span class="keyword">this</span>)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">return</span> flatbuffers::Table::GetPointer&lt;flatbuffers::String <span class="keyword">const</span>*,<span class="keyword">unsigned</span> <span class="keyword">int</span>&gt;(<span class="keyword">this</span>, <span class="number">4u</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>程序的反序列化会大量使用 <code>flatbuffers::Table::GetXXXX</code> 的函数模板，从这些函数中可以看出一些 Scheme 文件的信息</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> flatbuffers::String *__cdecl Test::Sample::Monster::name(<span class="keyword">const</span> Test::Sample::Monster *<span class="keyword">const</span> <span class="keyword">this</span>)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">return</span> flatbuffers::Table::GetPointer&lt;flatbuffers::String <span class="keyword">const</span>*,<span class="keyword">unsigned</span> <span class="keyword">int</span>&gt;(<span class="keyword">this</span>, <span class="number">4u</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>第二个参数的数字可以体现该条目在 Scheme 文件中的位置</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int32_t</span> __cdecl Test::Sample::Weapon::value(<span class="keyword">const</span> Test::Sample::Weapon *<span class="keyword">const</span> <span class="keyword">this</span>)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">return</span> flatbuffers::Table::GetField&lt;<span class="keyword">int</span>&gt;(<span class="keyword">this</span>, <span class="number">6u</span>, <span class="number">0</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>从传参个数可以判断该条目是否为标量类型（有3个参数即是标量类型，第3个参数为其默认值）</li>
+</ul>
+<p>在逆向分析 flatbuffers 的过程中，Verifier 可以暴露大量信息（Verifier 是 flatbuffers 的检查器），它的内部结构如下：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( !flatbuffers::Verifier::<span class="built_in">Check</span>(<span class="keyword">this</span>, <span class="keyword">this</span>-&gt;size_ &gt; <span class="number">0xB</span>) )</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"><span class="keyword">if</span> ( identifier )</span><br><span class="line">&#123;</span><br><span class="line">  v4 = <span class="keyword">this</span>-&gt;size_ &gt; <span class="number">7</span> &amp;&amp; flatbuffers::<span class="built_in">BufferHasIdentifier</span>(&amp;<span class="keyword">this</span>-&gt;buf_[start], identifier, <span class="number">0</span>);</span><br><span class="line">  <span class="keyword">if</span> ( !flatbuffers::Verifier::<span class="built_in">Check</span>(<span class="keyword">this</span>, v4) )</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line">o = flatbuffers::Verifier::VerifyOffset&lt;<span class="keyword">unsigned</span> <span class="keyword">int</span>,<span class="keyword">int</span>&gt;(<span class="keyword">this</span>, start);</span><br><span class="line"><span class="keyword">return</span> flatbuffers::Verifier::<span class="built_in">Check</span>(<span class="keyword">this</span>, o != <span class="number">0</span>)</span><br><span class="line">    &amp;&amp; Test::Sample::Monster::<span class="built_in">Verify</span>((<span class="keyword">const</span> Test::Sample::Monster *<span class="keyword">const</span>)&amp;<span class="keyword">this</span>-&gt;buf_[start + o], <span class="keyword">this</span>);</span><br></pre></td></tr></table></figure>
+<p>最后一个函数 Verify 可以泄露有关 Scheme 的信息：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( flatbuffers::Table::<span class="built_in">VerifyTableStart</span>(<span class="keyword">this</span>, verifier)</span><br><span class="line">  &amp;&amp; flatbuffers::Table::VerifyOffset&lt;<span class="keyword">unsigned</span> <span class="keyword">int</span>&gt;(<span class="keyword">this</span>, verifier, <span class="number">4u</span>) )</span><br><span class="line">&#123;</span><br><span class="line">  v2 = Test::Sample::Monster::<span class="built_in">name</span>(<span class="keyword">this</span>);</span><br><span class="line">  <span class="keyword">if</span> ( flatbuffers::Verifier::<span class="built_in">VerifyString</span>(verifier, v2)</span><br><span class="line">    &amp;&amp; flatbuffers::Table::VerifyOffset&lt;<span class="keyword">unsigned</span> <span class="keyword">int</span>&gt;(<span class="keyword">this</span>, verifier, <span class="number">6u</span>) )</span><br><span class="line">  &#123;</span><br><span class="line">    v3 = Test::Sample::Monster::<span class="built_in">weapon</span>(<span class="keyword">this</span>);</span><br><span class="line">    <span class="keyword">if</span> ( <span class="built_in">ZNK11flatbuffers8Verifier12VerifyVectorIJENS_6OffsetIN4Test6Sample6WeaponEEEjEEbPKNS_6VectorIT0_T1_EE</span>(</span><br><span class="line">           verifier,</span><br><span class="line">           v3) )</span><br><span class="line">    &#123;</span><br><span class="line">      v4 = Test::Sample::Monster::<span class="built_in">weapon</span>(<span class="keyword">this</span>);</span><br><span class="line">      <span class="keyword">if</span> ( flatbuffers::Verifier::VerifyVectorOfTables&lt;Test::Sample::Weapon&gt;(verifier, v4)</span><br><span class="line">        &amp;&amp; flatbuffers::Verifier::<span class="built_in">EndTable</span>(verifier) )</span><br><span class="line">      &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>VerifyString 用于分析 string 类型</li>
+<li>VectorVerifyVectorOfTables 用于分析 Vector 类型</li>
+</ul>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">bool</span> __cdecl Test::Sample::Weapon::<span class="built_in">Verify</span>(<span class="keyword">const</span> Test::Sample::Weapon *<span class="keyword">const</span> <span class="keyword">this</span>, flatbuffers::Verifier *verifier)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">const</span> flatbuffers::String *v2; <span class="comment">// rdx</span></span><br><span class="line">  <span class="keyword">bool</span> result; <span class="comment">// al</span></span><br><span class="line"></span><br><span class="line">  result = <span class="number">0</span>;</span><br><span class="line">  <span class="keyword">if</span> ( flatbuffers::Table::<span class="built_in">VerifyTableStart</span>(<span class="keyword">this</span>, verifier)</span><br><span class="line">    &amp;&amp; flatbuffers::Table::VerifyOffset&lt;<span class="keyword">unsigned</span> <span class="keyword">int</span>&gt;(<span class="keyword">this</span>, verifier, <span class="number">4u</span>) )</span><br><span class="line">  &#123;</span><br><span class="line">    v2 = Test::Sample::Weapon::<span class="built_in">key</span>(<span class="keyword">this</span>);</span><br><span class="line">    <span class="keyword">if</span> ( flatbuffers::Verifier::<span class="built_in">VerifyString</span>(verifier, v2)</span><br><span class="line">      &amp;&amp; flatbuffers::Table::VerifyField&lt;<span class="keyword">int</span>&gt;(<span class="keyword">this</span>, verifier, <span class="number">6u</span>, <span class="number">4uLL</span>)</span><br><span class="line">      &amp;&amp; flatbuffers::Verifier::<span class="built_in">EndTable</span>(verifier) )</span><br><span class="line">    &#123;</span><br><span class="line">      <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> result;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>VerifyField 的第4个参数表示该标量类型条目的大小</li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/Principles/" rel="tag"><i class="fa fa-tag"></i> Principles</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/08/08/%E5%9B%BD%E8%B5%9B-%E5%86%B3%E8%B5%9B2023/" rel="prev" title="国赛-决赛2023">
+      <i class="fa fa-chevron-left"></i> 国赛-决赛2023
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">279</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">13</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">146</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">3.9m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">59:03</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
