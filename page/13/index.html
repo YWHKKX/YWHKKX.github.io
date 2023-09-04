@@ -156,6 +156,209 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/10/07/Linux%20tty%20%E7%AE%80%E6%9E%90/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/10/07/Linux%20tty%20%E7%AE%80%E6%9E%90/" class="post-title-link" itemprop="url">Linux tty 简析</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-10-07 21:30:27 / Modified: 21:31:54" itemprop="dateCreated datePublished" datetime="2022-10-07T21:30:27+08:00">2022-10-07</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>7.5k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>7 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>tty_struct attack</strong></p>
+<p>当用户打开 ptmx 驱动时 <code>open(&quot;/dev/ptmx&quot;, O_RDWR)</code> ，会分配一个 <code>tty_struct</code> 结构，它的结构如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">tty_struct</span> &#123;</span></span><br><span class="line">	<span class="keyword">int</span>	magic;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">kref</span> <span class="title">kref</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">device</span> *<span class="title">dev</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">tty_driver</span> *<span class="title">driver</span>;</span></span><br><span class="line">	<span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">tty_operations</span> *<span class="title">ops</span>;</span></span><br><span class="line">	<span class="keyword">int</span> index;</span><br><span class="line"></span><br><span class="line">	<span class="comment">/* Protects ldisc changes: Lock tty not pty */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">ld_semaphore</span> <span class="title">ldisc_sem</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">tty_ldisc</span> *<span class="title">ldisc</span>;</span></span><br><span class="line"></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">mutex</span> <span class="title">atomic_write_lock</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">mutex</span> <span class="title">legacy_mutex</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">mutex</span> <span class="title">throttle_mutex</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">rw_semaphore</span> <span class="title">termios_rwsem</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">mutex</span> <span class="title">winsize_mutex</span>;</span></span><br><span class="line">	<span class="keyword">spinlock_t</span> ctrl_lock;</span><br><span class="line">	<span class="keyword">spinlock_t</span> flow_lock;</span><br><span class="line">	<span class="comment">/* Termios values are protected by the termios rwsem */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">ktermios</span> <span class="title">termios</span>, <span class="title">termios_locked</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">termiox</span> *<span class="title">termiox</span>;</span>	<span class="comment">/* May be NULL for unsupported */</span></span><br><span class="line">	<span class="keyword">char</span> name[<span class="number">64</span>];</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">pid</span> *<span class="title">pgrp</span>;</span>		<span class="comment">/* Protected by ctrl lock */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">pid</span> *<span class="title">session</span>;</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> flags;</span><br><span class="line">	<span class="keyword">int</span> count;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">winsize</span> <span class="title">winsize</span>;</span>		<span class="comment">/* winsize_mutex */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> stopped:<span class="number">1</span>,	<span class="comment">/* flow_lock */</span></span><br><span class="line">		      flow_stopped:<span class="number">1</span>,</span><br><span class="line">		      unused:BITS_PER_LONG - <span class="number">2</span>;</span><br><span class="line">	<span class="keyword">int</span> hw_stopped;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> ctrl_status:<span class="number">8</span>,	<span class="comment">/* ctrl_lock */</span></span><br><span class="line">		      packet:<span class="number">1</span>,</span><br><span class="line">		      unused_ctrl:BITS_PER_LONG - <span class="number">9</span>;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> receive_room;	<span class="comment">/* Bytes free for queue */</span></span><br><span class="line">	<span class="keyword">int</span> flow_change;</span><br><span class="line"></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">tty_struct</span> *<span class="title">link</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">fasync_struct</span> *<span class="title">fasync</span>;</span></span><br><span class="line">	<span class="keyword">wait_queue_head_t</span> write_wait;</span><br><span class="line">	<span class="keyword">wait_queue_head_t</span> read_wait;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">work_struct</span> <span class="title">hangup_work</span>;</span></span><br><span class="line">	<span class="keyword">void</span> *disc_data;</span><br><span class="line">	<span class="keyword">void</span> *driver_data;</span><br><span class="line">	<span class="keyword">spinlock_t</span> files_lock;		<span class="comment">/* protects tty_files list */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">tty_files</span>;</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> N_TTY_BUF_SIZE 4096</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">int</span> closing;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span> *write_buf;</span><br><span class="line">	<span class="keyword">int</span> write_cnt;</span><br><span class="line">	<span class="comment">/* If the tty has a pending do_SAK, queue it here - akpm */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">work_struct</span> <span class="title">SAK_work</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">tty_port</span> *<span class="title">port</span>;</span></span><br><span class="line">&#125; __randomize_layout;</span><br></pre></td></tr></table></figure>
+<p>其中有一个 <code>struct tty_operations</code> 指针，而 <code>tty_operations</code> 结构体里是一些列对驱动操作的函数指针：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">tty_operations</span> &#123;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">tty_struct</span> * (*<span class="title">lookup</span>)(<span class="keyword">struct</span> <span class="title">tty_driver</span> *<span class="title">driver</span>,</span></span><br><span class="line"><span class="class">			<span class="keyword">struct</span> <span class="title">file</span> *<span class="title">filp</span>, <span class="title">int</span> <span class="title">idx</span>);</span></span><br><span class="line">	<span class="keyword">int</span>  (*install)(struct tty_driver *driver, struct tty_struct *tty);</span><br><span class="line">	<span class="keyword">void</span> (*remove)(struct tty_driver *driver, struct tty_struct *tty);</span><br><span class="line">	<span class="keyword">int</span>  (*open)(struct tty_struct * tty, struct file * filp);</span><br><span class="line">	<span class="keyword">void</span> (*close)(struct tty_struct * tty, struct file * filp);</span><br><span class="line">	<span class="keyword">void</span> (*shutdown)(struct tty_struct *tty);</span><br><span class="line">	<span class="keyword">void</span> (*cleanup)(struct tty_struct *tty);</span><br><span class="line">	<span class="keyword">int</span>  (*write)(struct tty_struct * tty,</span><br><span class="line">		      <span class="keyword">const</span> <span class="keyword">unsigned</span> <span class="keyword">char</span> *buf, <span class="keyword">int</span> count);</span><br><span class="line">	<span class="keyword">int</span>  (*put_char)(struct tty_struct *tty, <span class="keyword">unsigned</span> <span class="keyword">char</span> ch);</span><br><span class="line">	<span class="keyword">void</span> (*flush_chars)(struct tty_struct *tty);</span><br><span class="line">	<span class="keyword">int</span>  (*write_room)(struct tty_struct *tty);</span><br><span class="line">	<span class="keyword">int</span>  (*chars_in_buffer)(struct tty_struct *tty);</span><br><span class="line">	<span class="keyword">int</span>  (*ioctl)(struct tty_struct *tty,</span><br><span class="line">		    <span class="keyword">unsigned</span> <span class="keyword">int</span> cmd, <span class="keyword">unsigned</span> <span class="keyword">long</span> arg);</span><br><span class="line">	<span class="keyword">long</span> (*compat_ioctl)(struct tty_struct *tty,</span><br><span class="line">			     <span class="keyword">unsigned</span> <span class="keyword">int</span> cmd, <span class="keyword">unsigned</span> <span class="keyword">long</span> arg);</span><br><span class="line">	<span class="keyword">void</span> (*set_termios)(struct tty_struct *tty, struct ktermios * old);</span><br><span class="line">	<span class="keyword">void</span> (*throttle)(struct tty_struct * tty);</span><br><span class="line">	<span class="keyword">void</span> (*unthrottle)(struct tty_struct * tty);</span><br><span class="line">	<span class="keyword">void</span> (*stop)(struct tty_struct *tty);</span><br><span class="line">	<span class="keyword">void</span> (*start)(struct tty_struct *tty);</span><br><span class="line">	<span class="keyword">void</span> (*hangup)(struct tty_struct *tty);</span><br><span class="line">	<span class="keyword">int</span> (*break_ctl)(struct tty_struct *tty, <span class="keyword">int</span> state);</span><br><span class="line">	<span class="keyword">void</span> (*flush_buffer)(struct tty_struct *tty);</span><br><span class="line">	<span class="keyword">void</span> (*set_ldisc)(struct tty_struct *tty);</span><br><span class="line">	<span class="keyword">void</span> (*wait_until_sent)(struct tty_struct *tty, <span class="keyword">int</span> timeout);</span><br><span class="line">	<span class="keyword">void</span> (*send_xchar)(struct tty_struct *tty, <span class="keyword">char</span> ch);</span><br><span class="line">	<span class="keyword">int</span> (*tiocmget)(struct tty_struct *tty);</span><br><span class="line">	<span class="keyword">int</span> (*tiocmset)(struct tty_struct *tty,</span><br><span class="line">			<span class="keyword">unsigned</span> <span class="keyword">int</span> <span class="built_in">set</span>, <span class="keyword">unsigned</span> <span class="keyword">int</span> clear);</span><br><span class="line">	<span class="keyword">int</span> (*resize)(struct tty_struct *tty, struct winsize *ws);</span><br><span class="line">	<span class="keyword">int</span> (*set_termiox)(struct tty_struct *tty, struct termiox *tnew);</span><br><span class="line">	<span class="keyword">int</span> (*get_icount)(struct tty_struct *tty,</span><br><span class="line">				struct serial_icounter_struct *icount);</span><br><span class="line">	<span class="keyword">int</span>  (*get_serial)(struct tty_struct *tty, struct serial_struct *p);</span><br><span class="line">	<span class="keyword">int</span>  (*set_serial)(struct tty_struct *tty, struct serial_struct *p);</span><br><span class="line">	<span class="keyword">void</span> (*show_fdinfo)(struct tty_struct *tty, struct seq_file *m);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_CONSOLE_POLL</span></span><br><span class="line">	<span class="keyword">int</span> (*poll_init)(struct tty_driver *driver, <span class="keyword">int</span> line, <span class="keyword">char</span> *options);</span><br><span class="line">	<span class="keyword">int</span> (*poll_get_char)(struct tty_driver *driver, <span class="keyword">int</span> line);</span><br><span class="line">	<span class="keyword">void</span> (*poll_put_char)(struct tty_driver *driver, <span class="keyword">int</span> line, <span class="keyword">char</span> ch);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">	<span class="keyword">int</span> (*proc_show)(struct seq_file *, <span class="keyword">void</span> *);</span><br><span class="line">&#125; __randomize_layout;</span><br></pre></td></tr></table></figure>
+<p><code>tty_struct</code> 结构体的大小为 <code>0x2E0</code>，在 kernel pwn 中，如果可以有 <code>kmalloc-1k</code> 我们就会考虑进行 <code>tty_struct attack</code>（劫持 <code>tty_operations</code>，控制执行流）</p>
+<p>内核的利用并不是本篇文章的重点，接下来我们将关注 <code>tty</code> 本身在内核中的作用</p>
+<p><strong>仿真终端</strong></p>
+<p><code>tty</code> 其实是 “电传打字机(Teletypewriter)” 的缩写（后来这种设备逐渐键盘和显示器取代），泛指计算机的终端（terminal）设备 </p>
+<ul>
+<li>在 Linux 或 UNIX 中，<code>tty</code> 变为了一个抽象设备（用于表示各种类型的终端设备）：<ul>
+<li>有时它指的是一个物理输入设备（例如串口）</li>
+<li>有时它指的是一个允许用户和系统交互的“虚拟仿真终端设备”</li>
+</ul>
+</li>
+</ul>
+<p>现代物理 IO 设备都采用“键盘+显示器”：</p>
+<ul>
+<li>如果用户态程序要把内容输出到显示器，只要把这些内容写入到显示器对应的 <code>tty</code> 设备就可以了，然后由 <code>tty</code> 层负责匹配合适的驱动完成输出，这也是 Linux 控制台的工作原理：</li>
+</ul>
+<img src="/2022/10/07/Linux%20tty%20%E7%AE%80%E6%9E%90/1665118227239.png" class width="1665118227239"> 
+<ul>
+<li>显示器和键盘这类物理设备会被抽象为驱动 driver</li>
+<li>而终端仿真程序 Terminal Emulator（虚拟终端）使用驱动接口完成进一步的抽象</li>
+<li>本质上来讲键盘输入的字符是没有意义的，而终端仿真程序会对这些字符进行“格式化”，“适配”和“解释”，这个过程被称为行规程 Line Discipline</li>
+<li>经过行规程的数据将会通过 <code>tty</code> 和用户层进行交互，同时返回输出数据</li>
+<li>返回的数据也要经过行规程，然后被“翻译”为显示器驱动可以理解的形式并输出</li>
+</ul>
+<p>在 Linux 中可以直接查看 <code>tty</code> 层的设备：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">➜  ~ ls /dev/tty*</span><br><span class="line">/dev/tty    /dev/tty23  /dev/tty39  /dev/tty54      /dev/ttyS10  /dev/ttyS26</span><br><span class="line">/dev/tty0   /dev/tty24  /dev/tty4   /dev/tty55      /dev/ttyS11  /dev/ttyS27</span><br><span class="line">/dev/tty1   /dev/tty25  /dev/tty40  /dev/tty56      /dev/ttyS12  /dev/ttyS28</span><br><span class="line">/dev/tty10  /dev/tty26  /dev/tty41  /dev/tty57      /dev/ttyS13  /dev/ttyS29</span><br><span class="line">/dev/tty11  /dev/tty27  /dev/tty42  /dev/tty58      /dev/ttyS14  /dev/ttyS3</span><br><span class="line">/dev/tty12  /dev/tty28  /dev/tty43  /dev/tty59      /dev/ttyS15  /dev/ttyS30</span><br><span class="line">/dev/tty13  /dev/tty29  /dev/tty44  /dev/tty6       /dev/ttyS16  /dev/ttyS31</span><br><span class="line">/dev/tty14  /dev/tty3   /dev/tty45  /dev/tty60      /dev/ttyS17  /dev/ttyS4</span><br><span class="line">/dev/tty15  /dev/tty30  /dev/tty46  /dev/tty61      /dev/ttyS18  /dev/ttyS5</span><br><span class="line">/dev/tty16  /dev/tty31  /dev/tty47  /dev/tty62      /dev/ttyS19  /dev/ttyS6</span><br><span class="line">/dev/tty17  /dev/tty32  /dev/tty48  /dev/tty63      /dev/ttyS2   /dev/ttyS7</span><br><span class="line">/dev/tty18  /dev/tty33  /dev/tty49  /dev/tty7       /dev/ttyS20  /dev/ttyS8</span><br><span class="line">/dev/tty19  /dev/tty34  /dev/tty5   /dev/tty8       /dev/ttyS21  /dev/ttyS9</span><br><span class="line">/dev/tty2   /dev/tty35  /dev/tty50  /dev/tty9       /dev/ttyS22</span><br><span class="line">/dev/tty20  /dev/tty36  /dev/tty51  /dev/ttyprintk  /dev/ttyS23</span><br><span class="line">/dev/tty21  /dev/tty37  /dev/tty52  /dev/ttyS0      /dev/ttyS24</span><br><span class="line">/dev/tty22  /dev/tty38  /dev/tty53  /dev/ttyS1      /dev/ttyS25</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>/dev/tty</code>：（控制终端）<ul>
+<li>代表当前 <code>tty</code> 设备</li>
+<li>在当前的终端中输入 <code>echo hello &gt; /dev/tty</code> ，都会直接显示在当前的终端中</li>
+</ul>
+</li>
+<li><code>/dev/tty1 ~ /dev/tty6</code>：（虚拟终端）<ul>
+<li>用于表示运行在内核态的软件仿真终端 </li>
+<li>可以把这些 <code>tty</code> 设备理解为对虚拟终端的一种抽象，使得用户程序能以操控文件的形式来与虚拟终端交互</li>
+</ul>
+</li>
+<li><code>/dev/tty0</code>：（虚拟终端）<ul>
+<li>代表当前虚拟终端</li>
+<li><code>/dev/tty</code> 主要是针对进程来说的，而 <code>/dev/tty0</code> 是针对整个系统来说的（所以 <code>/dev/tty0</code> 拥有更高的权限）</li>
+</ul>
+</li>
+<li><code>/dev/tty7 ~ /dev/tty63</code>：（其他终端）<ul>
+<li>用于表示运行在内核态的其他终端</li>
+<li>这些 <code>tty</code> 是由其他的关键软件使用的（例如 Ubuntu 中 <code>/dev/tty7</code> 就是图形显示管理器）</li>
+</ul>
+</li>
+<li><code>/dev/ttyS0 ~ /dev/ttyS31</code>：（串行端口终端）<ul>
+<li>是使用计算机串行端口连接的终端设备</li>
+</ul>
+</li>
+</ul>
+<p>我们可以做一个实验来感受一下 <code>/dev/tty1 ~ /dev/tty6</code>：</p>
+<ul>
+<li>先在当前终端中输入 <code>Ctrl + Alt + F4</code> 切换到 <code>/dev/tty4</code></li>
+</ul>
+<img src="/2022/10/07/Linux%20tty%20%E7%AE%80%E6%9E%90/1665123646699.png" class width="1665123646699"> 
+<ul>
+<li>上图显示的就是一个虚拟终端 Terminal Emulator，用户态的 Shell 运行在它上面</li>
+<li>输入 <code>Ctrl + Alt + F2</code> 切换到桌面环境，输入 <code>sudo echo &quot;hello&quot; &gt; /dev/tty4</code>，然后返回 <code>/dev/tty4</code></li>
+</ul>
+<img src="/2022/10/07/Linux%20tty%20%E7%AE%80%E6%9E%90/1665123684018.png" class width="1665123684018"> 
+<ul>
+<li>通过操作 <code>/dev/tty4</code> 文件，可以把用户态程序输入的内容输出到对应的虚拟终端上</li>
+</ul>
+<p>可以认为 <code>tty</code> 是虚拟终端的一个抽象层：</p>
+<ul>
+<li><code>tty</code> 给用户态程序 Shell 提供了一种抽象，使其能够以操作文件的形式来控制各种终端</li>
+</ul>
+<p>但是 <code>tty</code> 是运行在内核态中的，为了便于将终端仿真移入用户空间，同时仍保持 <code>tty</code> 子系统的完整，伪终端被发明了出来（被称为 <code>pseudo-TTY</code>，简称 <code>pty</code>）</p>
+<ul>
+<li>每当你在系统中启动一个终端仿真器或使用任何类型的 shell 时，它都会与 <code>pty</code> 进行交互</li>
+<li>当创建一个伪终端时，会在 <code>/dev/pts</code> 目录下创建一个设备文件（用于关联 <code>pty</code>）</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">➜  ~ ls -l /dev/pts </span><br><span class="line">总用量 0</span><br><span class="line">crw--w---- 1 yhellow tty  136, 0 10月  7 20:24 0</span><br><span class="line">crw--w---- 1 yhellow tty  136, 1 10月  7 20:24 1</span><br><span class="line">crw--w---- 1 yhellow tty  136, 2 10月  7 20:41 2</span><br><span class="line">c--------- 1 root    root   5, 2 10月  7 19:14 ptmx</span><br></pre></td></tr></table></figure>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">➜  ~ lsof /dev/ptmx</span><br><span class="line">COMMAND    PID    USER   FD   TYPE DEVICE SIZE/OFF NODE NAME</span><br><span class="line">gnome-ter 4015 yhellow   19u   CHR    5,2      0t0   87 /dev/ptmx</span><br><span class="line">gnome-ter 4015 yhellow   20u   CHR    5,2      0t0   87 /dev/ptmx</span><br><span class="line">gnome-ter 4015 yhellow   21u   CHR    5,2      0t0   87 /dev/ptmx</span><br></pre></td></tr></table></figure>
+<ul>
+<li>你可以在终端仿真器中输入 <code>tty</code> 来找到相关联的 <code>pty</code>：</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">➜  ~ tty                                        </span><br><span class="line">/dev/pts/0</span><br></pre></td></tr></table></figure>
+<p><strong>伪终端</strong></p>
+<p>伪终端（被称为 <code>pseudo-tty</code>，简称 <code>pty</code>）是指伪终端 master 和伪终端 slave 这一对字符设备，其中的 slave 对应 <code>/dev/pts/</code> 目录下的一个文件，而 master 则在内存中标识为一个文件描述符(fd)：</p>
+<ul>
+<li>master 端 - <code>ptm</code>：是更接近用户显示器、键盘的一端（基于 VFS 的特殊文件）</li>
+<li>slave 端 - <code>pts</code>：是在虚拟终端上运行的 CLI（Command Line Interface，命令行接口）程序</li>
+</ul>
+<img src="/2022/10/07/Linux%20tty%20%E7%AE%80%E6%9E%90/1665128335077.png" class width="1665128335077"> 
+<p>伪终端本质上是运行在用户态的终端模拟器创建的一对字符设备：</p>
+<img src="/2022/10/07/Linux%20tty%20%E7%AE%80%E6%9E%90/1665128404943.png" class width="1665128404943"> 
+<ul>
+<li><code>/dev/ptmx</code> 是一个字符设备文件，当进程打开 <code>/dev/ptmx</code> 文件时，进程会同时获得：<ul>
+<li>一个指向 <code>pseudoterminal master(ptm)</code> 的文件描述符</li>
+<li>一个在 <code>/dev/pts</code> 目录中创建的 <code>pseudoterminal slave(pts)</code> 设备 </li>
+</ul>
+</li>
+<li>建了一个伪终端对，并让 shell 运行在 slave 端：<ul>
+<li>当用户在终端模拟器中按下键盘按键时，它产生字节流并写入 master 中，shell 便可从 master 中读取输入（以读文件的形式）</li>
+<li>然后 shell 和它的子程序将输出内容写入 slave 中，由 CLI 程序进行显示</li>
+</ul>
+</li>
+</ul>
+<p>可以认为 <code>pty</code> 是一种轻量级的虚拟终端：</p>
+<ul>
+<li>是一些软件（如 ssh、screen、xterm 等）模拟的 Terminal Emulator</li>
+<li>在 Linux 中右键打开的终端就是 <code>pty</code></li>
+</ul>
+<p><strong>伪终端的运用</strong></p>
+<p>Telnet 和 SSH 都运用了伪终端技术（主要是远程登录部分）：</p>
+<ul>
+<li>每次用户通过客户端连接服务端的时候，服务端创建一个伪终端 master、slave 字符设备对</li>
+<li>在 slave 端运行 login 程序，将 master 端的输入输出通过网络传送至客户端</li>
+<li>客户端则将从网络收到的信息直接关联到键盘/显示器上</li>
+</ul>
+<img src="/2022/10/07/Linux%20tty%20%E7%AE%80%E6%9E%90/1665146881569.png" class width="1665146881569"> 
+<ul>
+<li>网络通信的方式还是依靠 NC 底层的 socket（TCP 协议发包）</li>
+<li>将 socket 生成的 socketFD 重定位为 master 端的“标准输入”（把管道的 <code>stdin</code> 重定位为 socketFD，再把管道的 <code>stdout</code> 重定位为 master）</li>
+<li>使 master 端和 socketFD 共用一个命名管道（命名管道相当于两个文件，一个用来读，一个用来写，它们底层使用同一个 <code>inode</code> 所以数据共享）</li>
+<li>最后把 login 的 <code>stdin stdout stderr</code> 重定位到 slave 上</li>
+</ul>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/10/05/HijackPrctl+kernel_base%E7%88%86%E7%A0%B4/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -2270,117 +2473,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/09/14/kernel%20protect/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/09/14/kernel%20protect/" class="post-title-link" itemprop="url">kernel protect</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2022-09-14 14:58:30" itemprop="dateCreated datePublished" datetime="2022-09-14T14:58:30+08:00">2022-09-14</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-12-09 18:34:17" itemprop="dateModified" datetime="2022-12-09T18:34:17+08:00">2022-12-09</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Technology/" itemprop="url" rel="index"><span itemprop="name">Technology</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>941</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>1 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="SMEP-amp-SMAP"><a href="#SMEP-amp-SMAP" class="headerlink" title="SMEP &amp; SMAP"></a>SMEP &amp; SMAP</h2><p>SMEP（Supervisor Mode Execution Prevention，管理模式执行保护）：阻止内核执行用户态传递的代码</p>
-<p>SMAP（Supervisor Mode Access Prevention，管理模式访问保护）：禁止内核CPU访问用户空间的数据和执行用户空间的代码</p>
-<p>CR4 寄存器的第 20/21 位可以查看是否开启 SMEP/SMAP：</p>
-<img src="/2022/09/14/kernel%20protect/1663059789043.png" class width="1663059789043"> 
-<h2 id="KASLR"><a href="#KASLR" class="headerlink" title="KASLR"></a>KASLR</h2><p>KASLR（Kernel Address Space Layout Randomization，内核地址空间布局随机化）：其实就是针对内核的 ASLR</p>
-<p>与 ASLR 不同，KASLR 有几个问题：</p>
-<ul>
-<li>如果用户在暴力破解找 kernel 的位置，会直接导致机器 crash</li>
-<li>与电脑的休眠机制不兼容</li>
-<li>有很多其他的模块需要或者依赖于知道 kernel 的位置，这些都需要谨慎处理：<ul>
-<li>开启 <code>kptr_restrict</code> 系统调用防止内核地址泄露到用户空间（普通用户都无法读取内核符号地址）</li>
-<li>使用 <code>dmesg_restrict</code> 防止 <code>dmesg</code> 泄露内核地址（限制非特权用户使用 dmesg 查看内核日志缓冲区中的消息）</li>
-<li><code>/var/log/messages</code> 应该设置为只有 <code>root</code> 用户能访问（该文件中存放的就是系统的日志信息）</li>
-</ul>
-</li>
-</ul>
-<h2 id="KPTI"><a href="#KPTI" class="headerlink" title="KPTI"></a>KPTI</h2><p>KPTI（Kernel PageTable Isolation，内核页表隔离）：完全分离用户空间与内核空间页表来解决页表泄露</p>
-<ul>
-<li>如果没有 KPTI，每当执行用户空间代码时，Linux 会在其分页表中保留整个内核内存的映射，并保护其访问，这样做的优点是当应用程序向内核发送系统调用或收到中断时，内核页表始终存在，可以避免绝大多数上下文交换相关的开销（TLB 刷新、页表交换等）</li>
-<li>开启 KPTI 后，为了彻底防止用户程序获取内核数据，可以令内核地址空间和用户地址空间使用两组页表集</li>
-</ul>
-<h2 id="Stack-Protector"><a href="#Stack-Protector" class="headerlink" title="Stack Protector"></a>Stack Protector</h2><p>在内核中也是有 Stack Protector 的，编译内核时设置 CONFIG_CC_STACKPROTECTOR 选项即可 </p>
-<ul>
-<li>每个函数执行前先向栈帧顶部插入一个 canary 值以确保顺序的栈上溢在破坏到父函数栈帧前必须要先破坏 canary</li>
-<li>每个函数返回之前会检测当前栈帧中的 canary 是否被修改，若被修改则代表发生了溢出，就会替换该函数的返回值为 <code>__stack_chk_fail</code></li>
-</ul>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2452,7 +2544,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">279</span>
+          <span class="site-state-item-count">280</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2506,7 +2598,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">59:03</span>
+    <span title="Reading time total">59:11</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
