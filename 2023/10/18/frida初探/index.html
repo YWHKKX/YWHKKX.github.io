@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="Frida 简析&amp;安装 Frida 是一款功能强大的动态代码插桩工具，主要用于 iOS 和 Android 应用程序，它允许开发人员在不修改目标应用程序源代码的情况下，注入新的代码来观察和修改应用程序的行为 Frida 支持多种编程语言，如 Python、JavaScript 和 C++，它可以通过命令行或图形界面进行使用，Frida 具有以下主要功能：   注入代码：Frida 可以注入">
+<meta property="og:type" content="article">
+<meta property="og:title" content="frida初探">
+<meta property="og:url" content="http://example.com/2023/10/18/frida%E5%88%9D%E6%8E%A2/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="Frida 简析&amp;安装 Frida 是一款功能强大的动态代码插桩工具，主要用于 iOS 和 Android 应用程序，它允许开发人员在不修改目标应用程序源代码的情况下，注入新的代码来观察和修改应用程序的行为 Frida 支持多种编程语言，如 Python、JavaScript 和 C++，它可以通过命令行或图形界面进行使用，Frida 具有以下主要功能：   注入代码：Frida 可以注入">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2023-10-18T11:12:17.000Z">
+<meta property="article:modified_time" content="2023-10-18T11:15:31.191Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="frida">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2023/10/18/frida%E5%88%9D%E6%8E%A2/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>frida初探 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/10/18/frida%E5%88%9D%E6%8E%A2/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          frida初探
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-10-18 19:12:17 / Modified: 19:15:31" itemprop="dateCreated datePublished" datetime="2023-10-18T19:12:17+08:00">2023-10-18</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>7k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>Frida 简析&amp;安装</strong></p>
+<p>Frida 是一款功能强大的动态代码插桩工具，主要用于 iOS 和 Android 应用程序，它允许开发人员在不修改目标应用程序源代码的情况下，注入新的代码来观察和修改应用程序的行为</p>
+<p>Frida 支持多种编程语言，如 Python、JavaScript 和 C++，它可以通过命令行或图形界面进行使用，Frida 具有以下主要功能： </p>
+<ul>
+<li>注入代码：Frida 可以注入新的代码到目标应用程序中，这些代码可以观察和修改应用程序的行为</li>
+<li>获取函数调用信息：Frida 可以获取目标应用程序中函数的调用信息，包括函数名、参数和返回值</li>
+<li>修改函数行为：Frida 可以修改目标应用程序中函数的行为，例如修改函数的返回值或修改函数输入参数</li>
+<li>监控线程：Frida 可以监控目标应用程序中的线程，包括线程的创建、退出和状态变化</li>
+<li>获取全局变量：Frida 可以获取目标应用程序中的全局变量，并对其进行读取或修改</li>
+</ul>
+<p>安装 Frida：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">sudo apt update</span><br><span class="line">sudo apt install build-essential libffi-dev libssl-dev python3-dev</span><br><span class="line">pip3 install frida-tools</span><br><span class="line">pip3 install frida</span><br></pre></td></tr></table></figure>
+<p>安装 Frida-server：</p>
+<ul>
+<li>下载网址：<a target="_blank" rel="noopener" href="https://github.com/frida/frida/releases">Releases · frida/frida (github.com)</a> </li>
+<li>将解压好的二进制文件改名为 <code>frida-server</code> 并拖入 <code>/user/bin</code> 中</li>
+</ul>
+<p><strong>Frida API 使用案例</strong></p>
+<p>官方文档如下：<a target="_blank" rel="noopener" href="https://frida.re/docs/javascript-api/">JavaScript API | Frida • A world-class dynamic instrumentation toolkit</a> </p>
+<p>开启 frida-server，并确保 frida 可以监控到非自己的子进程：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">sudo sysctl kernel.yama.ptrace_scope=0</span><br><span class="line">sudo frida-server</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>sysctl kernel.yama.ptrace_scope=0</code> 命令用于更改 Linux 内核的 <code>ptrace</code> 权限限制 <ul>
+<li>当 <code>ptrace_scope</code> 为1时，如果 tracer 和 tracee 进程没有父子关系则 ptrace 无效，root 用户不理会此条件</li>
+<li>当 <code>ptrace_scope</code> 为2时，如果 tracer 和 tracee 进程没有 CAP_SYS_PTRACE 能力则 ptrace 无效，root 用户可以获取任何能力，所以不理会该限制</li>
+<li>当 <code>ptrace_scope</code> 为3时，对于所有用户均禁止 ptrace</li>
+</ul>
+</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">cat /proc/sys/kernel/yama/ptrace_scope</span><br></pre></td></tr></table></figure>
+<ul>
+<li>查看 <code>kernel.yama.ptrace_scope</code> 的状态</li>
+</ul>
+<p>测试样例：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">f</span> <span class="params">(<span class="keyword">int</span> n)</span></span>&#123;</span><br><span class="line">    <span class="built_in">printf</span> (<span class="string">&quot;Number: %d\n&quot;</span>, n);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span> <span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> * argv[])</span></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> i = <span class="number">0</span>;</span><br><span class="line">    <span class="built_in">printf</span> (<span class="string">&quot;f() is at %p\n&quot;</span>, f);  </span><br><span class="line">    <span class="keyword">while</span> (<span class="number">1</span>)&#123;</span><br><span class="line">        f (i++);</span><br><span class="line">        sleep (<span class="number">1</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>Frida 脚本：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> __future__ <span class="keyword">import</span> print_function</span><br><span class="line"><span class="keyword">import</span> frida</span><br><span class="line"><span class="keyword">import</span> sys</span><br><span class="line"></span><br><span class="line">session = frida.attach(<span class="number">15529</span>) </span><br><span class="line">script = session.create_script(<span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">var write_address = Module.findExportByName(&#x27;libc.so.6&#x27;, &#x27;write&#x27;);</span></span><br><span class="line"><span class="string">Interceptor.attach(ptr(write_address), &#123;</span></span><br><span class="line"><span class="string">    onEnter: function(args) &#123;</span></span><br><span class="line"><span class="string">        const fd = args[0].toInt32();</span></span><br><span class="line"><span class="string">        const addr = args[1];</span></span><br><span class="line"><span class="string">        const size = args[2].toInt32();</span></span><br><span class="line"><span class="string">        const formattedString = `write($&#123;fd&#125;,$&#123;addr&#125;,$&#123;size&#125;)`;</span></span><br><span class="line"><span class="string">        send(formattedString);</span></span><br><span class="line"><span class="string">    &#125;</span></span><br><span class="line"><span class="string">&#125;);</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span>)</span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">on_message</span>(<span class="params">message, data</span>):</span></span><br><span class="line">    <span class="built_in">print</span>(message)</span><br><span class="line">script.on(<span class="string">&#x27;message&#x27;</span>, on_message)</span><br><span class="line">script.load()</span><br><span class="line">sys.stdin.read()</span><br></pre></td></tr></table></figure>
+<ul>
+<li>frida.attach：使用进程名或者进程号指定进程，attach 进程创建 session</li>
+<li>session.create_script：创建 JavaScript hook 脚本</li>
+<li>script.on：注册用于通信的回调函数</li>
+<li>script.load：加载脚本</li>
+<li>sys.stdin.read：保持主线程运行</li>
+</ul>
+<p>效果如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Number: <span class="number">545</span></span><br><span class="line">Number: <span class="number">546</span></span><br><span class="line">Number: <span class="number">547</span></span><br><span class="line">---------------------------------------------</span><br><span class="line">&#123;<span class="string">&#x27;type&#x27;</span>: <span class="string">&#x27;send&#x27;</span>, <span class="string">&#x27;payload&#x27;</span>: <span class="string">&#x27;write(1,0x55e0ed3372a0,12)&#x27;</span>&#125;</span><br><span class="line">&#123;<span class="string">&#x27;type&#x27;</span>: <span class="string">&#x27;send&#x27;</span>, <span class="string">&#x27;payload&#x27;</span>: <span class="string">&#x27;write(1,0x55e0ed3372a0,12)&#x27;</span>&#125;</span><br><span class="line">&#123;<span class="string">&#x27;type&#x27;</span>: <span class="string">&#x27;send&#x27;</span>, <span class="string">&#x27;payload&#x27;</span>: <span class="string">&#x27;write(1,0x55e0ed3372a0,12)&#x27;</span>&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>该脚本会输出传入被 hook 函数的参数</li>
+</ul>
+<p><strong>Frida Hook 脚本常用对象</strong></p>
+<p>hook 操作：Interceptor</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">Interceptor.attach(ptr(<span class="string">&quot;%s&quot;</span>), &#123;</span><br><span class="line">    <span class="attr">onEnter</span>: <span class="function"><span class="keyword">function</span>(<span class="params">args</span>) </span>&#123;</span><br><span class="line">        send(args[<span class="number">0</span>].toInt32()); <span class="comment">// 这里也可以直接修改args的值来改变传入的参数</span></span><br><span class="line">    onLeave: <span class="function"><span class="keyword">function</span> <span class="title">onLeave</span>(<span class="params">retval</span>) </span>&#123;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+<ul>
+<li>Interceptor.attach 用于 hook 操作，其 attach 方法有两个参数：<ul>
+<li>将要被 hook 的函数在内存中加载的地址（这个地址可以通过 <code>Module.findExportByName(链接库名,函数名)</code> 来获取）</li>
+<li>包含回调函数的对象（由两个回调函数组成）</li>
+</ul>
+</li>
+<li>ptr 接收一个字符串，用于构造一个指针</li>
+<li>onEnter 在进入该函数时调用，args 为传入该函数的参数</li>
+<li>onLeave 在函数返回时被调用，retval 该函数的返回值</li>
+<li>send 函数用于 hook 脚本向外部发送信息，通过在外部 python 脚本中用 script.on 设置回调函数来接收信息</li>
+</ul>
+<p>调用函数：NativeFunction</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> write_address = Module.findExportByName(<span class="string">&#x27;libc.so.6&#x27;</span>, <span class="string">&#x27;write&#x27;</span>);</span><br><span class="line"><span class="keyword">var</span> run = <span class="keyword">new</span> NativeFunction(write_address, <span class="string">&#x27;size_t&#x27;</span>, [<span class="string">&#x27;size_t&#x27;</span>,<span class="string">&#x27;pointer&#x27;</span>,<span class="string">&#x27;size_t&#x27;</span>]);</span><br><span class="line">Interceptor.attach(ptr(write_address), &#123;</span><br><span class="line">    <span class="attr">onEnter</span>: <span class="function"><span class="keyword">function</span>(<span class="params">args</span>) </span>&#123;</span><br><span class="line">        <span class="keyword">const</span> fd = args[<span class="number">0</span>].toInt32();</span><br><span class="line">        <span class="keyword">const</span> addr = args[<span class="number">1</span>];</span><br><span class="line">        <span class="keyword">const</span> size = args[<span class="number">2</span>].toInt32();</span><br><span class="line">        run(fd,addr,size);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+<ul>
+<li>NativeFunction 构造函数接受三个参数：函数地址，返回值，参数类型（数组表示）</li>
+<li>上述案例的作用就是将 write 函数再执行一遍，效果如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">Number: <span class="number">1410</span></span><br><span class="line">Number: <span class="number">1410</span></span><br><span class="line">Number: <span class="number">1411</span></span><br><span class="line">Number: <span class="number">1411</span></span><br><span class="line">Number: <span class="number">1412</span></span><br><span class="line">Number: <span class="number">1412</span></span><br></pre></td></tr></table></figure>
+<p>分配空间：Memory</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> write_address = Module.findExportByName(<span class="string">&#x27;libc.so.6&#x27;</span>, <span class="string">&#x27;write&#x27;</span>);</span><br><span class="line"><span class="keyword">var</span> st1 = Memory.allocUtf8String(<span class="string">&quot;Hack_by_YHellow!\\n&quot;</span>);</span><br><span class="line">Interceptor.attach(ptr(write_address), &#123;</span><br><span class="line">    <span class="attr">onEnter</span>: <span class="function"><span class="keyword">function</span>(<span class="params">args</span>) </span>&#123;</span><br><span class="line">        <span class="keyword">var</span> st2 = Memory.allocUtf8String(<span class="string">&quot;Can be output\\n&quot;</span>);</span><br><span class="line">        send(args[<span class="number">1</span>]+<span class="string">&quot;-&gt;&quot;</span>+st2);</span><br><span class="line">        args[<span class="number">1</span>] = st2;</span><br><span class="line">        args[<span class="number">2</span>] = ptr(<span class="string">&#x27;17&#x27;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+<ul>
+<li>Memory 对象下的方法可以操作被 attach 进程的内存空间，该方法分配的空间会在函数结束后被销毁（在 onEnter 中分配的内存空间会在 onEnter 结束后被释放，在全局分配的空间则会在整个程序结束后释放）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">&#123;<span class="string">&#x27;type&#x27;</span>: <span class="string">&#x27;send&#x27;</span>, <span class="string">&#x27;payload&#x27;</span>: <span class="string">&#x27;0x561ec38592a0-&gt;0x7f21a810bc00&#x27;</span>&#125;</span><br><span class="line">&#123;<span class="string">&#x27;type&#x27;</span>: <span class="string">&#x27;send&#x27;</span>, <span class="string">&#x27;payload&#x27;</span>: <span class="string">&#x27;0x7f21a810ac40&#x27;</span>&#125;</span><br><span class="line">&#123;<span class="string">&#x27;type&#x27;</span>: <span class="string">&#x27;send&#x27;</span>, <span class="string">&#x27;payload&#x27;</span>: <span class="string">&#x27;0x561ec38592a0-&gt;0x7f21a89aa530&#x27;</span>&#125;</span><br><span class="line">&#123;<span class="string">&#x27;type&#x27;</span>: <span class="string">&#x27;send&#x27;</span>, <span class="string">&#x27;payload&#x27;</span>: <span class="string">&#x27;0x7f21a810ac40&#x27;</span>&#125;</span><br><span class="line">-------------------------</span><br><span class="line">�ܚ�!� <span class="string">&#x27;�! ���!� &#x27;</span>�! �� �!� <span class="string">&#x27;�! ��!� &#x27;</span>�!  ���!� <span class="string">&#x27;�! @v�!� &#x27;</span>�! ؚ�!� <span class="string">&#x27;�! �� �!� &#x27;</span>�! ���!� <span class="string">&#x27;�! �� �!� &#x27;</span>�! ��!� <span class="string">&#x27;�!  ���!� &#x27;</span>�! @v�!� <span class="string">&#x27;�! ؚ�!� &#x27;</span>�! �� �!� <span class="string">&#x27;�! ��!� &#x27;</span>�! ���!� <span class="string">&#x27;�! ؚ�!� &#x27;</span>�! �� �!� <span class="string">&#x27;�! Number: 32</span></span><br><span class="line"><span class="string">Number: 33</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>由于 onEnter 结束后 Memory.allocUtf8String 申请的空间会被释放，被 hook 的 write 会打印出乱码</li>
+</ul>
+<p>读取内存：hexdump</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> write_address = Module.findExportByName(<span class="string">&#x27;libc.so.6&#x27;</span>, <span class="string">&#x27;write&#x27;</span>);</span><br><span class="line"><span class="keyword">var</span> run = <span class="keyword">new</span> NativeFunction(write_address, <span class="string">&#x27;size_t&#x27;</span>, [<span class="string">&#x27;pointer&#x27;</span>,<span class="string">&#x27;pointer&#x27;</span>]);</span><br><span class="line"></span><br><span class="line">Interceptor.attach(ptr(write_address), &#123;</span><br><span class="line">    <span class="attr">onEnter</span>: <span class="function"><span class="keyword">function</span>(<span class="params">args</span>) </span>&#123;</span><br><span class="line">        <span class="keyword">const</span> fd = args[<span class="number">0</span>].toInt32();</span><br><span class="line">        <span class="keyword">const</span> addr = args[<span class="number">1</span>];</span><br><span class="line">        <span class="keyword">const</span> size = args[<span class="number">2</span>].toInt32();</span><br><span class="line">        send(hexdump(addr,&#123;</span><br><span class="line">            <span class="attr">offset</span>: <span class="number">0</span>,</span><br><span class="line">            <span class="attr">length</span>: size,</span><br><span class="line">            <span class="attr">header</span>: <span class="literal">false</span>,</span><br><span class="line">            <span class="attr">ansi</span>: <span class="literal">false</span></span><br><span class="line">        &#125;));</span><br><span class="line">    &#125;</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+<ul>
+<li>函数 hexdump 有两个参数：需要读取的地址，读取设置</li>
+</ul>
+<p><strong>Frida 远程调试</strong></p>
+<p><code>frida.get_device_manager</code> 是 Frida 库中的一个函数，用于获取当前设备的设备管理器对象（设备管理器对象用于管理 Frida 连接到目标设备的进程）</p>
+<p>其中有一个 <code>add_remote_device</code> 方法用于添加远程设备（需要提供 IP:Port 或域名），返回一个 device 对象用于表示该远程设备</p>
+<p>使用 device 对象的 <code>attach</code> 方法就可以连接远程 frida 服务器上的某个进程：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">str_host = <span class="string">&#x27;xx.xx.xx.xx:xx&#x27;</span></span><br><span class="line">manager = frida.get_device_manager()</span><br><span class="line">remote_device = manager.add_remote_device(str_host)</span><br><span class="line">session = remote_device.attach(<span class="string">&quot;xx&quot;</span>)   </span><br></pre></td></tr></table></figure>
+<p>远程受害机：修改 ptrace 权限并启动 frida 服务器</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">sudo sysctl kernel.yama.ptrace_scope=0</span><br><span class="line">sudo frida-server</span><br></pre></td></tr></table></figure>
+<p>本地主机：编写 frida python 脚本</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> frida</span><br><span class="line"><span class="keyword">import</span> sys</span><br><span class="line"></span><br><span class="line">str_host = <span class="string">&#x27;192.168.11.130:6666&#x27;</span></span><br><span class="line">manager = frida.get_device_manager()</span><br><span class="line">remote_device = manager.add_remote_device(str_host)</span><br><span class="line"><span class="built_in">print</span>(remote_device)</span><br><span class="line">session = remote_device.attach(<span class="string">&quot;spy&quot;</span>)</span><br><span class="line"><span class="built_in">print</span>(session)                          </span><br><span class="line"></span><br><span class="line">scr = <span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">var write_address = Module.findExportByName(&#x27;libc.so.6&#x27;, &#x27;write&#x27;);</span></span><br><span class="line"><span class="string">var run = new NativeFunction(write_address, &#x27;size_t&#x27;, [&#x27;pointer&#x27;,&#x27;pointer&#x27;]);</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">Interceptor.attach(ptr(write_address), &#123;</span></span><br><span class="line"><span class="string">    onEnter: function(args) &#123;</span></span><br><span class="line"><span class="string">        const fd = args[0].toInt32();</span></span><br><span class="line"><span class="string">        const addr = args[1];</span></span><br><span class="line"><span class="string">        const size = args[2].toInt32();</span></span><br><span class="line"><span class="string">        send(hexdump(addr,&#123;</span></span><br><span class="line"><span class="string">            offset: 0,</span></span><br><span class="line"><span class="string">            length: size,</span></span><br><span class="line"><span class="string">            header: false,</span></span><br><span class="line"><span class="string">            ansi: false</span></span><br><span class="line"><span class="string">        &#125;));</span></span><br><span class="line"><span class="string">    &#125;</span></span><br><span class="line"><span class="string">&#125;);</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line">                </span><br><span class="line">script = session.create_script(scr)</span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">on_message</span>(<span class="params">message ,data</span>):</span></span><br><span class="line">    <span class="built_in">print</span> (message[<span class="string">&quot;payload&quot;</span>])</span><br><span class="line">script.on(<span class="string">&quot;message&quot;</span> , on_message)</span><br><span class="line">script.load()</span><br><span class="line">sys.stdin.read()</span><br></pre></td></tr></table></figure>
+<p>运行效果如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">&gt; <span class="number">1</span></span><br><span class="line">Name of person: yhellow</span><br><span class="line">ID: <span class="number">5894042113563141378</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Device(id=<span class="string">&quot;socket@192.168.11.130:6666&quot;</span>, name=<span class="string">&quot;192.168.11.130:6666&quot;</span>, type=<span class="string">&#x27;remote&#x27;</span>)</span><br><span class="line">Session(pid=<span class="number">4341</span>)</span><br><span class="line"><span class="number">563e56</span>b3124c  <span class="number">4</span>e <span class="number">61</span> <span class="number">6</span>d <span class="number">65</span> <span class="number">20</span> <span class="number">6f</span> <span class="number">66</span> <span class="number">20</span> <span class="number">70</span> <span class="number">65</span> <span class="number">72</span> <span class="number">73</span> <span class="number">6f</span> <span class="number">6</span>e <span class="number">3</span>a <span class="number">20</span>  Name of person: </span><br><span class="line"><span class="number">7f</span>c731d82f0c  <span class="number">49</span> <span class="number">44</span> <span class="number">3</span>a <span class="number">20</span> <span class="number">35</span> <span class="number">38</span> <span class="number">39</span> <span class="number">34</span> <span class="number">30</span> <span class="number">34</span> <span class="number">32</span> <span class="number">31</span> <span class="number">31</span> <span class="number">33</span> <span class="number">35</span> <span class="number">36</span>  ID: <span class="number">589404211356</span></span><br><span class="line"><span class="number">7f</span>c731d82f1c  <span class="number">33</span> <span class="number">31</span> <span class="number">34</span> <span class="number">31</span> <span class="number">33</span> <span class="number">37</span> <span class="number">38</span>                             <span class="number">3141378</span></span><br><span class="line"><span class="number">7f</span>fdd928bf37  <span class="number">0</span>a                                               .</span><br><span class="line"><span class="number">563e56</span>b31234  <span class="number">3</span>e <span class="number">20</span>                                            &gt; </span><br></pre></td></tr></table></figure>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/frida/" rel="tag"><i class="fa fa-tag"></i> frida</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/10/14/zer0ptsCTF2023/" rel="prev" title="zer0ptsCTF2023">
+      <i class="fa fa-chevron-left"></i> zer0ptsCTF2023
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">290</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">13</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">151</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">4.1m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">61:39</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

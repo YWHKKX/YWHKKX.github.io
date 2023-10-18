@@ -156,6 +156,169 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/11/23/Linux%20UDS%E4%B8%8EFD%E8%BF%81%E7%A7%BB%E6%8A%80%E6%9C%AF/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/11/23/Linux%20UDS%E4%B8%8EFD%E8%BF%81%E7%A7%BB%E6%8A%80%E6%9C%AF/" class="post-title-link" itemprop="url">Linux UDS与FD迁移技术</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-11-23 00:58:34 / Modified: 01:03:26" itemprop="dateCreated datePublished" datetime="2022-11-23T00:58:34+08:00">2022-11-23</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>6.5k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>Unix Domain Sockets</strong></p>
+<p>UDS（Unix Domain Sockets）在 Linux 上表现为一个文件，相比较于普通 socket 监听在端口上，一个进程也可以监听在一个 UDS 文件上，比如 <code>/tmp/xjjdog.sock</code></p>
+<p>由于通过这个文件进行数据传输，并不需要走网卡等物理设备，所以通过 UDS 传输数据，速度是非常快的</p>
+<p>UDS 主要用于同一主机上的进程间通信</p>
+<p><strong>Socket 网络通信原理</strong></p>
+<p>之前已经分析过了 Socket 的网络通信原理与内核对协议栈的处理</p>
+<p>大致的流程如下：</p>
+<ul>
+<li>驱动通知网卡有一个新的描述符（有一个即将网络包到达网卡）</li>
+<li>网卡从 <code>RX ring buffer</code> 中取出描述符，从而获知缓冲区的地址和大小</li>
+<li>网卡收到新的数据包</li>
+<li>网卡将新数据包直接通过 <code>DMA</code> 写到内核堆中 <code>sk_buffer</code> 结构体里，并使用中断来通知内核<ul>
+<li><code>RX ring buffer</code>：网络栈接收数据环形缓存区</li>
+<li><code>DMA</code>：Direct Memory Access 直接存储器访问，外部设备不通过CPU而直接与系统内存交换数据的接口技术</li>
+</ul>
+</li>
+<li>内核调用 <code>netif_receive_skb</code> 来处理 <code>sk_buffer</code> 中的数据包</li>
+<li>对于网络协议，内核会遍历协议容器 <code>ptype_base</code> 中的所有协议 <code>packet_type</code>，匹配成功后调用 <code>packet_type-&gt;func</code> 完成相应的处理</li>
+<li>最后把处理的结果输出到各个目标进程中</li>
+</ul>
+<p><strong>Socket 本地通信原理</strong></p>
+<p>Unix Domain Sockets 也使用了差不多的原理，但差别如下：</p>
+<ul>
+<li>UDS 不需要 IP:Port，而是通过一个文件名来表示</li>
+<li>使用 UDS 时，<code>socket</code> 函数的 <code>domain</code> 参数固定为 AF_UNIX</li>
+<li>UDS 中使用 <code>sockaddr_un</code> 来表示 <code>sockaddr</code> 结构体</li>
+</ul>
+<p>剩下的操作就和 <code>socket</code> 接口的那一套东西一样了</p>
+<p><strong>Msg 消息队列</strong></p>
+<p>之前也分析过了信息队列的底层实现</p>
+<p>消息队列，是消息的链接表，存放在内核中，一个消息队列由一个标识符（即ID）来标识</p>
+<ul>
+<li>消息队列的标识符 key 键，它的基本类型是 key_t，使用 <code>ftok</code> 函数可以生成一个 key_t</li>
+<li>两个无关的进程，可以通过唯一标识符 key 来找到对应的 msg</li>
+</ul>
+<p><code>msgget</code> 会在内核堆空间中创建一个 <code>msg_queue</code> 结构体，用于表示一个消息队列的头</p>
+<p><code>msgsnd</code> 和 <code>msgrcv</code> 都依靠 <code>msg_msg</code> 结构体，用于表示在这个消息队列中的各个消息主体</p>
+<p>这两者通过链表相关联：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">msg_queue -&gt; msg_msg -&gt; msg_msg -&gt; msg_msg ...</span><br></pre></td></tr></table></figure>
+<p>但现在我又了解到了信息队列的一个特殊用途：用于传递 Socket 信息</p>
+<p><strong>FD 迁移技术</strong></p>
+<p>FD 迁移技术可以把一个进程所挂载的连接（socket），转移到另外一个进程之上</p>
+<p>主要是通过如下两个系统调用：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">ssize_t</span> <span class="title">recvmsg</span><span class="params">(<span class="keyword">int</span> sockfd, struct msghdr *msg, <span class="keyword">int</span> flags)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">ssizt_t</span> <span class="title">sendmsg</span><span class="params">(<span class="keyword">int</span> sockfd, struct msghdr *msg, <span class="keyword">int</span> flags)</span></span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这个两个函数都需要传入一个 <code>sockfd</code>，并依赖 <code>msghdr</code> 结构体来传递信息：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">msghdr</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">    <span class="keyword">void</span> *msg_name;		<span class="comment">/* Address to send to/receive from.  */</span></span><br><span class="line">    <span class="keyword">socklen_t</span> msg_namelen;	<span class="comment">/* Length of address data.  */</span></span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">iovec</span> *<span class="title">msg_iov</span>;</span>	<span class="comment">/* Vector of data to send/receive into.  */</span></span><br><span class="line">    <span class="keyword">int</span> msg_iovlen;		<span class="comment">/* Number of elements in the vector.  */</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">void</span> *msg_control;		<span class="comment">/* Ancillary data (eg BSD filedesc passing). */</span></span><br><span class="line">    <span class="keyword">socklen_t</span> msg_controllen;	<span class="comment">/* Ancillary data buffer length.  */</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">int</span> msg_flags;		<span class="comment">/* Flags in received message.  */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>其中的 <code>msg_control</code> 条目有需要指向 <code>cmsghdr</code> 结构体：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">cmsghdr</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">    <span class="keyword">size_t</span> cmsg_len;		<span class="comment">/* Length of data in cmsg_data plus length</span></span><br><span class="line"><span class="comment">				   of cmsghdr structure.</span></span><br><span class="line"><span class="comment">				   !! The type should be socklen_t but the</span></span><br><span class="line"><span class="comment">				   definition of the kernel is incompatible</span></span><br><span class="line"><span class="comment">				   with this.  */</span></span><br><span class="line">    <span class="keyword">int</span> cmsg_level;		<span class="comment">/* Originating protocol.  */</span></span><br><span class="line">    <span class="keyword">int</span> cmsg_type;		<span class="comment">/* Protocol specific type.  */</span></span><br><span class="line">    <span class="meta">#<span class="meta-keyword">if</span> __glibc_c99_flexarr_available</span></span><br><span class="line">    __extension__ <span class="keyword">unsigned</span> <span class="keyword">char</span> __cmsg_data __flexarr; <span class="comment">/* Ancillary data.  */</span></span><br><span class="line">    <span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>成员变量 <code>cmsg_type</code> 有3个类型：<ul>
+<li><code>SCM_RIGHTS</code></li>
+<li><code>SCM_CREDENTIALS</code></li>
+<li><code>SCM_SECURITY</code></li>
+</ul>
+</li>
+<li>其中，<code>SCM_RIGHTS</code> 就是我们所需要的，它允许我们从一个进程，发送一个文件句柄到另外一个进程</li>
+</ul>
+<p>因此，依靠 <code>sendmsg</code> 和 <code>recvmsg</code> 两个系统调用就可以实现 FD 句柄的传输</p>
+<ul>
+<li>依靠 <code>sendmsg</code> 函数，将 FD 句柄发送到另外一个进程</li>
+<li>依靠 <code>recvmsg</code> 函数，接收这部分数据，然后将其还原成 <code>cmsghdr</code> 结构体，然后我们就可以从 <code>cmsg_data</code> 中获取句柄列表</li>
+<li>其实 FD 句柄在某个进程里只是一个引用，真正的 FD 句柄是放在内核中的，所谓的迁移，只不过是把一个指针，从一个进程中去掉，再加到另外一个进程中罢了</li>
+</ul>
+<p>测试案例如下：</p>
+<ul>
+<li>发送 FD 句柄：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/un.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/wait.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/socket.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> handle_error(msg) do &#123; perror(msg); exit(EXIT_FAILURE); &#125; while(0)</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">send_fd</span><span class="params">(<span class="keyword">int</span> socket, <span class="keyword">int</span> *fds, <span class="keyword">int</span> n)</span>  <span class="comment">// send fd by socket</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">msghdr</span> <span class="title">msg</span> =</span> &#123;<span class="number">0</span>&#125;;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">cmsghdr</span> *<span class="title">cmsg</span>;</span></span><br><span class="line">    <span class="keyword">char</span> buf[CMSG_SPACE(n * <span class="keyword">sizeof</span>(<span class="keyword">int</span>))], dup[<span class="number">256</span>];</span><br><span class="line">    <span class="built_in">memset</span>(buf, <span class="string">&#x27;\0&#x27;</span>, <span class="keyword">sizeof</span>(buf));</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">iovec</span> <span class="title">io</span> =</span> &#123; .iov_base = &amp;dup, .iov_len = <span class="keyword">sizeof</span>(dup) &#125;;</span><br><span class="line"></span><br><span class="line">    msg.msg_iov = &amp;io;</span><br><span class="line">    msg.msg_iovlen = <span class="number">1</span>;</span><br><span class="line">    msg.msg_control = buf;</span><br><span class="line">    msg.msg_controllen = <span class="keyword">sizeof</span>(buf);</span><br><span class="line"></span><br><span class="line">    cmsg = CMSG_FIRSTHDR(&amp;msg);</span><br><span class="line">    cmsg-&gt;cmsg_level = SOL_SOCKET;</span><br><span class="line">    cmsg-&gt;cmsg_type = SCM_RIGHTS;</span><br><span class="line">    cmsg-&gt;cmsg_len = CMSG_LEN(n * <span class="keyword">sizeof</span>(<span class="keyword">int</span>));</span><br><span class="line"></span><br><span class="line">    <span class="built_in">memcpy</span> ((<span class="keyword">int</span> *) CMSG_DATA(cmsg), fds, n * <span class="keyword">sizeof</span> (<span class="keyword">int</span>));</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (sendmsg (socket, &amp;msg, <span class="number">0</span>) &lt; <span class="number">0</span>)</span><br><span class="line">        handle_error (<span class="string">&quot;Failed to send message&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> *argv[])</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> sfd, fds[<span class="number">2</span>];</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">sockaddr_un</span> <span class="title">addr</span>;</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (argc != <span class="number">3</span>) &#123;</span><br><span class="line">        <span class="built_in">fprintf</span> (<span class="built_in">stderr</span>, <span class="string">&quot;Usage: %s &lt;file-name1&gt; &lt;file-name2&gt;\n&quot;</span>, argv[<span class="number">0</span>]);</span><br><span class="line">        <span class="built_in">exit</span> (<span class="number">1</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    sfd = socket(AF_UNIX, SOCK_STREAM, <span class="number">0</span>);</span><br><span class="line">    <span class="keyword">if</span> (sfd == <span class="number">-1</span>)</span><br><span class="line">        handle_error (<span class="string">&quot;Failed to create socket&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">memset</span>(&amp;addr, <span class="number">0</span>, <span class="keyword">sizeof</span>(struct sockaddr_un));</span><br><span class="line">    addr.sun_family = AF_UNIX;</span><br><span class="line">    <span class="built_in">strncpy</span>(addr.sun_path, <span class="string">&quot;/tmp/fd-pass.socket&quot;</span>, <span class="keyword">sizeof</span>(addr.sun_path) - <span class="number">1</span>);</span><br><span class="line"></span><br><span class="line">    fds[<span class="number">0</span>] = open(argv[<span class="number">1</span>], O_RDONLY);</span><br><span class="line">    <span class="keyword">if</span> (fds[<span class="number">0</span>] &lt; <span class="number">0</span>)</span><br><span class="line">        handle_error (<span class="string">&quot;Failed to open file 1 for reading&quot;</span>);</span><br><span class="line">    <span class="keyword">else</span></span><br><span class="line">        <span class="built_in">fprintf</span> (<span class="built_in">stdout</span>, <span class="string">&quot;Opened fd %d in parent\n&quot;</span>, fds[<span class="number">0</span>]);</span><br><span class="line"></span><br><span class="line">    fds[<span class="number">1</span>] = open(argv[<span class="number">2</span>], O_RDONLY);</span><br><span class="line">    <span class="keyword">if</span> (fds[<span class="number">1</span>] &lt; <span class="number">0</span>)</span><br><span class="line">        handle_error (<span class="string">&quot;Failed to open file 2 for reading&quot;</span>);</span><br><span class="line">    <span class="keyword">else</span></span><br><span class="line">        <span class="built_in">fprintf</span> (<span class="built_in">stdout</span>, <span class="string">&quot;Opened fd %d in parent\n&quot;</span>, fds[<span class="number">1</span>]);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (connect(sfd, (struct sockaddr *) &amp;addr, <span class="keyword">sizeof</span>(struct sockaddr_un)) == <span class="number">-1</span>)</span><br><span class="line">        handle_error (<span class="string">&quot;Failed to connect to socket&quot;</span>);</span><br><span class="line"></span><br><span class="line">    send_fd (sfd, fds, <span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">exit</span>(EXIT_SUCCESS);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>接收 FD 句柄：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;errno.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/un.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/wait.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/socket.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> handle_error(msg) do &#123; perror(msg); exit(EXIT_FAILURE); &#125; while(0)</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">int</span> * <span class="title">recv_fd</span><span class="params">(<span class="keyword">int</span> socket, <span class="keyword">int</span> n)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> *fds = <span class="built_in">malloc</span> (n * <span class="keyword">sizeof</span>(<span class="keyword">int</span>));</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">msghdr</span> <span class="title">msg</span> =</span> &#123;<span class="number">0</span>&#125;;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">cmsghdr</span> *<span class="title">cmsg</span>;</span></span><br><span class="line">    <span class="keyword">char</span> buf[CMSG_SPACE(n * <span class="keyword">sizeof</span>(<span class="keyword">int</span>))], dup[<span class="number">256</span>];</span><br><span class="line">    <span class="built_in">memset</span>(buf, <span class="string">&#x27;\0&#x27;</span>, <span class="keyword">sizeof</span>(buf));</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">iovec</span> <span class="title">io</span> =</span> &#123; .iov_base = &amp;dup, .iov_len = <span class="keyword">sizeof</span>(dup) &#125;;</span><br><span class="line"></span><br><span class="line">    msg.msg_iov = &amp;io;</span><br><span class="line">    msg.msg_iovlen = <span class="number">1</span>;</span><br><span class="line">    msg.msg_control = buf;</span><br><span class="line">    msg.msg_controllen = <span class="keyword">sizeof</span>(buf);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (recvmsg (socket, &amp;msg, <span class="number">0</span>) &lt; <span class="number">0</span>)</span><br><span class="line">        handle_error (<span class="string">&quot;Failed to receive message&quot;</span>);</span><br><span class="line"></span><br><span class="line">    cmsg = CMSG_FIRSTHDR(&amp;msg);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">memcpy</span> (fds, (<span class="keyword">int</span> *) CMSG_DATA(cmsg), n * <span class="keyword">sizeof</span>(<span class="keyword">int</span>));</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> fds;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> *argv[])</span> </span>&#123;</span><br><span class="line">    <span class="keyword">ssize_t</span> nbytes;</span><br><span class="line">    <span class="keyword">char</span> buffer[<span class="number">256</span>];</span><br><span class="line">    <span class="keyword">int</span> sfd, cfd, *fds;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">sockaddr_un</span> <span class="title">addr</span>;</span></span><br><span class="line"></span><br><span class="line">    sfd = socket(AF_UNIX, SOCK_STREAM, <span class="number">0</span>);</span><br><span class="line">    <span class="keyword">if</span> (sfd == <span class="number">-1</span>)</span><br><span class="line">        handle_error (<span class="string">&quot;Failed to create socket&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (unlink (<span class="string">&quot;/tmp/fd-pass.socket&quot;</span>) == <span class="number">-1</span> &amp;&amp; errno != ENOENT)</span><br><span class="line">        handle_error (<span class="string">&quot;Removing socket file failed&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">memset</span>(&amp;addr, <span class="number">0</span>, <span class="keyword">sizeof</span>(struct sockaddr_un));</span><br><span class="line">    addr.sun_family = AF_UNIX;</span><br><span class="line">    <span class="built_in">strncpy</span>(addr.sun_path, <span class="string">&quot;/tmp/fd-pass.socket&quot;</span>, <span class="keyword">sizeof</span>(addr.sun_path) - <span class="number">1</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (bind(sfd, (struct sockaddr *) &amp;addr, <span class="keyword">sizeof</span>(struct sockaddr_un)) == <span class="number">-1</span>)</span><br><span class="line">        handle_error (<span class="string">&quot;Failed to bind to socket&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (listen(sfd, <span class="number">5</span>) == <span class="number">-1</span>)</span><br><span class="line">        handle_error (<span class="string">&quot;Failed to listen on socket&quot;</span>);</span><br><span class="line"></span><br><span class="line">    cfd = accept(sfd, <span class="literal">NULL</span>, <span class="literal">NULL</span>);</span><br><span class="line">    <span class="keyword">if</span> (cfd == <span class="number">-1</span>)</span><br><span class="line">        handle_error (<span class="string">&quot;Failed to accept incoming connection&quot;</span>);</span><br><span class="line"></span><br><span class="line">    fds = recv_fd (cfd, <span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">int</span> i=<span class="number">0</span>; i&lt;<span class="number">2</span>; ++i) &#123;</span><br><span class="line">        <span class="built_in">fprintf</span> (<span class="built_in">stdout</span>, <span class="string">&quot;Reading from passed fd %d\n&quot;</span>, fds[i]);</span><br><span class="line">        <span class="keyword">while</span> ((nbytes = read(fds[i], buffer, <span class="keyword">sizeof</span>(buffer))) &gt; <span class="number">0</span>)</span><br><span class="line">            write(<span class="number">1</span>, buffer, nbytes);</span><br><span class="line">        *buffer = <span class="string">&#x27;\0&#x27;</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (close(cfd) == <span class="number">-1</span>)</span><br><span class="line">        handle_error (<span class="string">&quot;Failed to close client socket&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>结果：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">➜  <span class="built_in">exp</span> ./send flag flag2</span><br><span class="line">Opened fd <span class="number">4</span> in parent</span><br><span class="line">Opened fd <span class="number">5</span> in parent</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">➜  <span class="built_in">exp</span> ./read           </span><br><span class="line">Reading from passed fd <span class="number">5</span></span><br><span class="line">flag&#123;yhellow&#125;</span><br><span class="line">Reading from passed fd <span class="number">6</span></span><br><span class="line">flag&#123;yhellow&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在 <code>send</code> 程序中打开的两个文件 <code>flag flag2</code> 被迁移到了 <code>read</code> 程序中</li>
+</ul>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/11/22/Kernel%20%E7%8E%B0%E5%AE%9E%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0%EF%BC%9ADirty%20Cow/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1802,190 +1965,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/11/02/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9A%E5%8D%8F%E8%AE%AE%E6%A0%88/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/11/02/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9A%E5%8D%8F%E8%AE%AE%E6%A0%88/" class="post-title-link" itemprop="url">网络相关知识：协议栈</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2022-11-02 18:48:18 / Modified: 18:53:05" itemprop="dateCreated datePublished" datetime="2022-11-02T18:48:18+08:00">2022-11-02</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>8.1k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>7 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>TCP/IP 协议栈简述</strong> </p>
-<p>TCP/IP 协议栈是一系列网络协议的总和，是构成网络通信的核心骨架，采用4层结构，分别是：</p>
-<ul>
-<li>应用层：<ul>
-<li>向用户态程序提供网络接口</li>
-<li>例如：域名系统DNS协议、HTTP超文本传送协议、Telnet远程登录协议、SNMP简单网络管理协议</li>
-</ul>
-</li>
-<li>传输层：<ul>
-<li>位于通信部分的最高层，用户功能的最底层，用于为运行在不同主机上的进程之间提供逻辑通信</li>
-<li>例如：传输控制协议TCP - Transmission Control Protocol，用户数据报协议UDP - User Datagram Protocol</li>
-</ul>
-</li>
-<li>网络层：<ul>
-<li>进一步管理网络中的数据通信，将数据从源端经过若干中间节点传送到目的端</li>
-<li>例如：ARP协议，IP协议，ICMP协议，IGMP协议</li>
-</ul>
-</li>
-<li>链路层：<ul>
-<li>提供透明可靠的数据传送基本服务</li>
-<li>例如：以太网协议</li>
-</ul>
-</li>
-</ul>
-<p>梳理一下每层模型的职责：</p>
-<ul>
-<li>链路层：对“0”和“1”进行分组，定义数据帧，确认主机的物理地址，传输数据</li>
-<li>网络层：定义IP地址，确认主机所在的网络位置，并通过IP进行MAC寻址，对外网数据包进行路由转发</li>
-<li>传输层：定义端口，确认主机上应用程序的身份，并将数据包交给对应的应用程序</li>
-<li>应用层：定义数据格式，并按照对应的格式解读数据</li>
-</ul>
-<p><strong>网络协议的注册/注销</strong></p>
-<p>协议在内核中用 <code>packet_type</code> 来表示，其拥有不同的容器：</p>
-<ul>
-<li>每个协议在系统初始化或者相应模块加载的时候添加到内核中的一个大小为16的哈希表 <code>ptype_base</code> 中，其中哈希表中的每个元素都是一个双向链表：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">ptype_base</span>[<span class="title">PTYPE_HASH_SIZE</span>] __<span class="title">read_mostly</span>;</span> <span class="comment">/* 保存所有支持的3层协议(网际协议)处理函数的地方 */</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>另一种协议容器是 <code>ptype_all</code>，它直接就是一个双向链表：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>	<span class="title">ptype_all</span>;</span> <span class="comment">/* 保存所有协议处理回调的地方(设备无关) */</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>还有一种协议容器是 <code>struct net_device</code> 中的一个条目，也是一个双向链表：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">net_device</span> &#123;</span></span><br><span class="line">    ......</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>	<span class="title">ptype_all</span>;</span> <span class="comment">/* 保存所有协议处理回调的地方(设备有关) */</span></span><br><span class="line">    ......</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>添加协议的 API 如下：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">dev_add_pack</span><span class="params">(struct packet_type *pt)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> *<span class="title">head</span> =</span> ptype_head(pt);</span><br><span class="line"></span><br><span class="line">	spin_lock(&amp;ptype_lock);</span><br><span class="line">	list_add_rcu(&amp;pt-&gt;<span class="built_in">list</span>, head); </span><br><span class="line">	spin_unlock(&amp;ptype_lock);</span><br><span class="line">&#125;</span><br><span class="line">EXPORT_SYMBOL(dev_add_pack);</span><br></pre></td></tr></table></figure>
-<p>其中需要传入的 <code>packet_type</code> 结构体用于描述一个协议：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">packet_type</span> &#123;</span></span><br><span class="line">	__be16			type;	<span class="comment">/* This is really htons(ether_type). */</span></span><br><span class="line">	<span class="keyword">bool</span>			ignore_outgoing;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">net_device</span>	*<span class="title">dev</span>;</span>	<span class="comment">/* NULL is wildcarded here */</span></span><br><span class="line">	<span class="keyword">int</span>			(*func) (struct sk_buff *,</span><br><span class="line">					 struct net_device *,</span><br><span class="line">					 struct packet_type *,</span><br><span class="line">					 struct net_device *);</span><br><span class="line">	<span class="keyword">void</span>			(*list_func) (struct list_head *,</span><br><span class="line">					      struct packet_type *,</span><br><span class="line">					      struct net_device *);</span><br><span class="line">	<span class="keyword">bool</span>			(*id_match)(struct packet_type *ptype,</span><br><span class="line">					    struct sock *sk);</span><br><span class="line">	<span class="keyword">void</span>			*af_packet_priv;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>	<span class="title">list</span>;</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<ul>
-<li><code>type</code>：协议代码，表明了协议类型 </li>
-<li><code>dev</code>：设备，指明了在哪个设备上使能该协议（<code>dev</code> 将 NULL 视为通配符，表示任意设备）</li>
-<li><code>func</code>：对应协议的 Handler（处理程序，例如：在网卡收到数据后，<code>netif_receive_skb</code> 将会根据 <code>skb-&gt;protocol</code> 来调用相应的 func 来处理 skb）</li>
-<li><code>af_packet_priv</code>：为 PF_PACKET 类型的 socket 使用，指向该 <code>packet_type</code> 的创建者相关的 sock 数据结构 </li>
-<li><code>list</code>：协议链表头</li>
-</ul>
-<p>因此，协议的注册由两步完成：</p>
-<ul>
-<li>对 <code>packet_type</code> 进行初始化</li>
-<li>调用 <code>dev_add_pack</code> 把目标协议加入到 <code>ptype_base</code></li>
-</ul>
-<p>相应的，协议的注销需要调用如下 API：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">dev_remove_pack</span><span class="params">(struct packet_type *pt)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	__dev_remove_pack(pt);</span><br><span class="line"></span><br><span class="line">	synchronize_net(); <span class="comment">/* 保证在dev_remove_pack返回的时候,这个移除了的packet_type没有在内核中使用 */</span></span><br><span class="line">&#125;</span><br><span class="line">EXPORT_SYMBOL(dev_remove_pack);</span><br></pre></td></tr></table></figure>
-<p><strong>数据包的处理流程</strong></p>
-<p>对于 <code>ptype_base</code> 和 <code>ptype_all</code> 两个类型的协议 Container(容器)，协议 Handler 的调用方法是相似的：</p>
-<ul>
-<li>遍历其中的双向链表，直到找到了符合条件的 <code>packet_type</code></li>
-<li>可以使用 <code>deliver_skb</code> 间接调用 <code>packet_type-&gt;func</code></li>
-<li>或者直接调用 <code>packet_type-&gt;func</code></li>
-</ul>
-<p><code>ptype_base</code> 和 <code>ptype_all</code> 的不同之处在于：</p>
-<ul>
-<li><code>ptype_all</code> 本身就是一个双向链表，可以直接遍历</li>
-<li><code>ptype_base</code> 则是一个包含了双向链表的哈希表， 在遍历之前需要根据 <code>skb-&gt;protocol</code> 来计算找到待遍历的双向链表</li>
-</ul>
-<p>当网卡收到数据包后，它会将数据包从网卡硬件缓存转移到服务器内存中（具体为 <code>sk_buffer</code>），然后触发一个中断来通知内核进行处理</p>
-<p>内核会执行如下函数来处理 <code>sk_buffer</code> 中的数据包：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">netif_receive_skb</span><span class="params">(struct sk_buff *skb)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	trace_netif_receive_skb_entry(skb);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> netif_receive_skb_internal(skb);</span><br><span class="line">&#125;</span><br><span class="line">EXPORT_SYMBOL(netif_receive_skb);</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">int</span> <span class="title">netif_receive_skb_internal</span><span class="params">(struct sk_buff *skb)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> ret;</span><br><span class="line"></span><br><span class="line">	net_timestamp_check(netdev_tstamp_prequeue, skb); <span class="comment">/* 检查timestamp */</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (skb_defer_rx_timestamp(skb))</span><br><span class="line">		<span class="keyword">return</span> NET_RX_SUCCESS;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (static_branch_unlikely(&amp;generic_xdp_needed_key)) &#123;</span><br><span class="line">		<span class="keyword">int</span> ret;</span><br><span class="line"></span><br><span class="line">		preempt_disable();</span><br><span class="line">		rcu_read_lock();</span><br><span class="line">		ret = do_xdp_generic(rcu_dereference(skb-&gt;dev-&gt;xdp_prog), skb);</span><br><span class="line">		rcu_read_unlock();</span><br><span class="line">		preempt_enable();</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> (ret != XDP_PASS)</span><br><span class="line">			<span class="keyword">return</span> NET_RX_DROP;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	rcu_read_lock(); <span class="comment">/* RCU读锁(读者不受限制,写者阻塞) */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_RPS</span></span><br><span class="line">	<span class="keyword">if</span> (static_key_false(&amp;rps_needed)) &#123;</span><br><span class="line">		<span class="class"><span class="keyword">struct</span> <span class="title">rps_dev_flow</span> <span class="title">voidflow</span>, *<span class="title">rflow</span> =</span> &amp;voidflow;</span><br><span class="line">		<span class="keyword">int</span> cpu = get_rps_cpu(skb-&gt;dev, skb, &amp;rflow);</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> (cpu &gt;= <span class="number">0</span>) &#123;</span><br><span class="line">			ret = enqueue_to_backlog(skb, cpu, &amp;rflow-&gt;last_qtail);</span><br><span class="line">			rcu_read_unlock();</span><br><span class="line">			<span class="keyword">return</span> ret;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">	ret = __netif_receive_skb(skb);</span><br><span class="line">	rcu_read_unlock();</span><br><span class="line">	<span class="keyword">return</span> ret;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li><code>netif_receive_skb_internal</code> 只是对数据包进行了 RPS（增加服务器的负载均衡，优化吞吐率）的处理，然后调用 <code>__netif_receive_skb</code></li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">int</span> __netif_receive_skb(struct sk_buff *skb)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="keyword">int</span> ret;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (sk_memalloc_socks() &amp;&amp; skb_pfmemalloc(skb)) &#123;</span><br><span class="line">		<span class="keyword">unsigned</span> <span class="keyword">int</span> noreclaim_flag;</span><br><span class="line">		noreclaim_flag = memalloc_noreclaim_save();</span><br><span class="line">		ret = __netif_receive_skb_one_core(skb, <span class="literal">true</span>);</span><br><span class="line">		memalloc_noreclaim_restore(noreclaim_flag);</span><br><span class="line">	&#125; <span class="keyword">else</span></span><br><span class="line">		ret = __netif_receive_skb_one_core(skb, <span class="literal">false</span>);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> ret;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>进行简单检查后就调用了 <code>__netif_receive_skb_one_core</code>：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">int</span> __netif_receive_skb_one_core(struct sk_buff *skb, <span class="keyword">bool</span> pfmemalloc)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">net_device</span> *<span class="title">orig_dev</span> =</span> skb-&gt;dev;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">packet_type</span> *<span class="title">pt_prev</span> =</span> <span class="literal">NULL</span>;</span><br><span class="line">	<span class="keyword">int</span> ret;</span><br><span class="line"></span><br><span class="line">	ret = __netif_receive_skb_core(skb, pfmemalloc, &amp;pt_prev);</span><br><span class="line">	<span class="keyword">if</span> (pt_prev)</span><br><span class="line">		ret = pt_prev-&gt;func(skb, skb-&gt;dev, pt_prev, orig_dev); <span class="comment">/* 调用协议处理 */</span></span><br><span class="line">	<span class="keyword">return</span> ret;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>然后调用核心函数 <code>__netif_receive_skb_core</code>，返回对应的 <code>packet_type</code> 并调用 <code>packet_type-&gt;func</code></li>
-<li>核心函数 <code>__netif_receive_skb_core</code> 的源码如下：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br><span class="line">142</span><br><span class="line">143</span><br><span class="line">144</span><br><span class="line">145</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">int</span> __netif_receive_skb_core(struct sk_buff *skb, <span class="keyword">bool</span> pfmemalloc,</span><br><span class="line">				    struct packet_type **ppt_prev)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">packet_type</span> *<span class="title">ptype</span>, *<span class="title">pt_prev</span>;</span></span><br><span class="line">	<span class="keyword">rx_handler_func_t</span> *rx_handler;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">net_device</span> *<span class="title">orig_dev</span>;</span></span><br><span class="line">	<span class="keyword">bool</span> deliver_exact = <span class="literal">false</span>;</span><br><span class="line">	<span class="keyword">int</span> ret = NET_RX_DROP;</span><br><span class="line">	__be16 type;</span><br><span class="line"></span><br><span class="line">	net_timestamp_check(!netdev_tstamp_prequeue, skb);</span><br><span class="line"></span><br><span class="line">	trace_netif_receive_skb(skb);</span><br><span class="line"></span><br><span class="line">	orig_dev = skb-&gt;dev;</span><br><span class="line"></span><br><span class="line">	skb_reset_network_header(skb); </span><br><span class="line">	<span class="keyword">if</span> (!skb_transport_header_was_set(skb))</span><br><span class="line">		skb_reset_transport_header(skb);</span><br><span class="line">	skb_reset_mac_len(skb);</span><br><span class="line"></span><br><span class="line">	pt_prev = <span class="literal">NULL</span>;</span><br><span class="line"></span><br><span class="line">another_round:</span><br><span class="line">	skb-&gt;skb_iif = skb-&gt;dev-&gt;ifindex;</span><br><span class="line"></span><br><span class="line">	__this_cpu_inc(softnet_data.processed);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (skb-&gt;protocol == cpu_to_be16(ETH_P_8021Q) ||</span><br><span class="line">	    skb-&gt;protocol == cpu_to_be16(ETH_P_8021AD)) &#123;</span><br><span class="line">		skb = skb_vlan_untag(skb);</span><br><span class="line">		<span class="keyword">if</span> (unlikely(!skb))</span><br><span class="line">			<span class="keyword">goto</span> out;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (skb_skip_tc_classify(skb))</span><br><span class="line">		<span class="keyword">goto</span> skip_classify;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (pfmemalloc)</span><br><span class="line">		<span class="keyword">goto</span> skip_taps;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">/* ptype_all容器中协议处理(tcpdump抓包就在这里) */</span></span><br><span class="line">	list_for_each_entry_rcu(ptype, &amp;ptype_all, <span class="built_in">list</span>) &#123;</span><br><span class="line">		<span class="keyword">if</span> (pt_prev)</span><br><span class="line">			ret = deliver_skb(skb, pt_prev, orig_dev);</span><br><span class="line">		pt_prev = ptype;</span><br><span class="line">	&#125;</span><br><span class="line">    </span><br><span class="line">	<span class="comment">/* dev-&gt;ptype_all容器中协议处理(和设备有关) */</span></span><br><span class="line">	list_for_each_entry_rcu(ptype, &amp;skb-&gt;dev-&gt;ptype_all, <span class="built_in">list</span>) &#123;</span><br><span class="line">		<span class="keyword">if</span> (pt_prev)</span><br><span class="line">			ret = deliver_skb(skb, pt_prev, orig_dev);</span><br><span class="line">		pt_prev = ptype;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">skip_taps:</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> CONFIG_NET_INGRESS</span></span><br><span class="line">	<span class="keyword">if</span> (static_branch_unlikely(&amp;ingress_needed_key)) &#123;</span><br><span class="line">		skb = sch_handle_ingress(skb, &amp;pt_prev, &amp;ret, orig_dev);</span><br><span class="line">		<span class="keyword">if</span> (!skb)</span><br><span class="line">			<span class="keyword">goto</span> out;</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> (nf_ingress(skb, &amp;pt_prev, &amp;ret, orig_dev) &lt; <span class="number">0</span>)</span><br><span class="line">			<span class="keyword">goto</span> out;</span><br><span class="line">	&#125;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">	skb_reset_tc(skb);</span><br><span class="line">skip_classify:</span><br><span class="line">	<span class="keyword">if</span> (pfmemalloc &amp;&amp; !skb_pfmemalloc_protocol(skb))</span><br><span class="line">		<span class="keyword">goto</span> drop;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 对vlan报文的处理 */</span></span><br><span class="line">	<span class="keyword">if</span> (skb_vlan_tag_present(skb)) &#123;</span><br><span class="line">		<span class="keyword">if</span> (pt_prev) &#123;</span><br><span class="line">			ret = deliver_skb(skb, pt_prev, orig_dev);</span><br><span class="line">			pt_prev = <span class="literal">NULL</span>;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">if</span> (vlan_do_receive(&amp;skb))</span><br><span class="line">			<span class="keyword">goto</span> another_round;</span><br><span class="line">		<span class="keyword">else</span> <span class="keyword">if</span> (unlikely(!skb))</span><br><span class="line">			<span class="keyword">goto</span> out;</span><br><span class="line">	&#125;</span><br><span class="line">    </span><br><span class="line">	<span class="comment">/* 调用接收设备的rx_handler */</span></span><br><span class="line">	rx_handler = rcu_dereference(skb-&gt;dev-&gt;rx_handler);</span><br><span class="line">	<span class="keyword">if</span> (rx_handler) &#123;</span><br><span class="line">		<span class="keyword">if</span> (pt_prev) &#123;</span><br><span class="line">			ret = deliver_skb(skb, pt_prev, orig_dev);</span><br><span class="line">			pt_prev = <span class="literal">NULL</span>;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">switch</span> (rx_handler(&amp;skb)) &#123;</span><br><span class="line">		<span class="keyword">case</span> RX_HANDLER_CONSUMED:</span><br><span class="line">			ret = NET_RX_SUCCESS;</span><br><span class="line">			<span class="keyword">goto</span> out;</span><br><span class="line">		<span class="keyword">case</span> RX_HANDLER_ANOTHER:</span><br><span class="line">			<span class="keyword">goto</span> another_round;</span><br><span class="line">		<span class="keyword">case</span> RX_HANDLER_EXACT:</span><br><span class="line">			deliver_exact = <span class="literal">true</span>;</span><br><span class="line">		<span class="keyword">case</span> RX_HANDLER_PASS:</span><br><span class="line">			<span class="keyword">break</span>;</span><br><span class="line">		<span class="keyword">default</span>:</span><br><span class="line">			BUG();</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (unlikely(skb_vlan_tag_present(skb))) &#123;</span><br><span class="line">		<span class="keyword">if</span> (skb_vlan_tag_get_id(skb))</span><br><span class="line">			skb-&gt;pkt_type = PACKET_OTHERHOST;</span><br><span class="line">		skb-&gt;vlan_tci = <span class="number">0</span>;</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">    <span class="comment">/* 根据skb-&gt;protocol传递给上层协议(其实这就是&quot;sk_buff=&gt;packet_type&quot;的过程) */</span></span><br><span class="line">	type = skb-&gt;protocol;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (likely(!deliver_exact)) &#123; <span class="comment">/* 根据全局定义的协议处理报文 */</span></span><br><span class="line">		deliver_ptype_list_skb(skb, &amp;pt_prev, orig_dev, type,</span><br><span class="line">				       &amp;ptype_base[ntohs(type) &amp;</span><br><span class="line">						   PTYPE_HASH_MASK]); <span class="comment">/* 利用skb-&gt;protocol在ptype_base中选择对应的双向链表 */</span></span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	deliver_ptype_list_skb(skb, &amp;pt_prev, orig_dev, type,</span><br><span class="line">			       &amp;orig_dev-&gt;ptype_specific); <span class="comment">/* 根据设备上注册的协议进行处理 */</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (unlikely(skb-&gt;dev != orig_dev)) &#123; <span class="comment">/* 如果设备发生变化,那么还需要针对新设备的注册协议进行处理 */</span></span><br><span class="line">		deliver_ptype_list_skb(skb, &amp;pt_prev, orig_dev, type,</span><br><span class="line">				       &amp;skb-&gt;dev-&gt;ptype_specific); </span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (pt_prev) &#123; </span><br><span class="line">		<span class="keyword">if</span> (unlikely(skb_orphan_frags_rx(skb, GFP_ATOMIC)))</span><br><span class="line">			<span class="keyword">goto</span> drop;</span><br><span class="line">		*ppt_prev = pt_prev; <span class="comment">/* 把查找到的packet_type传出 */</span></span><br><span class="line">	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">drop:</span><br><span class="line">		<span class="keyword">if</span> (!deliver_exact)</span><br><span class="line">			atomic_long_inc(&amp;skb-&gt;dev-&gt;rx_dropped);</span><br><span class="line">		<span class="keyword">else</span></span><br><span class="line">			atomic_long_inc(&amp;skb-&gt;dev-&gt;rx_nohandler);</span><br><span class="line">		kfree_skb(skb);</span><br><span class="line">		ret = NET_RX_DROP;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">out:</span><br><span class="line">	<span class="keyword">return</span> ret;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><code>__netif_receive_skb_core</code> 函数主要有几个处理：</p>
-<ul>
-<li>vlan 报文的处理，主要是循环把 vlan 头剥掉（Virtual Local Area Network 虚拟局域网）</li>
-<li>交给 rx_handler 处理（例如：OVS，linux bridge 等）</li>
-<li><code>ptype_all</code> 处理（例如：抓包程序，raw socket 等）</li>
-<li><code>ptype_base</code> 处理，并交给协议栈（例如：ip、arp，rarp 等）</li>
-</ul>
-<p>其中我们只需要关注与有关 <code>ptype_base</code> 的部分，这里才是对网络协议的处理：</p>
-<ul>
-<li>程序会通过 <code>skb-&gt;protocol</code> 找到 <code>ptype_base</code> 中对应的双向链表</li>
-<li>遍历这个双向链表，直到 <code>packet_type-&gt;type == sk_buff-&gt;protocol</code></li>
-<li>然后调用 <code>packet_type-&gt;func</code> 完成对数据包的处理</li>
-</ul>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2057,7 +2036,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">289</span>
+          <span class="site-state-item-count">290</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2070,7 +2049,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">150</span>
+        <span class="site-state-item-count">151</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -2111,7 +2090,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">61:32</span>
+    <span title="Reading time total">61:39</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
