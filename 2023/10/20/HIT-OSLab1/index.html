@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="HIT-OSLab1 实验目标：  改写 bootsect.s 的代码，使得屏幕上可以输出 YHellowOS is loading... 使 bootsect.s 能够完成 setup.s 的载入，并跳转到 setup.s 开始执行处，并输出 Now we are in SETUP 将 setup.s 获取到的硬件参数输出到屏幕上 完成了输出硬件参数的步骤后，不再继续加载 linux 内核，保持">
+<meta property="og:type" content="article">
+<meta property="og:title" content="HIT-OSLab1">
+<meta property="og:url" content="http://example.com/2023/10/20/HIT-OSLab1/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="HIT-OSLab1 实验目标：  改写 bootsect.s 的代码，使得屏幕上可以输出 YHellowOS is loading... 使 bootsect.s 能够完成 setup.s 的载入，并跳转到 setup.s 开始执行处，并输出 Now we are in SETUP 将 setup.s 获取到的硬件参数输出到屏幕上 完成了输出硬件参数的步骤后，不再继续加载 linux 内核，保持">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2023/10/20/HIT-OSLab1/1697733495967.png">
+<meta property="article:published_time" content="2023-10-19T16:41:59.000Z">
+<meta property="article:modified_time" content="2023-10-19T16:42:46.147Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="labs">
+<meta property="article:tag" content="OS">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2023/10/20/HIT-OSLab1/1697733495967.png">
+
+<link rel="canonical" href="http://example.com/2023/10/20/HIT-OSLab1/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>HIT-OSLab1 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/10/20/HIT-OSLab1/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          HIT-OSLab1
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-10-20 00:41:59 / Modified: 00:42:46" itemprop="dateCreated datePublished" datetime="2023-10-20T00:41:59+08:00">2023-10-20</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>7.1k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>HIT-OSLab1</strong></p>
+<p>实验目标：</p>
+<ul>
+<li>改写 bootsect.s 的代码，使得屏幕上可以输出 <code>YHellowOS is loading...</code></li>
+<li>使 bootsect.s 能够完成 setup.s 的载入，并跳转到 setup.s 开始执行处，并输出 <code>Now we are in SETUP</code></li>
+<li>将 setup.s 获取到的硬件参数输出到屏幕上</li>
+<li>完成了输出硬件参数的步骤后，不再继续加载 linux 内核，保持上述信息</li>
+</ul>
+<p><strong>实验过程</strong></p>
+<p>先简单解释分析一下 bootsect.s 的作用：</p>
+<ul>
+<li>bootsect.s 是一个汇编程序，是引导扇区的源代码（该扇区被称为引导扇区，是一个计算机启动时第一个读取的扇区，通常是硬盘或软盘的第一个扇区）</li>
+<li>引导扇区通常包含一个引导扇区表（Boot Sector Table，BST），该表指向计算机的引导Loader（通常是BIOS）和操作系统 </li>
+</ul>
+<p>其核心代码如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">SETUPLEN = 4				! nr of setup-sectors # setup程序代码占用扇区数</span><br><span class="line">BOOTSEG  = 0x07c0			! original address of boot-sector # bootsect起始地址</span><br><span class="line">INITSEG  = 0x9000			! we move boot here - out of the way </span><br><span class="line">SETUPSEG = 0x9020			! setup starts here # setup起始地址</span><br><span class="line">SYSSEG   = 0x1000			! system loaded at 0x10000 (65536). # system起始地址</span><br><span class="line">ENDSEG   = SYSSEG + SYSSIZE		! where to stop loading</span><br><span class="line"></span><br><span class="line">entry _start</span><br><span class="line">_start:</span><br><span class="line">	mov	ax,#BOOTSEG</span><br><span class="line">	mov	ds,ax			# ds:数据段基地址</span><br><span class="line">	mov	ax,#INITSEG</span><br><span class="line">	mov	es,ax			# es:附加段基地址</span><br><span class="line">	mov	cx,#256			# cx:计数器(用于指示rep循环的次数)</span><br><span class="line">	sub	si,si			# si:数据段偏移</span><br><span class="line">	sub	di,di			# di:附加段偏移</span><br><span class="line">	rep					# 用于重复执行一段汇编代码(默认计数器为cx)</span><br><span class="line">	movw				# movw默认的源寄存器是ds:si,目标寄存器是es:di</span><br><span class="line">	jmpi	go,INITSEG</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这一段指令使位于 0x07c00 的 bootsect 代码，被全部拷贝到了 0x90000</li>
+<li>最后跳转到 0x90000 从 go 标号处开始执行</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">go:	mov	ax,cs			# cs:代码段基地址</span><br><span class="line">	mov	ds,ax</span><br><span class="line">	mov	es,ax</span><br><span class="line">! put stack at 0x9ff00.</span><br><span class="line">	mov	ss,ax			# ss:栈段基地址</span><br><span class="line">	mov	sp,#0xFF00		! arbitrary value &gt;&gt;512</span><br><span class="line"></span><br><span class="line">! load the setup-sectors directly after the bootblock.</span><br><span class="line">! Note that &#x27;es&#x27; is already set up.</span><br><span class="line"></span><br><span class="line">load_setup:</span><br><span class="line">	mov	dx,#0x0000		! drive 0, head 0 		# 驱动器编号&#x27;0&#x27;和磁头编号&#x27;0&#x27;</span><br><span class="line">	mov	cx,#0x0002		! sector 2, track 0		# 扇区号&#x27;2&#x27;和磁道号&#x27;0&#x27;</span><br><span class="line">	mov	bx,#0x0200		! address = 512, in INITSEG	   # 读取数据的起始地址为512</span><br><span class="line">	mov	ax,#0x0200+SETUPLEN	! service 2, nr of sectors	# 读取的数据长度为0x200+4</span><br><span class="line">	int	0x13			! read it</span><br><span class="line">	jnc	ok_load_setup		! ok - continue</span><br><span class="line">	mov	dx,#0x0000</span><br><span class="line">	mov	ax,#0x0000		! reset the diskette</span><br><span class="line">	int	0x13</span><br><span class="line">	j	load_setup</span><br></pre></td></tr></table></figure>
+<ul>
+<li>指令 <code>int 0x13</code> 的中断服务程序实质上就是磁盘服务程序，用于读取 setup 的代码并将其加载到程序的内存 0x90200 中 </li>
+<li>如果 ax 寄存器的值大于0，则 jnc 会使程序跳转至 ok_load_setup，否则会尝试再次加载 setup</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br></pre></td><td class="code"><pre><span class="line">ok_load_setup:</span><br><span class="line"></span><br><span class="line">! Get disk drive parameters, specifically nr of sectors/track</span><br><span class="line"></span><br><span class="line">	mov	dl,#0x00</span><br><span class="line">	mov	ax,#0x0800		! AH=8 is get drive parameters</span><br><span class="line">	int	0x13</span><br><span class="line">	mov	ch,#0x00</span><br><span class="line">	seg cs				# 将cs的值加载到数据段(seg [ds:] address)</span><br><span class="line">	mov	sectors,cx</span><br><span class="line">	mov	ax,#INITSEG</span><br><span class="line">	mov	es,ax</span><br><span class="line"></span><br><span class="line">! Print some inane message</span><br><span class="line"></span><br><span class="line">	mov	ah,#0x03		! read cursor pos</span><br><span class="line">	xor	bh,bh</span><br><span class="line">	int	0x10</span><br><span class="line">	</span><br><span class="line">	mov	cx,#24</span><br><span class="line">	mov	bx,#0x0007		! page 0, attribute 7 (normal)</span><br><span class="line">	mov	bp,#msg1</span><br><span class="line">	mov	ax,#0x1301		! write string, move cursor</span><br><span class="line">	int	0x10</span><br><span class="line"></span><br><span class="line">! ok, we&#x27;ve written the message, now</span><br><span class="line">! we want to load the system (at 0x10000)</span><br><span class="line"></span><br><span class="line">	mov	ax,#SYSSEG</span><br><span class="line">	mov	es,ax		! segment of 0x010000</span><br><span class="line">	call	read_it				# 读取磁盘上的system</span><br><span class="line">	call	kill_motor			# 关闭驱动器马达,这样就可以知道驱动器的状态了</span><br><span class="line"></span><br><span class="line">! After that we check which root-device to use. If the device is</span><br><span class="line">! defined (!= 0), nothing is done and the given device is used.</span><br><span class="line">! Otherwise, either /dev/PS0 (2,28) or /dev/at0 (2,8), depending</span><br><span class="line">! on the number of sectors that the BIOS reports currently.</span><br><span class="line"># 检查要使用哪个根文件系统设备</span><br><span class="line"></span><br><span class="line">	seg cs				</span><br><span class="line">	mov	ax,root_dev</span><br><span class="line">	cmp	ax,#0</span><br><span class="line">	jne	root_defined</span><br><span class="line">	seg cs</span><br><span class="line">	mov	bx,sectors</span><br><span class="line">	mov	ax,#0x0208		! /dev/ps0 - 1.2Mb</span><br><span class="line">	cmp	bx,#15</span><br><span class="line">	je	root_defined</span><br><span class="line">	mov	ax,#0x021c		! /dev/PS0 - 1.44Mb</span><br><span class="line">	cmp	bx,#18</span><br><span class="line">	je	root_defined</span><br><span class="line">undef_root:</span><br><span class="line">	jmp undef_root</span><br><span class="line">root_defined:</span><br><span class="line">	seg cs</span><br><span class="line">	mov	root_dev,ax</span><br><span class="line"></span><br><span class="line">! after that (everyting loaded), we jump to</span><br><span class="line">! the setup-routine loaded directly after</span><br><span class="line">! the bootblock:</span><br><span class="line"></span><br><span class="line">	jmpi	0,SETUPSEG</span><br></pre></td></tr></table></figure>
+<ul>
+<li>指令 <code>int 0x10</code> 的中断服务程序可以将字符串输出到屏幕上</li>
+<li>输出信息并进行初始化后，程序会调用 read_it 来读取磁盘上的 system 模块，并将其加载到 0x10000 </li>
+<li>最后跳转到 0x90200 执行 setup 的代码</li>
+</ul>
+<p>计算机上电后，ROM BIOS 会在物理内存 0 处初始化中断向量表，其中有256个中断向量，每个中断向量占用4字节，共1KB，在物理内存地址 0x000-0x3ff 处，这些中断向量供 BIOS 中断使用</p>
+<p>BIOS 初始化中断向量表后，启动设备的第一个扇区（即引导扇区）读入内存地址 0x7c00 处，并跳转到此处开始执行：</p>
+<ul>
+<li>此时操作系统处于实模式，寻址方式为：16位段寄存器 * 0x10 + 16位目标寄存器</li>
+<li>为了方便加载主模块，引导程序首先会将自己拷贝到内存相对靠后的位置（如 linux0.11 的 bootsect 程序先将自己移动到 0x90000 处），然后跳转过去执行</li>
+<li>在接下来的步骤中，程序会依次加载 setup 和 system 的代码，并跳转执行 setup 的代码</li>
+</ul>
+<p>setup.s 是一个汇编语言源代码文件，通常位于操作系统内核的源代码目录中，它的作用是设置操作系统的初始状态，为操作系统其他模块的运行做准备：</p>
+<ul>
+<li>操作系统的主模块为了让其中代码地址等于实际的物理地址，需要将其加载到内存 0x0000 处，但此时会覆盖在 0x000-0x3ff 处的 BIOS 中断向量表</li>
+<li>所以操作系统在加载时需要先将主模块加载到内存中不与 BIOS 中断向量表冲突的地址处，之后在可以覆盖中断向量表时才将其移动到 0x0000</li>
+<li>例如在 Linux0.11 的 system 模块就是先在 bootsect 程序中被加载到了 0x10000，之后在 setup 程序中移到 0x0000 处</li>
+</ul>
+<p>接下来的工作就是利用 <code>int 0x10</code> 来将我们需要的字符串打印到屏幕上，为此我们需要先把字符串构造好：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">msgmy:</span><br><span class="line">	.ascii &quot;YHellowOS is loading...&quot;</span><br><span class="line">	.byte 13,10,13,10</span><br></pre></td></tr></table></figure>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">msgmy:</span><br><span class="line">	.ascii &quot;Now we are in setup...&quot;</span><br><span class="line">	.byte 13,10,13,10</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>13,10</code> 代表换行符</li>
+</ul>
+<p>接下来就可以编写打印函数了：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">read_cur:</span><br><span class="line">	mov	ah,#0x03	</span><br><span class="line">	xor	bh,bh </span><br><span class="line">	int	0x10</span><br><span class="line">	ret</span><br><span class="line"></span><br><span class="line">print_string:</span><br><span class="line">	mov cx,bx</span><br><span class="line">	mov	bx,#0x0007</span><br><span class="line">	mov	bp,ax</span><br><span class="line">	mov	ax,#0x1301		</span><br><span class="line">	int	0x10</span><br><span class="line">	ret</span><br></pre></td></tr></table></figure>
+<ul>
+<li>read_cur 用于获取光标位置（如果没有这一步，打印数据很可能会被后续数据覆盖），寄存器 cx 中的值就是该字符串的长度，寄存器 bx 中的值代表了输出字符的颜色</li>
+<li>print_string 用于打印字符串，需要传入两个参数（ax：字符串地址，bx：字符串长度）</li>
+</ul>
+<p>这里有一点需要注意：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">mov ax,#INITSEG</span><br><span class="line">mov ds,ax</span><br><span class="line">mov ax,#SETUPSEG</span><br><span class="line">mov	es,ax  </span><br><span class="line"></span><br><span class="line">call read_cur</span><br><span class="line">mov ax,#msgmy</span><br><span class="line">mov	bx,#26</span><br><span class="line">call print_string</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在 setup.s 中使用 read_cur 获取光标位置前，需要先重置 ds/es（主要是重置 es 格外数据段）</li>
+</ul>
+<p>在输出硬件参数前我们需要知道 setup.s 读取了哪些硬件参数，找到其核心代码：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br></pre></td><td class="code"><pre><span class="line">entry start</span><br><span class="line">start:</span><br><span class="line"></span><br><span class="line">! ok, the read went well so we get current cursor position and save it for</span><br><span class="line">! posterity.</span><br><span class="line"># 获取光标位置(0x9000:0x0)</span><br><span class="line">	mov	ax,#INITSEG	! this is done in bootsect already, but...</span><br><span class="line">	mov	ds,ax</span><br><span class="line">	mov	ah,#0x03	! read cursor pos</span><br><span class="line">	xor	bh,bh</span><br><span class="line">	int	0x10		! save it in known place, con_init fetches</span><br><span class="line">	mov	[0],dx		! it from 0x90000.</span><br><span class="line">! Get memory size (extended mem, kB)</span><br><span class="line"># 获取拓展内存大小(0x9000:0x2)</span><br><span class="line">	mov	ah,#0x88</span><br><span class="line">	int	0x15</span><br><span class="line">	mov	[2],ax</span><br><span class="line"></span><br><span class="line">! Get video-card data:</span><br><span class="line"># 获取显卡video-card参数(0x9000:0x6)</span><br><span class="line">	mov	ah,#0x0f</span><br><span class="line">	int	0x10</span><br><span class="line">	mov	[4],bx		! bh = display page</span><br><span class="line">	mov	[6],ax		! al = video mode, ah = window width</span><br><span class="line"></span><br><span class="line">! check for EGA/VGA and some config parameters</span><br><span class="line">	mov	ah,#0x12</span><br><span class="line">	mov	bl,#0x10</span><br><span class="line">	int	0x10</span><br><span class="line">	mov	[8],ax</span><br><span class="line">	mov	[10],bx</span><br><span class="line">	mov	[12],cx</span><br><span class="line"></span><br><span class="line">! Get hd0 data</span><br><span class="line"># 获取硬盘hd0参数(0x9000:0x80)</span><br><span class="line">	mov	ax,#0x0000</span><br><span class="line">	mov	ds,ax</span><br><span class="line">	lds	si,[4*0x41]</span><br><span class="line">	mov	ax,#INITSEG</span><br><span class="line">	mov	es,ax</span><br><span class="line">	mov	di,#0x0080</span><br><span class="line">	mov	cx,#0x10</span><br><span class="line">	rep</span><br><span class="line">	movsb				# ds:si(4*0x41)-&gt;es:di(0x90000+0x80)</span><br><span class="line"></span><br><span class="line">! Get hd1 data</span><br><span class="line"># 获取硬盘hd1参数(0x9000:0x90)</span><br><span class="line">	mov	ax,#0x0000</span><br><span class="line">	mov	ds,ax</span><br><span class="line">	lds	si,[4*0x46]</span><br><span class="line">	mov	ax,#INITSEG</span><br><span class="line">	mov	es,ax</span><br><span class="line">	mov	di,#0x0090</span><br><span class="line">	mov	cx,#0x10</span><br><span class="line">	rep</span><br><span class="line">	movsb				# ds:si(4*0x41)-&gt;es:di(0x90000+0x90)</span><br><span class="line">	</span><br><span class="line">	......</span><br></pre></td></tr></table></figure>
+<ul>
+<li>我们需要打印的设备有 HD0，HD1，VC（地址偏移记录在注释中）</li>
+</ul>
+<p>为了方便读取地址中的数据，我们需要写一个打印函数：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">print_hex_4:</span><br><span class="line">	mov cx,#4   </span><br><span class="line">	j print_hex</span><br><span class="line">print_hex_2:</span><br><span class="line">	mov cx,#2</span><br><span class="line">	j print_hex</span><br><span class="line">print_hex:</span><br><span class="line">	mov dx,ax   </span><br><span class="line">print_digit:</span><br><span class="line">	rol dx,#4		# 向左循环移动4位</span><br><span class="line">	mov ax,#0xe0f </span><br><span class="line">	and al,dl </span><br><span class="line">	add al,#0x30	# 将数据转化为ascii字符</span><br><span class="line">	cmp al,#0x3a</span><br><span class="line">	jl outp  </span><br><span class="line">	add al,#0x07  </span><br><span class="line">outp:</span><br><span class="line">	int 0x10</span><br><span class="line">	loop print_digit</span><br><span class="line">	ret</span><br></pre></td></tr></table></figure>
+<p>最后我们可以按照数据的格式写出代码：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br></pre></td><td class="code"><pre><span class="line">! Show HD Information:</span><br><span class="line">	mov ax,#INITSEG		# 由于之前修改了ds/es,这里要先将它们改回</span><br><span class="line">	mov ds,ax</span><br><span class="line">	mov ax,#SETUPSEG</span><br><span class="line">	mov	es,ax  </span><br><span class="line"></span><br><span class="line">	call read_cur		# 打印Cursor POS</span><br><span class="line">	mov ax,#cur</span><br><span class="line">	mov bx,#13</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[0]</span><br><span class="line">	call print_hex_4</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur		# 打印Memory SIZE</span><br><span class="line">	mov ax,#mem</span><br><span class="line">	mov bx,#12</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[2]</span><br><span class="line">	call print_hex_4</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#kb</span><br><span class="line">	mov bx,#4</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	call read_cur		# 打印video-card设备的数据</span><br><span class="line">	mov ax,#vc</span><br><span class="line">	mov bx,#11</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#display</span><br><span class="line">	mov bx,#13</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[4]</span><br><span class="line">	call print_hex_4</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#mode</span><br><span class="line">	mov bx,#11</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[6]</span><br><span class="line">	call print_hex_2</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#width</span><br><span class="line">	mov bx,#13</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[8]</span><br><span class="line">	call print_hex_2</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur		# 打印hd0设备的数据</span><br><span class="line">	mov ax,#hd1</span><br><span class="line">	mov bx,#12</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#cyl</span><br><span class="line">	mov bx,#10</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[0x80]</span><br><span class="line">	call print_hex_4</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#head</span><br><span class="line">	mov bx,#8</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[0x80+0x2]</span><br><span class="line">	call print_hex_4</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#sect</span><br><span class="line">	mov bx,#8</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[0x80+0xe]</span><br><span class="line">	call print_hex_4</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur		# 打印hd1设备的数据</span><br><span class="line">	mov ax,#hd2</span><br><span class="line">	mov bx,#12</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#cyl</span><br><span class="line">	mov bx,#10</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[0x90]</span><br><span class="line">	call print_hex_4</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#head</span><br><span class="line">	mov bx,#8</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[0x90+0x2]</span><br><span class="line">	call print_hex_4</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#sect</span><br><span class="line">	mov bx,#8</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[0x90+0xe]</span><br><span class="line">	call print_hex_4</span><br><span class="line">	call print_nl</span><br></pre></td></tr></table></figure>
+<p>至于最后一个要求，我们只需要写一个死循环即可：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">l:  jmp l</span><br></pre></td></tr></table></figure>
+<p>最终效果如下：</p>
+<img src="/2023/10/20/HIT-OSLab1/1697733495967.png" class width="1697733495967"> 
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/labs/" rel="tag"><i class="fa fa-tag"></i> labs</a>
+              <a href="/tags/OS/" rel="tag"><i class="fa fa-tag"></i> OS</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/10/20/HIT-OSLab0/" rel="prev" title="HIT-OSLab0">
+      <i class="fa fa-chevron-left"></i> HIT-OSLab0
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">292</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">13</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">152</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">4.1m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">61:49</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
