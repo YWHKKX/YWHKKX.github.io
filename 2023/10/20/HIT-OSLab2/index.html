@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="HIT-OSLab2 实验目标：在 Linux-0.11 上添加两个系统调用：（原始只有72个系统调用） 1int iam(const char * name);  将 name 中存放的字符串拷贝到内核中并保存下来，要求 name 的长度不能超过 23 个字符，若超过了，返回 -1 并置 errno 为 EINVAL，如果没有超过就返回拷贝的字符个数  1int whoami(char * na">
+<meta property="og:type" content="article">
+<meta property="og:title" content="HIT-OSLab2">
+<meta property="og:url" content="http://example.com/2023/10/20/HIT-OSLab2/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="HIT-OSLab2 实验目标：在 Linux-0.11 上添加两个系统调用：（原始只有72个系统调用） 1int iam(const char * name);  将 name 中存放的字符串拷贝到内核中并保存下来，要求 name 的长度不能超过 23 个字符，若超过了，返回 -1 并置 errno 为 EINVAL，如果没有超过就返回拷贝的字符个数  1int whoami(char * na">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2023/10/20/HIT-OSLab2/1697810935770.png">
+<meta property="article:published_time" content="2023-10-20T14:56:32.000Z">
+<meta property="article:modified_time" content="2023-10-20T14:57:20.400Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="labs">
+<meta property="article:tag" content="OS">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2023/10/20/HIT-OSLab2/1697810935770.png">
+
+<link rel="canonical" href="http://example.com/2023/10/20/HIT-OSLab2/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>HIT-OSLab2 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/10/20/HIT-OSLab2/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          HIT-OSLab2
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-10-20 22:56:32 / Modified: 22:57:20" itemprop="dateCreated datePublished" datetime="2023-10-20T22:56:32+08:00">2023-10-20</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>7k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>HIT-OSLab2</strong></p>
+<p>实验目标：在 Linux-0.11 上添加两个系统调用：（原始只有72个系统调用）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">iam</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> * name)</span></span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>将 <code>name</code> 中存放的字符串拷贝到内核中并保存下来，要求 <code>name</code> 的长度不能超过 23 个字符，若超过了，返回 -1 并置 <code>errno</code> 为 <code>EINVAL</code>，如果没有超过就返回拷贝的字符个数</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">whoami</span><span class="params">(<span class="keyword">char</span> * name,<span class="keyword">unsigned</span> <span class="keyword">int</span> size)</span></span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>将内核中存放的字符串（由 <code>iam</code> 拷贝进去的）重新复制到 <code>name</code> 中，<code>size</code> 是指 <code>name</code> 指向的内存空间允许存放的最大长度，如果 <code>size</code> 小于需要的空间，就返回 -1，并置 <code>errno</code> 为 <code>EINVAL</code>，否则返回拷贝的字节数</li>
+</ul>
+<p><strong>实验过程</strong></p>
+<p>系统调用执行的详细过程如下：</p>
+<ul>
+<li>调用中断处理程序：当进程需要执行系统调用时，进程会主动调用中断处理程序 interrupt handler</li>
+<li>保存现场信息：中断处理程序会保存当前进程的寄存器值到堆栈中，以便在系统调用结束后恢复进程状态</li>
+<li>切换控制权：将 CPU 控制权交给操作系统,操作系统开始处理系统调用请求</li>
+<li>解析系统调用请求：操作系统根据系统调用请求的代码指针等信息，解析出需要调用的系统服务函数的地址</li>
+<li>调用系统服务函数：操作系统将解析出的系统服务函数地址作为参数，调用系统服务函数执行系统调用请求</li>
+<li>处理系统调用结果：系统服务函数处理完系统调用请求后，会将结果返回给操作系统</li>
+<li>恢复现场信息：操作系统将保存的寄存器值从堆栈中取出，恢复当前进程的原始状态</li>
+<li>切换控制权：操作系统将 CPU 控制权还给进程，进程继续执行</li>
+</ul>
+<p>在代码层中的实现如下：</p>
+<ul>
+<li>把系统调用的编号存入 ax</li>
+<li>把函数参数存入其他通用寄存器</li>
+<li>触发 0x80 中断（<code>int 0x80</code>）</li>
+</ul>
+<p>在 linux-0.11 中，系统调用的源码存放在两处地方：</p>
+<ul>
+<li><code>linux-0.11/lib/</code></li>
+<li><code>linux-0.11/kernel/</code>（实验要求我们把文件放入这里）</li>
+</ul>
+<p>在系统调用中用户态程序不能直接和内核态程序交换数据，必须使用内核提供的 API，在 linux-0.11 中的 API 如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">unsigned</span> <span class="keyword">char</span> <span class="title">get_fs_byte</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> * addr)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">register</span> <span class="keyword">char</span> _v;</span><br><span class="line"></span><br><span class="line">	__asm__ (<span class="string">&quot;movb %%fs:%1,%0&quot;</span>:<span class="string">&quot;=r&quot;</span> (_v):<span class="string">&quot;m&quot;</span> (*addr));</span><br><span class="line">	<span class="keyword">return</span> _v;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">unsigned</span> <span class="keyword">short</span> <span class="title">get_fs_word</span><span class="params">(<span class="keyword">const</span> <span class="keyword">unsigned</span> <span class="keyword">short</span> *addr)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">short</span> _v;</span><br><span class="line"></span><br><span class="line">	__asm__ (<span class="string">&quot;movw %%fs:%1,%0&quot;</span>:<span class="string">&quot;=r&quot;</span> (_v):<span class="string">&quot;m&quot;</span> (*addr));</span><br><span class="line">	<span class="keyword">return</span> _v;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="title">get_fs_long</span><span class="params">(<span class="keyword">const</span> <span class="keyword">unsigned</span> <span class="keyword">long</span> *addr)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> _v;</span><br><span class="line"></span><br><span class="line">	__asm__ (<span class="string">&quot;movl %%fs:%1,%0&quot;</span>:<span class="string">&quot;=r&quot;</span> (_v):<span class="string">&quot;m&quot;</span> (*addr)); \</span><br><span class="line">	<span class="keyword">return</span> _v;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">void</span> <span class="title">put_fs_byte</span><span class="params">(<span class="keyword">char</span> val,<span class="keyword">char</span> *addr)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">__asm__ (<span class="string">&quot;movb %0,%%fs:%1&quot;</span>::<span class="string">&quot;r&quot;</span> (val),<span class="string">&quot;m&quot;</span> (*addr));</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">void</span> <span class="title">put_fs_word</span><span class="params">(<span class="keyword">short</span> val,<span class="keyword">short</span> * addr)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">__asm__ (<span class="string">&quot;movw %0,%%fs:%1&quot;</span>::<span class="string">&quot;r&quot;</span> (val),<span class="string">&quot;m&quot;</span> (*addr));</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">void</span> <span class="title">put_fs_long</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">long</span> val,<span class="keyword">unsigned</span> <span class="keyword">long</span> * addr)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">__asm__ (<span class="string">&quot;movl %0,%%fs:%1&quot;</span>::<span class="string">&quot;r&quot;</span> (val),<span class="string">&quot;m&quot;</span> (*addr));</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment"> * Someone who knows GNU asm better than I should double check the followig.</span></span><br><span class="line"><span class="comment"> * It seems to work, but I don&#x27;t know if I&#x27;m doing something subtly wrong.</span></span><br><span class="line"><span class="comment"> * --- TYT, 11/24/91</span></span><br><span class="line"><span class="comment"> * [ nothing wrong here, Linus ]</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="title">get_fs</span><span class="params">()</span> </span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">short</span> _v;</span><br><span class="line">	__asm__(<span class="string">&quot;mov %%fs,%%ax&quot;</span>:<span class="string">&quot;=a&quot;</span> (_v):);</span><br><span class="line">	<span class="keyword">return</span> _v;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="title">get_ds</span><span class="params">()</span> </span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">short</span> _v;</span><br><span class="line">	__asm__(<span class="string">&quot;mov %%ds,%%ax&quot;</span>:<span class="string">&quot;=a&quot;</span> (_v):);</span><br><span class="line">	<span class="keyword">return</span> _v;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">inline</span> <span class="keyword">void</span> <span class="title">set_fs</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">long</span> val)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	__asm__(<span class="string">&quot;mov %0,%%fs&quot;</span>::<span class="string">&quot;a&quot;</span> ((<span class="keyword">unsigned</span> <span class="keyword">short</span>) val));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>编写 sys_iam 和 sys_whoami 的代码：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;errno.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;asm/segment.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="keyword">char</span> msg[<span class="number">24</span>];</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">sys_iam</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> *name)</span></span>&#123;</span><br><span class="line">    <span class="keyword">char</span> tmp[<span class="number">24</span>];</span><br><span class="line">    <span class="keyword">int</span> i;</span><br><span class="line">    <span class="keyword">for</span>(i=<span class="number">0</span>;i&lt;<span class="number">24</span>;i++)&#123;</span><br><span class="line">        tmp[i] = get_fs_byte(name+i);</span><br><span class="line">        <span class="keyword">if</span>(tmp[i] == <span class="string">&#x27;\0&#x27;</span>)</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span>(i&gt;=<span class="number">23</span>)&#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="built_in">strcpy</span>(msg,tmp);</span><br><span class="line">    <span class="keyword">return</span> i;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">sys_whoami</span><span class="params">(<span class="keyword">char</span> *name,<span class="keyword">unsigned</span> <span class="keyword">int</span> size)</span></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> len;</span><br><span class="line">    <span class="keyword">int</span> i;</span><br><span class="line">    len = <span class="built_in">strlen</span>(msg);</span><br><span class="line">    <span class="keyword">if</span>(len &gt; size)&#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">for</span>(i=<span class="number">0</span>;i&lt;len;i++)&#123;</span><br><span class="line">        put_fs_byte(msg[i],name+i);</span><br><span class="line">        <span class="keyword">if</span>(msg[i] == <span class="string">&#x27;\0&#x27;</span>)</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> i;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>系统调用号在 <code>linux-0.11/include/unistd.h</code> 文件中，我们可以在其末尾添加新的系统调用号：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> __NR_iam	72</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> __NR_woiam	73</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>需要注意的是：这里同时需要修改 <code>hdc-0.11.img</code> 中的 <code>hdc/usr/include/unistd.h</code> 文件，如果想在虚拟机中使用 gcc 编译的话，会导入虚拟机 <code>hdc/usr/include/</code> 中的文件为头文件</li>
+</ul>
+<p>系统调用总数量则记录在 <code>linux-0.11/kernel/system_call.s</code> 中，将其改为74：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">nr_system_calls = <span class="number">74</span></span><br></pre></td></tr></table></figure>
+<p>接下来需要在系统调用中添加我们实现的程序，为此我们需要先分析一下系统调用的代码</p>
+<p>在 linux-0.11 中，<code>system_call.s</code> 文件为 Linux 内核中所有系统调用的实现提供了框架，主要包含以下内容：</p>
+<ul>
+<li>系统调用函数原型声明：定义了每个系统调用的函数原型，以便其他汇编文件可以方便地调用这些函数</li>
+<li>系统调用处理函数：定义了实际处理每个系统调用的函数，这些函数由内核驱动，并通过中断处理机制执行</li>
+<li>系统调用参数转换函数：在调用用户空间应用程序之前，系统调用参数需要进行转换，这些函数负责将内核提供的参数转换为应用程序需要的格式</li>
+</ul>
+<p>所有系统调用的入口如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">system_call:</span><br><span class="line">	cmpl $nr_system_calls-1,%eax	# 系统调用号不存在</span><br><span class="line">	ja bad_sys_call</span><br><span class="line">	push %ds					# 将段寄存器和目的寄存器压栈保存</span><br><span class="line">	push %es</span><br><span class="line">	push %fs</span><br><span class="line">	pushl %edx</span><br><span class="line">	pushl %ecx		# push %ebx,%ecx,%edx as parameters</span><br><span class="line">	pushl %ebx		# to the system call</span><br><span class="line">	movl $0x10,%edx		# set up ds,es to kernel space</span><br><span class="line">	mov %dx,%ds</span><br><span class="line">	mov %dx,%es</span><br><span class="line">	movl $0x17,%edx		# fs points to local data space</span><br><span class="line">	mov %dx,%fs</span><br><span class="line">	call sys_call_table(,%eax,4)	# 执行系统调用</span><br></pre></td></tr></table></figure>
+<p>在 sys_call_table 中记录了所有的系统调用，其位置在 <code>linux-0.11/include/linux/sys.h</code>：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">extern int sys_iam();</span><br><span class="line">extern int sys_whoami();</span><br><span class="line"></span><br><span class="line">fn_ptr sys_call_table[] = &#123; sys_setup, sys_exit, sys_fork, sys_read,</span><br><span class="line">sys_write, sys_open, sys_close, sys_waitpid, sys_creat, sys_link,</span><br><span class="line">sys_unlink, sys_execve, sys_chdir, sys_time, sys_mknod, sys_chmod,</span><br><span class="line">sys_chown, sys_break, sys_stat, sys_lseek, sys_getpid, sys_mount,</span><br><span class="line">sys_umount, sys_setuid, sys_getuid, sys_stime, sys_ptrace, sys_alarm,</span><br><span class="line">sys_fstat, sys_pause, sys_utime, sys_stty, sys_gtty, sys_access,</span><br><span class="line">sys_nice, sys_ftime, sys_sync, sys_kill, sys_rename, sys_mkdir,</span><br><span class="line">sys_rmdir, sys_dup, sys_pipe, sys_times, sys_prof, sys_brk, sys_setgid,</span><br><span class="line">sys_getgid, sys_signal, sys_geteuid, sys_getegid, sys_acct, sys_phys,</span><br><span class="line">sys_lock, sys_ioctl, sys_fcntl, sys_mpx, sys_setpgid, sys_ulimit,</span><br><span class="line">sys_uname, sys_umask, sys_chroot, sys_ustat, sys_dup2, sys_getppid,</span><br><span class="line">sys_getpgrp, sys_setsid, sys_sigaction, sys_sgetmask, sys_ssetmask,</span><br><span class="line">sys_setreuid,sys_setregid,sys_iam,sys_whoami &#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在其中添加 sys_iam，sys_whoami 即可完成注册</li>
+</ul>
+<p>最后需要在 makefile 中添加 sys_iam，sys_whoami 的链接，不然就会引发如下报错：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">ld: kernel/kernel.o:(.data+0x120): undefined reference to `sys_iam&#x27;</span><br><span class="line">ld: kernel/kernel.o:(.data+0x124): undefined reference to `sys_whoami&#x27;</span><br><span class="line">make: *** [Makefile:67：tools/system] 错误 1</span><br></pre></td></tr></table></figure>
+<p>修改 makefile：</p>
+<figure class="highlight makefile"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">OBJS  = sched.o system_call.o traps.o asm.o fork.o \</span><br><span class="line">	panic.o printk.o vsprintf.o sys.o exit.o \</span><br><span class="line">	signal.o mktime.o whoami.o</span><br></pre></td></tr></table></figure>
+<figure class="highlight makefile"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">### Dependencies:</span></span><br><span class="line">whoami.s whoami.o: whoami.c ../<span class="keyword">include</span>/linux/kernel.h ../<span class="keyword">include</span>/unistd.h</span><br></pre></td></tr></table></figure>
+<p>为了测试系统调用，我们可以将 hdc-0.11.img 挂载（使用 mount-hdc 脚本），然后再往其中写入测试脚本的代码</p>
+<p>不过在此之前我们需要先了解一下 _syscallN 宏：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> _syscall0(type,name) \</span></span><br><span class="line"><span class="meta">type name(void) \</span></span><br><span class="line"><span class="meta">&#123; \</span></span><br><span class="line"><span class="meta">long __res; \</span></span><br><span class="line"><span class="meta">__asm__ volatile (<span class="meta-string">&quot;int $0x80&quot;</span> \</span></span><br><span class="line"><span class="meta">	: <span class="meta-string">&quot;=a&quot;</span> (__res) \</span></span><br><span class="line"><span class="meta">	: <span class="meta-string">&quot;0&quot;</span> (__NR_##name)); \</span></span><br><span class="line"><span class="meta"><span class="meta-keyword">if</span> (__res &gt;= 0) \</span></span><br><span class="line"><span class="meta">	return (type) __res; \</span></span><br><span class="line"><span class="meta">errno = -__res; \</span></span><br><span class="line"><span class="meta">return -1; \</span></span><br><span class="line"><span class="meta">&#125;</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> _syscall3(type,name,atype,a,btype,b,ctype,c) \</span></span><br><span class="line"><span class="meta">type name(atype a,btype b,ctype c) \</span></span><br><span class="line"><span class="meta">&#123; \</span></span><br><span class="line"><span class="meta">long __res; \</span></span><br><span class="line"><span class="meta">__asm__ volatile (<span class="meta-string">&quot;int $0x80&quot;</span> \</span></span><br><span class="line"><span class="meta">	: <span class="meta-string">&quot;=a&quot;</span> (__res) \</span></span><br><span class="line"><span class="meta">	: <span class="meta-string">&quot;0&quot;</span> (__NR_##name),<span class="meta-string">&quot;b&quot;</span> ((long)(a)),<span class="meta-string">&quot;c&quot;</span> ((long)(b)),<span class="meta-string">&quot;d&quot;</span> ((long)(c))); \</span></span><br><span class="line"><span class="meta"><span class="meta-keyword">if</span> (__res&gt;=0) \</span></span><br><span class="line"><span class="meta">	return (type) __res; \</span></span><br><span class="line"><span class="meta">errno=-__res; \</span></span><br><span class="line"><span class="meta">return -1; \</span></span><br><span class="line"><span class="meta">&#125;</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span> <span class="comment">/* __LIBRARY__ */</span></span></span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>N</code> 是一个整数（表示系统调用的编号），<code>...</code> 是一个可变参数列表（用于传递系统调用的参数），<code>##</code> 是一个 C 语言宏展开的符号（<code>##name</code> 将被替换 <code>name</code>）</li>
+<li><code>&quot;=a&quot;</code> 用于指定返回寄存器 <code>__res</code> 的输出模式（返回寄存器 <code>__res</code> 用于存储系统调用的返回值），这段代码的作用是：在执行完汇编代码后应该将结果存储在 eax 寄存器中</li>
+<li>将系统调用号 <code>__NR_##name</code> 和参数 <code>a b c</code> 压入栈中，最后执行 <code>int 0x80</code></li>
+</ul>
+<p>在 linux-0.11 上函数调用和系统调用的底层代码是不同的，_syscallN 宏的出现可以使我们以函数调用的方式去写系统调用的C代码</p>
+<p>下面是利用 _syscallN 执行系统调用的测试脚本：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;errno.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> __LIBRARY__</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"></span><br><span class="line">_syscall2(<span class="keyword">int</span>,whoami,<span class="keyword">char</span> *,name,<span class="keyword">unsigned</span> <span class="keyword">int</span>,size)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> *argv[])</span></span>&#123;</span><br><span class="line">    <span class="keyword">char</span> name[<span class="number">24</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">    <span class="keyword">int</span> re = whoami(name,<span class="number">24</span>);</span><br><span class="line">    <span class="keyword">if</span>(re != <span class="number">-1</span>)&#123;</span><br><span class="line">		<span class="built_in">printf</span>(<span class="string">&quot;output successfully!\n&quot;</span>,name);</span><br><span class="line">		<span class="built_in">printf</span>(<span class="string">&quot;my name is %s\n&quot;</span>,name);</span><br><span class="line">	&#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;errno.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> __LIBRARY__</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"></span><br><span class="line">_syscall1(<span class="keyword">int</span>,iam,<span class="keyword">const</span> <span class="keyword">char</span> *,name)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> **argv)</span></span>&#123;</span><br><span class="line">    <span class="keyword">char</span> name[<span class="number">24</span>] = <span class="string">&quot;iam yhellow&quot;</span>;</span><br><span class="line">    <span class="keyword">int</span> re = iam(name);</span><br><span class="line">    <span class="keyword">if</span>(re != <span class="number">-1</span>)&#123;</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;input successfully!\n&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>使用如下命令进行编译：（最好在 linux-0.11 中进行编译）</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">gcc -o whoami whoami.c -Wall</span><br><span class="line">gcc -o iam iam.c -Wall</span><br></pre></td></tr></table></figure>
+<p>最终效果如下：</p>
+<img src="/2023/10/20/HIT-OSLab2/1697810935770.png" class width="1697810935770"> 
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/labs/" rel="tag"><i class="fa fa-tag"></i> labs</a>
+              <a href="/tags/OS/" rel="tag"><i class="fa fa-tag"></i> OS</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/10/20/HIT-OSLab1/" rel="prev" title="HIT-OSLab1">
+      <i class="fa fa-chevron-left"></i> HIT-OSLab1
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">293</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">13</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">152</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">4.1m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">61:56</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
