@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="HIT-OSLab3 实验目标：  掌握 Linux 下的多进程编程技术 通过对进程运行轨迹的跟踪来形象化进程的概念 在进程运行轨迹跟踪的基础上进行相应的数据统计，从而能对进程调度算法进行实际的量化评价，更进一步加深对调度和调度算法的理解，获得能在实际操作系统上对调度算法进行实验数据对比的直接经验  基于模板 process.c 编写多进程的样本程序，实现如下功能：  所有子进程都并行运行，每个子">
+<meta property="og:type" content="article">
+<meta property="og:title" content="HIT-OSLab3">
+<meta property="og:url" content="http://example.com/2023/10/26/HIT-OSLab3/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="HIT-OSLab3 实验目标：  掌握 Linux 下的多进程编程技术 通过对进程运行轨迹的跟踪来形象化进程的概念 在进程运行轨迹跟踪的基础上进行相应的数据统计，从而能对进程调度算法进行实际的量化评价，更进一步加深对调度和调度算法的理解，获得能在实际操作系统上对调度算法进行实验数据对比的直接经验  基于模板 process.c 编写多进程的样本程序，实现如下功能：  所有子进程都并行运行，每个子">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2023/10/26/HIT-OSLab3/1698330533711.png">
+<meta property="og:image" content="http://example.com/2023/10/26/HIT-OSLab3/1698325401290.png">
+<meta property="article:published_time" content="2023-10-26T14:45:09.000Z">
+<meta property="article:modified_time" content="2023-10-26T14:46:19.841Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="labs">
+<meta property="article:tag" content="OS">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2023/10/26/HIT-OSLab3/1698330533711.png">
+
+<link rel="canonical" href="http://example.com/2023/10/26/HIT-OSLab3/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>HIT-OSLab3 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/10/26/HIT-OSLab3/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          HIT-OSLab3
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-10-26 22:45:09 / Modified: 22:46:19" itemprop="dateCreated datePublished" datetime="2023-10-26T22:45:09+08:00">2023-10-26</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>17k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>15 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>HIT-OSLab3</strong></p>
+<p>实验目标：</p>
+<ul>
+<li>掌握 <code>Linux</code> 下的多进程编程技术</li>
+<li>通过对进程运行轨迹的跟踪来形象化进程的概念</li>
+<li>在进程运行轨迹跟踪的基础上进行相应的数据统计，从而能对进程调度算法进行实际的量化评价，更进一步加深对调度和调度算法的理解，获得能在实际操作系统上对调度算法进行实验数据对比的直接经验</li>
+</ul>
+<p>基于模板 <code>process.c</code> 编写多进程的样本程序，实现如下功能：</p>
+<ul>
+<li>所有子进程都并行运行，每个子进程的实际运行时间一般不超过30秒</li>
+<li>父进程向标准输出打印所有子进程的 id，并在所有子进程都退出后才退出</li>
+<li>在 Linux-0.11 上实现进程运行轨迹的跟踪，基本任务是在内核中维护一个日志文件 <code>/var/process.log</code>，把从操作系统启动到系统关机过程中所有进程的运行轨迹都记录在这一 log 文件中</li>
+<li>在修改过的 Linux-0.11 上运行样本程序，通过分析 log 文件，统计该程序建立的所有进程的等待时间、完成时间（周转时间）和运行时间，然后计算平均等待时间，平均完成时间和吞吐量</li>
+<li>可以自己编写统计程序，也可以使用 python 脚本程序 <code>stat_log.py</code>（在 <code>/home/teacher/</code> 目录下）进行统计</li>
+<li>修改 Linux-0.11 进程调度的时间片，然后再运行同样的样本程序，统计同样的时间数据，和原有的情况对比，体会不同时间片带来的差异</li>
+</ul>
+<p><strong>实验过程</strong></p>
+<p>文件 <code>./files/process.c</code> 的信息如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;time.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/times.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> HZ	100</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">cpuio_bound</span><span class="params">(<span class="keyword">int</span> last, <span class="keyword">int</span> cpu_time, <span class="keyword">int</span> io_time)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> * argv[])</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment"> * 此函数按照参数占用CPU和I/O时间</span></span><br><span class="line"><span class="comment"> * last: 函数实际占用CPU和I/O的总时间,不含在就绪队列中的时间, &gt;=0是必须的</span></span><br><span class="line"><span class="comment"> * cpu_time: 一次连续占用CPU的时间, &gt;=0是必须的</span></span><br><span class="line"><span class="comment"> * io_time: 一次I/O消耗的时间, &gt;=0是必须的</span></span><br><span class="line"><span class="comment"> * 如果last &gt; cpu_time + io_time, 则往复多次占用CPU和I/O</span></span><br><span class="line"><span class="comment"> * 所有时间的单位为秒</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">cpuio_bound</span><span class="params">(<span class="keyword">int</span> last, <span class="keyword">int</span> cpu_time, <span class="keyword">int</span> io_time)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">tms</span> <span class="title">start_time</span>, <span class="title">current_time</span>;</span></span><br><span class="line">	<span class="keyword">clock_t</span> utime, stime;</span><br><span class="line">	<span class="keyword">int</span> sleep_time;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">while</span> (last &gt; <span class="number">0</span>)</span><br><span class="line">	&#123;</span><br><span class="line">		<span class="comment">/* CPU Burst */</span></span><br><span class="line">		times(&amp;start_time);</span><br><span class="line">		<span class="comment">/* 其实只有t.tms_utime才是真正的CPU时间,但我们是在模拟一个只在用户状态运行的CPU大户,就像&quot;for(;;);&quot;,所以把t.tms_stime加上很合理 */</span></span><br><span class="line">		<span class="keyword">do</span></span><br><span class="line">		&#123;</span><br><span class="line">			times(&amp;current_time);</span><br><span class="line">			utime = current_time.tms_utime - start_time.tms_utime;</span><br><span class="line">			stime = current_time.tms_stime - start_time.tms_stime;</span><br><span class="line">		&#125; <span class="keyword">while</span> ( ( (utime + stime) / HZ )  &lt; cpu_time );</span><br><span class="line">		last -= cpu_time;</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> (last &lt;= <span class="number">0</span> )</span><br><span class="line">			<span class="keyword">break</span>;</span><br><span class="line"></span><br><span class="line">		<span class="comment">/* IO Burst */</span></span><br><span class="line">		<span class="comment">/* 用sleep(1)模拟1秒钟的I/O操作 */</span></span><br><span class="line">		sleep_time=<span class="number">0</span>;</span><br><span class="line">		<span class="keyword">while</span> (sleep_time &lt; io_time)</span><br><span class="line">		&#123;</span><br><span class="line">			sleep(<span class="number">1</span>);</span><br><span class="line">			sleep_time++;</span><br><span class="line">		&#125;</span><br><span class="line">		last -= sleep_time;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这个文件主要实现了 <code>cpuio_bound</code> 函数</li>
+<li>程序会先用 <code>times</code> 系统调用来获取系统的时间信息，源码如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">tms</span> &#123;</span></span><br><span class="line">	<span class="keyword">time_t</span> tms_utime;	<span class="comment">/* 表示当前进程的用户时间,即进程执行用户空间代码的时间 */</span></span><br><span class="line">	<span class="keyword">time_t</span> tms_stime;	<span class="comment">/* 表示当前进程的内核时间,即进程执行内核代码的时间 */</span></span><br><span class="line">	<span class="keyword">time_t</span> tms_cutime;	<span class="comment">/* 表示当前进程的父进程的用户时间 */</span></span><br><span class="line">	<span class="keyword">time_t</span> tms_cstime;	<span class="comment">/* 表示当前进程的父进程的内核时间 */</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">sys_times</span><span class="params">(struct tms * tbuf)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">if</span> (tbuf) &#123;</span><br><span class="line">		verify_area(tbuf,<span class="keyword">sizeof</span> *tbuf);</span><br><span class="line">        <span class="comment">/* current是内核中的tms结构体,内核会自动更新current全局变量的值,以反映当前进程的执行时间信息 */</span></span><br><span class="line">		put_fs_long(current-&gt;utime,(<span class="keyword">unsigned</span> <span class="keyword">long</span> *)&amp;tbuf-&gt;tms_utime);</span><br><span class="line">		put_fs_long(current-&gt;stime,(<span class="keyword">unsigned</span> <span class="keyword">long</span> *)&amp;tbuf-&gt;tms_stime);</span><br><span class="line">		put_fs_long(current-&gt;cutime,(<span class="keyword">unsigned</span> <span class="keyword">long</span> *)&amp;tbuf-&gt;tms_cutime);</span><br><span class="line">		put_fs_long(current-&gt;cstime,(<span class="keyword">unsigned</span> <span class="keyword">long</span> *)&amp;tbuf-&gt;tms_cstime);</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> jiffies;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>接着程序会分别模拟占用一次 CPU 资源和等待1秒 IO 资源这两个操作</li>
+</ul>
+<p>实验的第一个要求是进程并发，此时我们需要 fork 系统调用，该系统调用会将父进程拷贝一份作为子进程</p>
+<p>在 linux-0.11 中 sys_fork 的实现如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">.align 2</span><br><span class="line">sys_fork:</span><br><span class="line">	call find_empty_process		# 查找是否存在一个空闲的进程ID</span><br><span class="line">	testl %eax,%eax</span><br><span class="line">	js 1f</span><br><span class="line">	push %gs				# gs:主要用于保存全局符号表的基址</span><br><span class="line">	pushl %esi</span><br><span class="line">	pushl %edi</span><br><span class="line">	pushl %ebp</span><br><span class="line">	pushl %eax</span><br><span class="line">	call copy_process		# 复制指定进程的内存空间</span><br><span class="line">	addl $20,%esp</span><br><span class="line">1:	ret</span><br></pre></td></tr></table></figure>
+<ul>
+<li>核心函数 copy_process 的实现如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> NR_TASKS 64</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> * <span class="title">task</span>[<span class="title">NR_TASKS</span>] =</span> &#123;&amp;(init_task.task), &#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">copy_process</span><span class="params">(<span class="keyword">int</span> nr,<span class="keyword">long</span> ebp,<span class="keyword">long</span> edi,<span class="keyword">long</span> esi,<span class="keyword">long</span> gs,<span class="keyword">long</span> none,</span></span></span><br><span class="line"><span class="params"><span class="function">		<span class="keyword">long</span> ebx,<span class="keyword">long</span> ecx,<span class="keyword">long</span> edx,</span></span></span><br><span class="line"><span class="params"><span class="function">		<span class="keyword">long</span> fs,<span class="keyword">long</span> es,<span class="keyword">long</span> ds,</span></span></span><br><span class="line"><span class="params"><span class="function">		<span class="keyword">long</span> eip,<span class="keyword">long</span> cs,<span class="keyword">long</span> eflags,<span class="keyword">long</span> esp,<span class="keyword">long</span> ss)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> *<span class="title">p</span>;</span></span><br><span class="line">	<span class="keyword">int</span> i;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">file</span> *<span class="title">f</span>;</span></span><br><span class="line"></span><br><span class="line">	p = (struct task_struct *) get_free_page(); <span class="comment">/* 分配task_struct结构体 */</span></span><br><span class="line">	<span class="keyword">if</span> (!p)</span><br><span class="line">		<span class="keyword">return</span> -EAGAIN;</span><br><span class="line">	task[nr] = p;</span><br><span class="line">	*p = *current;	<span class="comment">/* NOTE! this doesn&#x27;t copy the supervisor stack */</span></span><br><span class="line">	p-&gt;state = TASK_UNINTERRUPTIBLE; <span class="comment">/* 设置不可打断的等待状态(由于该进程没有初始化完毕,因此不能被调度) */</span></span><br><span class="line">	p-&gt;pid = last_pid;</span><br><span class="line">	p-&gt;father = current-&gt;pid;</span><br><span class="line">	p-&gt;counter = p-&gt;priority; <span class="comment">/* 设置该进程调用的优先级 */</span></span><br><span class="line">	p-&gt;signal = <span class="number">0</span>;</span><br><span class="line">	p-&gt;alarm = <span class="number">0</span>;</span><br><span class="line">	p-&gt;leader = <span class="number">0</span>;		<span class="comment">/* process leadership doesn&#x27;t inherit */</span></span><br><span class="line">	p-&gt;utime = p-&gt;stime = <span class="number">0</span>;</span><br><span class="line">	p-&gt;cutime = p-&gt;cstime = <span class="number">0</span>;</span><br><span class="line">	p-&gt;start_time = jiffies;</span><br><span class="line">	p-&gt;tss.back_link = <span class="number">0</span>;</span><br><span class="line">	p-&gt;tss.esp0 = PAGE_SIZE + (<span class="keyword">long</span>) p;</span><br><span class="line">	p-&gt;tss.ss0 = <span class="number">0x10</span>;</span><br><span class="line">	p-&gt;tss.eip = eip;</span><br><span class="line">	p-&gt;tss.eflags = eflags;</span><br><span class="line">	p-&gt;tss.eax = <span class="number">0</span>;</span><br><span class="line">	p-&gt;tss.ecx = ecx;</span><br><span class="line">	p-&gt;tss.edx = edx;</span><br><span class="line">	p-&gt;tss.ebx = ebx;</span><br><span class="line">	p-&gt;tss.esp = esp;</span><br><span class="line">	p-&gt;tss.ebp = ebp;</span><br><span class="line">	p-&gt;tss.esi = esi;</span><br><span class="line">	p-&gt;tss.edi = edi;</span><br><span class="line">	p-&gt;tss.es = es &amp; <span class="number">0xffff</span>;</span><br><span class="line">	p-&gt;tss.cs = cs &amp; <span class="number">0xffff</span>;</span><br><span class="line">	p-&gt;tss.ss = ss &amp; <span class="number">0xffff</span>;</span><br><span class="line">	p-&gt;tss.ds = ds &amp; <span class="number">0xffff</span>;</span><br><span class="line">	p-&gt;tss.fs = fs &amp; <span class="number">0xffff</span>;</span><br><span class="line">	p-&gt;tss.gs = gs &amp; <span class="number">0xffff</span>;</span><br><span class="line">	p-&gt;tss.ldt = _LDT(nr);</span><br><span class="line">	p-&gt;tss.trace_bitmap = <span class="number">0x80000000</span>;</span><br><span class="line">	<span class="keyword">if</span> (last_task_used_math == current)</span><br><span class="line">		__asm__(<span class="string">&quot;clts ; fnsave %0&quot;</span>::<span class="string">&quot;m&quot;</span> (p-&gt;tss.i387));</span><br><span class="line">	<span class="keyword">if</span> (copy_mem(nr,p)) &#123; <span class="comment">/* 将一个进程的内存空间复制到另一个进程中 */</span></span><br><span class="line">		task[nr] = <span class="literal">NULL</span>;</span><br><span class="line">		free_page((<span class="keyword">long</span>) p);</span><br><span class="line">		<span class="keyword">return</span> -EAGAIN;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">for</span> (i=<span class="number">0</span>; i&lt;NR_OPEN;i++) <span class="comment">/* 这段代码的作用是遍历一个进程的文件指针数组,并将每个文件指针的计数器加一 */</span></span><br><span class="line">		<span class="keyword">if</span> ((f=p-&gt;filp[i]))</span><br><span class="line">			f-&gt;f_count++;</span><br><span class="line">	<span class="keyword">if</span> (current-&gt;pwd)</span><br><span class="line">		current-&gt;pwd-&gt;i_count++;</span><br><span class="line">	<span class="keyword">if</span> (current-&gt;root)</span><br><span class="line">		current-&gt;root-&gt;i_count++;</span><br><span class="line">	<span class="keyword">if</span> (current-&gt;executable)</span><br><span class="line">		current-&gt;executable-&gt;i_count++;</span><br><span class="line">	set_tss_desc(gdt+(nr&lt;&lt;<span class="number">1</span>)+FIRST_TSS_ENTRY,&amp;(p-&gt;tss));</span><br><span class="line">	set_ldt_desc(gdt+(nr&lt;&lt;<span class="number">1</span>)+FIRST_LDT_ENTRY,&amp;(p-&gt;ldt));</span><br><span class="line">	p-&gt;state = TASK_RUNNING;	<span class="comment">/* do this last, just in case */</span></span><br><span class="line">	<span class="keyword">return</span> last_pid;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在 linux-0.11 中，进程是由 <code>task[NR_TASKS]</code> 数组进行管理的（其中第一个进程为 <code>init</code> 进程）</li>
+<li>新建进程的过程本质上就是往 <code>task[NR_TASKS]</code> 中添加一个 <code>task_struct</code> 结构体</li>
+</ul>
+<p>实验要求父进程必须在所有子进程结束后才能返回，此时需要 wait 系统调用，其作用是等待子进程结束并返回子进程的退出状态码，对应源码如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">pid_t</span> <span class="title">wait</span><span class="params">(<span class="keyword">int</span> * wait_stat)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">return</span> waitpid(<span class="number">-1</span>,wait_stat,<span class="number">0</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> FIRST_TASK task[0]</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> LAST_TASK task[NR_TASKS-1]</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">sys_waitpid</span><span class="params">(<span class="keyword">pid_t</span> pid,<span class="keyword">unsigned</span> <span class="keyword">long</span> * stat_addr, <span class="keyword">int</span> options)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> flag, code;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> ** <span class="title">p</span>;</span></span><br><span class="line"></span><br><span class="line">	verify_area(stat_addr,<span class="number">4</span>); <span class="comment">/* 验证一块内存区域的安全性 */</span></span><br><span class="line">repeat:</span><br><span class="line">	flag=<span class="number">0</span>;</span><br><span class="line">	<span class="keyword">for</span>(p = &amp;LAST_TASK ; p &gt; &amp;FIRST_TASK ; --p) &#123; <span class="comment">/* 遍历task[NR_TASKS]中的所有进程 */</span></span><br><span class="line">		<span class="keyword">if</span> (!*p || *p == current) <span class="comment">/* 跳过当前进程 */</span></span><br><span class="line">			<span class="keyword">continue</span>;</span><br><span class="line">		<span class="keyword">if</span> ((*p)-&gt;father != current-&gt;pid) <span class="comment">/* 跳过当前进程的非子进程 */</span></span><br><span class="line">			<span class="keyword">continue</span>;</span><br><span class="line">		<span class="keyword">if</span> (pid&gt;<span class="number">0</span>) &#123; </span><br><span class="line">			<span class="keyword">if</span> ((*p)-&gt;pid != pid)</span><br><span class="line">				<span class="keyword">continue</span>;</span><br><span class="line">		&#125; <span class="keyword">else</span> <span class="keyword">if</span> (!pid) &#123;</span><br><span class="line">			<span class="keyword">if</span> ((*p)-&gt;pgrp != current-&gt;pgrp)</span><br><span class="line">				<span class="keyword">continue</span>;</span><br><span class="line">		&#125; <span class="keyword">else</span> <span class="keyword">if</span> (pid != <span class="number">-1</span>) &#123;</span><br><span class="line">			<span class="keyword">if</span> ((*p)-&gt;pgrp != -pid)</span><br><span class="line">				<span class="keyword">continue</span>;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">switch</span> ((*p)-&gt;state) &#123; <span class="comment">/* waitpid设置&quot;pid=-1&quot;,程序会执行到这里(此时已经确定p为子进程) */</span></span><br><span class="line">			<span class="keyword">case</span> TASK_STOPPED: <span class="comment">/* 暂停或停止执行 */</span></span><br><span class="line">				<span class="keyword">if</span> (!(options &amp; WUNTRACED)) <span class="comment">/* WUNTRACED用于表示进程正在被跟踪 */</span></span><br><span class="line">					<span class="keyword">continue</span>;</span><br><span class="line">				put_fs_long(<span class="number">0x7f</span>,stat_addr);</span><br><span class="line">				<span class="keyword">return</span> (*p)-&gt;pid;</span><br><span class="line">			<span class="keyword">case</span> TASK_ZOMBIE: <span class="comment">/* 已经结束,但尚未释放系统资源(僵尸进程) */</span></span><br><span class="line">				current-&gt;cutime += (*p)-&gt;utime;</span><br><span class="line">				current-&gt;cstime += (*p)-&gt;stime;</span><br><span class="line">				flag = (*p)-&gt;pid;</span><br><span class="line">				code = (*p)-&gt;exit_code; </span><br><span class="line">				release(*p); <span class="comment">/* 释放子进程资源 */</span></span><br><span class="line">				put_fs_long(code,stat_addr);</span><br><span class="line">				<span class="keyword">return</span> flag;</span><br><span class="line">			<span class="keyword">default</span>: <span class="comment">/* 意味着有子进程正在运行,sys_waitpid仍然不能返回 */</span></span><br><span class="line">				flag=<span class="number">1</span>;</span><br><span class="line">				<span class="keyword">continue</span>;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> (flag) &#123; </span><br><span class="line">		<span class="keyword">if</span> (options &amp; WNOHANG)</span><br><span class="line">			<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">		current-&gt;state=TASK_INTERRUPTIBLE; <span class="comment">/* 表示进程可以被中断 */</span></span><br><span class="line">		schedule(); <span class="comment">/* 进行调度 */</span></span><br><span class="line">		<span class="keyword">if</span> (!(current-&gt;signal &amp;= ~(<span class="number">1</span>&lt;&lt;(SIGCHLD<span class="number">-1</span>))))</span><br><span class="line">			<span class="keyword">goto</span> repeat;</span><br><span class="line">		<span class="keyword">else</span></span><br><span class="line">			<span class="keyword">return</span> -EINTR;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> -ECHILD;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>注意：只要 <code>wait(&amp;stat)</code> 检测到一个子进程处于 TASK_STOPPED 或者 TASK_ZOMBIE 状态时就会返回</li>
+<li>当 <code>wait(&amp;stat)</code> 遍历完所有进程都找不到当前进程的子进程时，就会返回 <code>-ECHILD</code></li>
+</ul>
+<p>根据实验要求，我们编写的实验代码如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;time.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/times.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/wait.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> * argv[])</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> pid[<span class="number">8</span>];</span><br><span class="line">	<span class="keyword">int</span> i;</span><br><span class="line">	<span class="keyword">int</span> stat;</span><br><span class="line">	<span class="keyword">for</span> (i = <span class="number">0</span>; i &lt; <span class="number">8</span>; i++) &#123;</span><br><span class="line">		pid[i] = fork();</span><br><span class="line">		<span class="keyword">if</span>(!pid[i])&#123; <span class="comment">/* 子进程调用cpuio_bound */</span></span><br><span class="line">			cpuio_bound(<span class="number">20</span>,<span class="number">18</span>,<span class="number">2</span>);</span><br><span class="line">			<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">else</span> <span class="keyword">if</span>(pid[i] &lt; <span class="number">0</span> )</span><br><span class="line">		&#123;</span><br><span class="line">			<span class="built_in">printf</span>(<span class="string">&quot;Failed to fork child process %d!\n&quot;</span>,i+<span class="number">1</span>);</span><br><span class="line">			<span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">for</span> (i = <span class="number">0</span>; i &lt; <span class="number">8</span>; i++)</span><br><span class="line">		<span class="built_in">printf</span>(<span class="string">&quot;Child PID: %d\n&quot;</span>, pid[i]);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">while</span> ((wait(&amp;stat)) &gt; <span class="number">0</span>); <span class="comment">/* 等待所有子进程返回 */</span></span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>由于实验要求记录从操作系统启动到系统关机过程中所有进程的运行轨迹，因此我们需要先了解一下系统启动的过程：</p>
+<ul>
+<li>bootloader（引导加载器）负责从硬盘或软盘加载 Linux 内核和根文件系统（root filesystem），当计算机开机时，bootloader 会读取硬盘或软盘上的配置信息（grub、lilo …），然后将内核和根文件系统加载到内存中</li>
+<li>内核启动后，会首先读取根文件系统，将其挂载到根目录下，然后调用 swapper 进程（最开始处于内核态，然后通过 <code>move_to_user_mode</code> 切换到用户态），该进程会执行一些初始化任务，如设置内存分配、网络初始化等</li>
+<li>init 进程是 Linux 系统的第一个用户空间程序，它负责启动其他进程和服务，在 init 进程启动后，它会加载其他所需的进程和服务，如：网络服务（sshd、httpd …）、系统服务（crond、syslog …）等</li>
+<li>init 进程加载的其他进程和服务也会像 init 进程一样，通过系统调用与内核交互，它们可以访问内核提供的功能，它们也可以创建、删除和监控其他进程</li>
+<li>在 init 进程加载其他进程和服务后，用户空间程序就可以正常运行了，用户可以通过终端或其他界面与系统交互，如：输入输出、文件操作、网络访问 …</li>
+</ul>
+<p>下面是 swapper 进程（pid=0）执行的代码： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">main</span><span class="params">(<span class="keyword">void</span>)</span>		<span class="comment">/* This really IS void, no error here. */</span></span></span><br><span class="line"><span class="function"></span>&#123;			<span class="comment">/* The startup routine assumes (well, ...) this */</span></span><br><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment"> * Interrupts are still disabled. Do necessary setups, then</span></span><br><span class="line"><span class="comment"> * enable them</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"> 	ROOT_DEV = ORIG_ROOT_DEV;</span><br><span class="line"> 	drive_info = DRIVE_INFO;</span><br><span class="line">	memory_end = (<span class="number">1</span>&lt;&lt;<span class="number">20</span>) + (EXT_MEM_K&lt;&lt;<span class="number">10</span>);</span><br><span class="line">	memory_end &amp;= <span class="number">0xfffff000</span>;</span><br><span class="line">	<span class="keyword">if</span> (memory_end &gt; <span class="number">16</span>*<span class="number">1024</span>*<span class="number">1024</span>)</span><br><span class="line">		memory_end = <span class="number">16</span>*<span class="number">1024</span>*<span class="number">1024</span>;</span><br><span class="line">	<span class="keyword">if</span> (memory_end &gt; <span class="number">12</span>*<span class="number">1024</span>*<span class="number">1024</span>) </span><br><span class="line">		buffer_memory_end = <span class="number">4</span>*<span class="number">1024</span>*<span class="number">1024</span>;</span><br><span class="line">	<span class="keyword">else</span> <span class="keyword">if</span> (memory_end &gt; <span class="number">6</span>*<span class="number">1024</span>*<span class="number">1024</span>)</span><br><span class="line">		buffer_memory_end = <span class="number">2</span>*<span class="number">1024</span>*<span class="number">1024</span>;</span><br><span class="line">	<span class="keyword">else</span></span><br><span class="line">		buffer_memory_end = <span class="number">1</span>*<span class="number">1024</span>*<span class="number">1024</span>;</span><br><span class="line">	main_memory_start = buffer_memory_end;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> RAMDISK</span></span><br><span class="line">	main_memory_start += rd_init(main_memory_start, RAMDISK*<span class="number">1024</span>);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">	mem_init(main_memory_start,memory_end); <span class="comment">/* 内存分配和初始化相关的处理 */</span></span><br><span class="line">	trap_init(); <span class="comment">/* 初始化trap栈,即用于保存trap上下文的栈(trap即是异常处理) */</span></span><br><span class="line">	blk_dev_init(); <span class="comment">/* 初始化块设备结构与驱动 */</span></span><br><span class="line">	chr_dev_init(); <span class="comment">/* 初始化字符设备结构与驱动 */</span></span><br><span class="line">	tty_init(); <span class="comment">/* 初始化tty终端设备 */</span></span><br><span class="line">	time_init(); <span class="comment">/* 初始化时间模块结构 */</span></span><br><span class="line">	sched_init(); <span class="comment">/* 初始化调度模块结构 */</span></span><br><span class="line">	buffer_init(buffer_memory_end); <span class="comment">/* 初始化缓冲区模块结构 */</span></span><br><span class="line">	hd_init(); <span class="comment">/* 初始化硬盘模块结构 */</span></span><br><span class="line">	floppy_init(); <span class="comment">/* 初始化软盘模块结构以及其他配置 */</span></span><br><span class="line">	sti(); <span class="comment">/* 在系统调用表(System Call Table)中初始化内核模块 */</span></span><br><span class="line">	move_to_user_mode(); <span class="comment">/* 将内核空间的数据和指针复制到用户空间 */</span></span><br><span class="line">	<span class="keyword">if</span> (!fork()) &#123;		<span class="comment">/* 利用fork创建init进程(pid=1) */</span></span><br><span class="line">		init(); <span class="comment">/* 核心初始化操作 */</span></span><br><span class="line">	&#125;</span><br><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment"> *   NOTE!!   For any other task &#x27;pause()&#x27; would mean we have to get a</span></span><br><span class="line"><span class="comment"> * signal to awaken, but task0 is the sole exception (see &#x27;schedule()&#x27;)</span></span><br><span class="line"><span class="comment"> * as task 0 gets activated at every idle moment (when no other tasks</span></span><br><span class="line"><span class="comment"> * can run). For task0 &#x27;pause()&#x27; just means we go check if some other</span></span><br><span class="line"><span class="comment"> * task can run, and if not we return here.</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line">	<span class="keyword">for</span>(;;) pause();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>前半部分都是一系列的初始化操作</li>
+<li>系统调用 fork 创建的 init 进程会执行核心函数 init，源码如下：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">char</span> *argv_rc[] = &#123;<span class="string">&quot;/bin/sh&quot;</span>, <span class="literal">NULL</span>&#125;;</span><br><span class="line"><span class="keyword">static</span> <span class="keyword">char</span> *envp_rc[] = &#123;<span class="string">&quot;HOME=/&quot;</span>, <span class="literal">NULL</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">char</span> *argv[] = &#123;<span class="string">&quot;-/bin/sh&quot;</span>, <span class="literal">NULL</span>&#125;;</span><br><span class="line"><span class="keyword">static</span> <span class="keyword">char</span> *envp[] = &#123;<span class="string">&quot;HOME=/usr/root&quot;</span>, <span class="literal">NULL</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">init</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> pid,i;</span><br><span class="line"></span><br><span class="line">	setup((<span class="keyword">void</span> *) &amp;drive_info); <span class="comment">/* 完成文件系统的加载 */</span></span><br><span class="line">    <span class="comment">/* /dev/tty0表示系统中的第一个控制台设备</span></span><br><span class="line"><span class="comment">    在启动Linux系统时,系统会默认使用/dev/tty0作为控制台设备</span></span><br><span class="line"><span class="comment">    dup用来复制标准输入的文件描述符 */</span></span><br><span class="line">	(<span class="keyword">void</span>) open(<span class="string">&quot;/dev/tty0&quot;</span>,O_RDWR,<span class="number">0</span>); <span class="comment">// 打开stdin </span></span><br><span class="line">	(<span class="keyword">void</span>) dup(<span class="number">0</span>);					 <span class="comment">// 打开stout </span></span><br><span class="line">	(<span class="keyword">void</span>) dup(<span class="number">0</span>);					 <span class="comment">// 打开sterr</span></span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;%d buffers = %d bytes buffer space\n\r&quot;</span>,NR_BUFFERS,</span><br><span class="line">		NR_BUFFERS*BLOCK_SIZE);</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">&quot;Free mem: %d bytes\n\r&quot;</span>,memory_end-main_memory_start);</span><br><span class="line">	<span class="keyword">if</span> (!(pid=fork())) &#123;</span><br><span class="line">		close(<span class="number">0</span>);</span><br><span class="line">		<span class="keyword">if</span> (open(<span class="string">&quot;/etc/rc&quot;</span>,O_RDONLY,<span class="number">0</span>)) <span class="comment">/* 该文件包含了系统启动时需要执行的一系列命令(这些命令用于设置系统环境,启动各种服务,配置网络等) */</span></span><br><span class="line">			_exit(<span class="number">1</span>);</span><br><span class="line">		execve(<span class="string">&quot;/bin/sh&quot;</span>,argv_rc,envp_rc); </span><br><span class="line">		_exit(<span class="number">2</span>);</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> (pid&gt;<span class="number">0</span>)</span><br><span class="line">		<span class="keyword">while</span> (pid != wait(&amp;i)) <span class="comment">/* 子进程结束以后,父进程继续执行 */</span></span><br><span class="line">			<span class="comment">/* nothing */</span>;</span><br><span class="line">	<span class="keyword">while</span> (<span class="number">1</span>) &#123;</span><br><span class="line">		<span class="keyword">if</span> ((pid=fork())&lt;<span class="number">0</span>) &#123;</span><br><span class="line">			<span class="built_in">printf</span>(<span class="string">&quot;Fork failed in init\r\n&quot;</span>);</span><br><span class="line">			<span class="keyword">continue</span>;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">if</span> (!pid) &#123;</span><br><span class="line">			close(<span class="number">0</span>);close(<span class="number">1</span>);close(<span class="number">2</span>);</span><br><span class="line">			setsid(); <span class="comment">/* 创建一个新的会话,并将其作为当前进程的会话首进程 */</span></span><br><span class="line">			(<span class="keyword">void</span>) open(<span class="string">&quot;/dev/tty0&quot;</span>,O_RDWR,<span class="number">0</span>); </span><br><span class="line">			(<span class="keyword">void</span>) dup(<span class="number">0</span>); </span><br><span class="line">			(<span class="keyword">void</span>) dup(<span class="number">0</span>);</span><br><span class="line">			_exit(execve(<span class="string">&quot;/bin/sh&quot;</span>,argv,envp));</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">while</span> (<span class="number">1</span>)</span><br><span class="line">			<span class="keyword">if</span> (pid == wait(&amp;i))</span><br><span class="line">				<span class="keyword">break</span>;</span><br><span class="line">		<span class="built_in">printf</span>(<span class="string">&quot;\n\rchild %d died with code %04x\n\r&quot;</span>,pid,i);</span><br><span class="line">		sync(); <span class="comment">/* 强制文件系统将数据写入磁盘(不会立即将数据写入磁盘,而是会等待磁盘的缓冲区被填满后才会将数据写入磁盘) */</span></span><br><span class="line">	&#125;</span><br><span class="line">	_exit(<span class="number">0</span>);	<span class="comment">/* NOTE! _exit, not exit() */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>在创建日志文件 <code>/var/process.log</code> 前，需要以下操作先执行：</p>
+<ul>
+<li>等待 <code>setup((void *) &amp;drive_info)</code> 完成文件系统的加载（否则会导致系统错误）</li>
+<li>等待 <code>stdin/stdout/stderr</code> 生成完毕（否则会导致文件描述符混乱）</li>
+</ul>
+<p>为了监控 init 进程，我们需要将 init 进程中如下的代码迁移到 swapper 进程中，但这样会触发一个 <code>task[0] trying to sleep</code> 的报错，网上搜索后发现是配置的问题</p>
+<p>所以我这里选择不监控 swapper 进程（包括它的非 init 子进程），将 <code>open(&quot;/var/process.log&quot;)</code> 写到 init 进程中：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">setup((<span class="keyword">void</span> *) &amp;drive_info);</span><br><span class="line">(<span class="keyword">void</span>) open(<span class="string">&quot;/dev/tty0&quot;</span>,O_RDWR,<span class="number">0</span>);</span><br><span class="line">(<span class="keyword">void</span>) dup(<span class="number">0</span>);</span><br><span class="line">(<span class="keyword">void</span>) dup(<span class="number">0</span>);</span><br><span class="line">(<span class="keyword">void</span>)open(<span class="string">&quot;/var/process.log&quot;</span>, O_CREAT | O_TRUNC | O_WRONLY, <span class="number">0666</span>);</span><br></pre></td></tr></table></figure>
+<ul>
+<li>由于用户态的其他进程都是 init 进程的子进程，因此 <code>/var/process.log</code> 会作为 “文件描述符-3” 被传递给后续的用户态进程</li>
+<li>注意：swapper 不止有 init 一个子进程，而其他子进程没有 “文件描述符-3”，也就不会被监控</li>
+</ul>
+<p>接下来我们需要使用 “文件描述符-3” 来往 <code>/var/process.log</code> 中写入数据，不过在此之前我们需要先搞清楚 printk 函数的底层逻辑：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">char</span> buf[<span class="number">1024</span>];</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">printk</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> *fmt, ...)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	va_list args;</span><br><span class="line">	<span class="keyword">int</span> i;</span><br><span class="line"></span><br><span class="line">	va_start(args, fmt); <span class="comment">/* 初始化可变参数列表 */</span></span><br><span class="line">	i = <span class="built_in">vsprintf</span>(buf, fmt, args); <span class="comment">/* 用于将格式化字符串中的参数替换为实际值 */</span></span><br><span class="line">	va_end(args); <span class="comment">/* 清理可变参数列表 */</span></span><br><span class="line">	__asm__(<span class="string">&quot;push %%fs\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;push %%ds\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;pop %%fs\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;pushl %0\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;pushl $buf\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;pushl $0\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;call tty_write\n\t&quot;</span> <span class="comment">/* 将数据写入终端设备(打印) */</span></span><br><span class="line">			<span class="string">&quot;addl $8,%%esp\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;popl %0\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;pop %%fs&quot;</span> ::<span class="string">&quot;r&quot;</span>(i)</span><br><span class="line">			: <span class="string">&quot;ax&quot;</span>, <span class="string">&quot;cx&quot;</span>, <span class="string">&quot;dx&quot;</span>);</span><br><span class="line">	<span class="keyword">return</span> i;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>我们可以参考 printk 函数的代码，仿照写一个格式化的写入函数：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;linux/sched.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/stat.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">char</span> logbuf[<span class="number">1024</span>];</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">writelogf</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> *fmt, ...)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	va_list args;</span><br><span class="line">	<span class="keyword">int</span> i;</span><br><span class="line"></span><br><span class="line">	va_start(args, fmt);</span><br><span class="line">	i = <span class="built_in">vsprintf</span>(logbuf, fmt, args); </span><br><span class="line">	va_end(args);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (!(file = task[<span class="number">1</span>]-&gt;filp[<span class="number">3</span>])) <span class="comment">/* 获取init进程的&quot;文件描述符-3&quot;(日志文件) */</span></span><br><span class="line">		<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">	inode = file-&gt;f_inode;</span><br><span class="line">	__asm__(<span class="string">&quot;push %%fs\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;push %%ds\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;pop %%fs\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;pushl %0\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;pushl $logbuf\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;pushl %1\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;pushl %2\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;call file_write\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;addl $12,%%esp\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;popl %0\n\t&quot;</span></span><br><span class="line">			<span class="string">&quot;pop %%fs&quot;</span> ::<span class="string">&quot;r&quot;</span>(i),<span class="string">&quot;r&quot;</span>(file),<span class="string">&quot;r&quot;</span>(inode)</span><br><span class="line">			: <span class="string">&quot;ax&quot;</span>, <span class="string">&quot;cx&quot;</span>, <span class="string">&quot;dx&quot;</span>);</span><br><span class="line">	<span class="keyword">return</span> i;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>PS：这里不能直接调用 write，因为 write 使用 <code>file=current-&gt;filp[fd]</code> 来获取文件描述符，此时 swapper 创建的非 init 进程就会因为缺少对应的文件描述符而发生错误</li>
+</ul>
+<p>接下来我们需要分析进程的运行轨迹，在 linux-0.11 中，进程有5个状态：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> TASK_RUNNING			0 <span class="comment">/* 就绪状态 */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> TASK_INTERRUPTIBLE		1 <span class="comment">/* 可打断的等待状态 */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> TASK_UNINTERRUPTIBLE	2 <span class="comment">/* 不可打断的等待状态 */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> TASK_ZOMBIE				3 <span class="comment">/* 僵死状态 */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> TASK_STOPPED			4 <span class="comment">/* 挂起状态(在linux-0.11中并不会被设置) */</span></span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>就绪状态：表示该进程可以获取 CPU 资源（似乎 linux-0.11 没有区分就绪状态和运行状态）</li>
+<li>可打断的等待状态：等待资源有效时唤醒，可以被其他进程或中断信号所打断</li>
+<li>不可打断的等待状态：等待资源有效时唤醒，不能被其他进程或中断信号所打断</li>
+<li>僵死状态：进程资源用户空间被释放，但内核中的进程PCB并没有释放 </li>
+<li>挂起状态：进程被外部程序暂停</li>
+</ul>
+<p>linux-0.11 的进程状态转化图如下：</p>
+<img src="/2023/10/26/HIT-OSLab3/1698330533711.png" class width="1698330533711"> 
+<ul>
+<li>TASK_UNINTERRUPTIBLE 只能被 <code>wake_up</code> 唤醒</li>
+<li>TASK_INTERRUPTIBLE 可以被 <code>wake_up</code> 与 <code>schedule</code> 唤醒</li>
+</ul>
+<p>先分析一下 linux-0.11 与进程调度相关的几个函数：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">schedule</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> i,next,c;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> ** <span class="title">p</span>;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">/* check alarm, wake up any interruptible tasks that have got a signal */</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span>(p = &amp;LAST_TASK ; p &gt; &amp;FIRST_TASK ; --p) <span class="comment">/* 更新可以被调度的程序 */</span></span><br><span class="line">		<span class="keyword">if</span> (*p) &#123;</span><br><span class="line">			<span class="keyword">if</span> ((*p)-&gt;alarm &amp;&amp; (*p)-&gt;alarm &lt; jiffies) &#123;</span><br><span class="line">					(*p)-&gt;signal |= (<span class="number">1</span>&lt;&lt;(SIGALRM<span class="number">-1</span>));</span><br><span class="line">					(*p)-&gt;alarm = <span class="number">0</span>;</span><br><span class="line">				&#125;</span><br><span class="line">			<span class="keyword">if</span> (((*p)-&gt;signal &amp; ~(_BLOCKABLE &amp; (*p)-&gt;blocked)) &amp;&amp;</span><br><span class="line">			(*p)-&gt;state==TASK_INTERRUPTIBLE)&#123;</span><br><span class="line">                <span class="comment">/* 接收到中断信号(等待资源已满足) &amp;&amp; TASK_INTERRUPTIBLE */</span></span><br><span class="line">				(*p)-&gt;state=TASK_RUNNING;</span><br><span class="line">				writelogf(<span class="string">&quot;%d\tJ\t%d\n&quot;</span>,(*p)-&gt;pid,jiffies);</span><br><span class="line">			&#125;</span><br><span class="line">				</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">/* this is the scheduler proper: */</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">while</span> (<span class="number">1</span>) &#123; <span class="comment">/* 处理调度前的配置,选择下一个将要被调度的进程 */</span></span><br><span class="line">		c = <span class="number">-1</span>;</span><br><span class="line">		next = <span class="number">0</span>;</span><br><span class="line">		i = NR_TASKS;</span><br><span class="line">		p = &amp;task[NR_TASKS];</span><br><span class="line">		<span class="keyword">while</span> (--i) &#123;</span><br><span class="line">			<span class="keyword">if</span> (!*--p)</span><br><span class="line">				<span class="keyword">continue</span>;</span><br><span class="line">			<span class="keyword">if</span> ((*p)-&gt;state == TASK_RUNNING &amp;&amp; (*p)-&gt;counter &gt; c) </span><br><span class="line">                <span class="comment">/* (*p)-&gt;counter是时间片(用于表示该进程执行的时间) */</span></span><br><span class="line">				c = (*p)-&gt;counter, next = i; <span class="comment">/* 选择counter最大的进程进行调度 */</span></span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">if</span> (c) <span class="keyword">break</span>;</span><br><span class="line">		<span class="keyword">for</span>(p = &amp;LAST_TASK ; p &gt; &amp;FIRST_TASK ; --p)</span><br><span class="line">			<span class="keyword">if</span> (*p)</span><br><span class="line">				(*p)-&gt;counter = ((*p)-&gt;counter &gt;&gt; <span class="number">1</span>) +</span><br><span class="line">						(*p)-&gt;priority; <span class="comment">/* 更新调度时间片 */</span></span><br><span class="line">	&#125;</span><br><span class="line">	switch_to(next); <span class="comment">/* 从当前进程切换到另一个进程 */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>函数 <code>schedule</code> 每次开始调度前，都会先检查是否有满足 TASK_RUNNING 条件的进程，然后使其带上 TASK_RUNNING 标记</li>
+<li>接下来 <code>schedule</code> 会在带有 TASK_RUNNING 的进程中，选择 counter 最大的进程为目标</li>
+<li>然后 <code>schedule</code> 会更新所有进程的时间片（算法为：<code>counter=2*counter+priority</code>） </li>
+<li>最后使用 <code>switch_to(next)</code> 切换到目标进程</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">do_timer</span><span class="params">(<span class="keyword">long</span> cpl)</span> </span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">extern</span> <span class="keyword">int</span> beepcount;</span><br><span class="line">	<span class="function"><span class="keyword">extern</span> <span class="keyword">void</span> <span class="title">sysbeepstop</span><span class="params">(<span class="keyword">void</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (beepcount)</span><br><span class="line">		<span class="keyword">if</span> (!--beepcount)</span><br><span class="line">			sysbeepstop();</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (cpl)</span><br><span class="line">		current-&gt;utime++;</span><br><span class="line">	<span class="keyword">else</span></span><br><span class="line">		current-&gt;stime++;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (next_timer) &#123;</span><br><span class="line">		next_timer-&gt;jiffies--;</span><br><span class="line">		<span class="keyword">while</span> (next_timer &amp;&amp; next_timer-&gt;jiffies &lt;= <span class="number">0</span>) &#123;</span><br><span class="line">			<span class="keyword">void</span> (*fn)(<span class="keyword">void</span>);</span><br><span class="line">			</span><br><span class="line">			fn = next_timer-&gt;fn;</span><br><span class="line">			next_timer-&gt;fn = <span class="literal">NULL</span>;</span><br><span class="line">			next_timer = next_timer-&gt;next;</span><br><span class="line">			(fn)();</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> (current_DOR &amp; <span class="number">0xf0</span>)</span><br><span class="line">		do_floppy_timer(); <span class="comment">/* 内核线程函数,负责处理Floppy设备的定时器中断 */</span></span><br><span class="line">	<span class="keyword">if</span> ((--current-&gt;counter)&gt;<span class="number">0</span>) <span class="keyword">return</span>; <span class="comment">/* 随着current占用CPU资源,current-&gt;counter逐渐减少 */</span></span><br><span class="line">	current-&gt;counter=<span class="number">0</span>;</span><br><span class="line">	<span class="keyword">if</span> (!cpl) <span class="keyword">return</span>;</span><br><span class="line">	schedule(); <span class="comment">/* 当前进程时间片用完后,执行调度程序 */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>函数 <code>do_timer</code> 是内核中的一个内核线程函数，负责处理系统定时器，并在定时器触发时执行相应的操作</li>
+<li>函数 <code>do_timer</code> 的执行周期是由内核调度器设置的，代表了内核调度器处理进程调度的速度</li>
+<li>在 <code>do_timer</code> 中，当前正在运行的进程的时间片会逐渐减少，意味着该进程的 “优先程度” 会逐步下降</li>
+</ul>
+<p>上述两个函数体现了 linux-0.11 调度的核心思想：基于动态优先级的时间片轮转调度</p>
+<ul>
+<li>占用 CPU 资源会导致 “时间片” 下降，等待调度会导致 “时间片” 上升</li>
+<li>调度程序优先调用 “时间片” 大的进程</li>
+<li>新进入 <code>task[NR_TASKS]</code> 的进程优先级比较低，因此没有抢占机制</li>
+</ul>
+<p>回到实验，为了记录进程的运行轨迹，我们只需要在内核修改 <code>p-&gt;state</code> 的代码后调用 <code>writelogf</code> 即可</p>
+<p>有一点需要注意，在 <code>sleep_on</code> 函数中需要特殊处理：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">sleep_on</span><span class="params">(struct task_struct **p)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> *<span class="title">tmp</span>;</span></span><br><span class="line">    ......</span><br><span class="line">	<span class="keyword">if</span>(current-&gt;pid != <span class="number">1</span>)</span><br><span class="line">		writelogf(<span class="string">&quot;%d\tW\t%d\n&quot;</span>,current-&gt;pid,jiffies);</span><br><span class="line">	schedule();</span><br><span class="line">    ......</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>之前我们没有选择在 swapper 进程中创建 <code>/var/process.log</code>，并且 init 进程在调用 <code>setup((void *) &amp;drive_info)</code> 时就会执行到 <code>sleep_on</code> 函数</li>
+<li>由于在 init 进程调用 <code>sleep_on</code> 时，文件 <code>/var/process.log</code> 并没有创建完毕，所以此时调用 <code>writelogf</code> 就会导致系统错误</li>
+</ul>
+<p>另外在 <code>schedule</code> 函数中有一点需要注意：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span>(current-&gt;pid != task[next]-&gt;pid)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="keyword">if</span>(current-&gt;state == TASK_RUNNING)</span><br><span class="line">		writelogf(<span class="string">&quot;%d\tJ\t%d\n&quot;</span>,current-&gt;pid,jiffies);</span><br><span class="line">	writelogf(<span class="string">&quot;%d\tR\t%d\n&quot;</span>,task[next]-&gt;pid,jiffies);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>记录 task[next] 进程的状态</li>
+</ul>
+<p>到了实验的最后一步，需要先编译并执行之前写的 <code>process.c</code>：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">gcc -o process process.c</span><br><span class="line">./process</span><br><span class="line">sync # 刷新cache,确保文件确实写入了磁盘</span><br></pre></td></tr></table></figure>
+<p>效果如如下：</p>
+<img src="/2023/10/26/HIT-OSLab3/1698325401290.png" class width="1698325401290">  
+<p>接着就可以用 <code>mount-hdc</code> 挂载文件，并把 <code>/oslab/hdc/var/process.log</code> 拿出，然后使用 stat_log.py 脚本进行测试：（由于我没有记录完整的 init 进程，因此我这里只测试 process 以及它生成的子进程）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">(Unit: tick)</span><br><span class="line">Process   Turnaround   Waiting   CPU Burst   I/O Burst</span><br><span class="line">      <span class="number">0</span>        <span class="number">23207</span>         <span class="number">0</span>           <span class="number">0</span>           <span class="number">0</span></span><br><span class="line">      <span class="number">6</span>        <span class="number">14617</span>         <span class="number">7</span>           <span class="number">2</span>       <span class="number">14607</span></span><br><span class="line">      <span class="number">7</span>        <span class="number">14614</span>     <span class="number">12606</span>        <span class="number">1801</span>         <span class="number">206</span></span><br><span class="line">      <span class="number">8</span>        <span class="number">14612</span>     <span class="number">12606</span>        <span class="number">1801</span>         <span class="number">205</span></span><br><span class="line">      <span class="number">9</span>        <span class="number">14610</span>     <span class="number">12605</span>        <span class="number">1800</span>         <span class="number">205</span></span><br><span class="line">     <span class="number">10</span>        <span class="number">14610</span>     <span class="number">12604</span>        <span class="number">1801</span>         <span class="number">204</span></span><br><span class="line">     <span class="number">11</span>        <span class="number">14608</span>     <span class="number">12604</span>        <span class="number">1800</span>         <span class="number">204</span></span><br><span class="line">     <span class="number">12</span>        <span class="number">14606</span>     <span class="number">12603</span>        <span class="number">1800</span>         <span class="number">203</span></span><br><span class="line">     <span class="number">13</span>        <span class="number">14606</span>     <span class="number">12602</span>        <span class="number">1801</span>         <span class="number">202</span></span><br><span class="line">     <span class="number">14</span>        <span class="number">14604</span>     <span class="number">12602</span>        <span class="number">1800</span>         <span class="number">202</span></span><br><span class="line">     <span class="number">15</span>            <span class="number">3</span>         <span class="number">0</span>           <span class="number">3</span>           <span class="number">0</span></span><br><span class="line">     <span class="number">16</span>            <span class="number">3</span>         <span class="number">0</span>           <span class="number">1</span>           <span class="number">1</span></span><br><span class="line">Average:    <span class="number">12891.67</span>   <span class="number">8403.25</span></span><br><span class="line">Throughout: <span class="number">0.03</span>/s</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在运行测试脚本之前，要先手动将不需要的 pid 给去除</li>
+<li>否则就会因为缺少 swapper 线程（包括它的非 init 子进程）的部分信息而引发报错</li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/labs/" rel="tag"><i class="fa fa-tag"></i> labs</a>
+              <a href="/tags/OS/" rel="tag"><i class="fa fa-tag"></i> OS</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/10/24/%E7%BB%BF%E7%9B%9F%E6%9D%AFCTF2023/" rel="prev" title="绿盟杯CTF2023">
+      <i class="fa fa-chevron-left"></i> 绿盟杯CTF2023
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">295</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">13</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">152</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">4.1m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">62:41</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
