@@ -156,6 +156,125 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/03/30/IO_FILE%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90%EF%BC%9Afopen/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/03/30/IO_FILE%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90%EF%BC%9Afopen/" class="post-title-link" itemprop="url">IO_FILE源码分析：fopen</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-03-30 18:18:39" itemprop="dateCreated datePublished" datetime="2022-03-30T18:18:39+08:00">2022-03-30</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-03-31 01:09:16" itemprop="dateModified" datetime="2022-03-31T01:09:16+08:00">2022-03-31</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/SourceCodeAnalysis/" itemprop="url" rel="index"><span itemprop="name">SourceCodeAnalysis</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>6.9k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="IO-FILE源码分析：fopen"><a href="#IO-FILE源码分析：fopen" class="headerlink" title="IO_FILE源码分析：fopen"></a>IO_FILE源码分析：fopen</h2><p>连续做了几个 IO_FILE pwn 的题目，发现自己对于 IO_FILE 漏洞的原理不是很了解，于是打算学习学习 IO_FILE 的源码</p>
+<p>我打算先学习源码，之后再学习漏洞利用的底层原理</p>
+<p>感谢 raycp 师傅的源码讲解！！！</p>
+<hr>
+<p>fopen 是IO中最重要的函数之一，每当我们想打开文件时，第一个调用的便是这个函数</p>
+<p>先看看它的源码：（libc-2.23）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;libioP.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> __STDC__</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> _LIBC</span></span><br><span class="line"><span class="meta"># <span class="meta-keyword">include</span> <span class="meta-string">&lt;shlib-compat.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line"><span class="meta"># <span class="meta-keyword">define</span> _IO_new_fopen fopen</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line">_IO_FILE *</span><br><span class="line">_IO_new_fopen (filename, mode)</span><br><span class="line">     <span class="keyword">const</span> <span class="keyword">char</span> *filename;</span><br><span class="line">     <span class="keyword">const</span> <span class="keyword">char</span> *mode;</span><br><span class="line">&#123;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">locked_FILE</span></span></span><br><span class="line"><span class="class">  &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> _<span class="title">IO_FILE_plus</span> <span class="title">fp</span>;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> _IO_MTSAFE_IO</span></span><br><span class="line">    _IO_lock_t lock;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> _<span class="title">IO_wide_data</span> <span class="title">wd</span>;</span></span><br><span class="line">  &#125; *new_f = (struct locked_FILE *) <span class="built_in">malloc</span> (<span class="keyword">sizeof</span> (struct locked_FILE));</span><br><span class="line"><span class="comment">/* malloc分配内存空间 */</span></span><br><span class="line">  <span class="keyword">if</span> (new_f == <span class="literal">NULL</span>)</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> _IO_MTSAFE_IO</span></span><br><span class="line">  new_f-&gt;fp.file._lock = &amp;new_f-&gt;lock;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> defined _LIBC || defined _GLIBCPP_USE_WCHAR_T</span></span><br><span class="line">  _IO_no_init (&amp;new_f-&gt;fp.file, <span class="number">0</span>, <span class="number">0</span>, &amp;new_f-&gt;wd, &amp;_IO_wfile_jumps);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">else</span> <span class="comment">/* _IO_no_init对file结构体进行初始化 */</span></span></span><br><span class="line">  _IO_no_init (&amp;new_f-&gt;fp.file, <span class="number">1</span>, <span class="number">0</span>, <span class="literal">NULL</span>, <span class="literal">NULL</span>);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">  _IO_JUMPS (&amp;new_f-&gt;fp) = &amp;_IO_file_jumps; <span class="comment">/* 设置_IO_file_jumps函数表 */</span></span><br><span class="line">  _IO_file_init (&amp;new_f-&gt;fp); <span class="comment">/* _IO_file_init将结构体链接进_IO_list_all链表 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span>  !_IO_UNIFIED_JUMPTABLES</span></span><br><span class="line">  new_f-&gt;fp.vtable = <span class="literal">NULL</span>;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">  <span class="keyword">if</span> (_IO_file_fopen ((_IO_FILE *) new_f, filename, mode, <span class="number">1</span>) != <span class="literal">NULL</span>)</span><br><span class="line">    <span class="keyword">return</span> (_IO_FILE *) &amp;new_f-&gt;fp; <span class="comment">/* 执行系统调用打开文件 */</span></span><br><span class="line">  _IO_un_link (&amp;new_f-&gt;fp);</span><br><span class="line">  <span class="built_in">free</span> (new_f);</span><br><span class="line">  <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> _LIBC</span></span><br><span class="line">strong_alias (_IO_new_fopen, __new_fopen)</span><br><span class="line">versioned_symbol (libc, _IO_new_fopen, _IO_fopen, GLIBC_2_1);</span><br><span class="line">versioned_symbol (libc, __new_fopen, fopen, GLIBC_2_1);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br></pre></td></tr></table></figure>
+<p>fopen 实际上是 <code>_IO_new_fopen</code> 函数，前面都是一些初始化的操作：</p>
+<ul>
+<li><code>malloc</code>分配内存空间</li>
+<li><code>_IO_no_init</code> 对FILE结构体进行 <code>null</code> 初始化</li>
+<li><code>_IO_file_init</code> 将结构体链接进 <code>_IO_list_all</code> 链表</li>
+<li><code>_IO_file_fopen</code> 执行系统调用打开文件</li>
+</ul>
+<p>接下来便分别对它们进行分析：</p>
+<p><strong>malloc 分配内存空间</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">*new_f = (struct locked_FILE *) <span class="built_in">malloc</span> (<span class="keyword">sizeof</span> (struct locked_FILE));</span><br></pre></td></tr></table></figure>
+<p>这个“locked_FILE”是个结构体（就是FILE结构体），包含了3个条目：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">locked_FILE</span></span></span><br><span class="line"><span class="class">  &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> _<span class="title">IO_FILE_plus</span> <span class="title">fp</span>;</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> _IO_MTSAFE_IO</span></span><br><span class="line">    _IO_lock_t lock;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> _<span class="title">IO_wide_data</span> <span class="title">wd</span>;</span></span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
+<p>malloc 将会分配“locked_FILE”结构体大小的内存，最后在”fopen“执行完成后释放掉</p>
+<p><strong>_IO_no_init 对FILE结构体进行 null 初始化</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span></span><br><span class="line">_IO_no_init (fp, flags, orientation, wd, jmp)</span><br><span class="line">     _IO_FILE *fp;</span><br><span class="line">     <span class="keyword">int</span> flags;</span><br><span class="line">     <span class="keyword">int</span> orientation;</span><br><span class="line">     <span class="class"><span class="keyword">struct</span> _<span class="title">IO_wide_data</span> *<span class="title">wd</span>;</span></span><br><span class="line">     <span class="class"><span class="keyword">struct</span> _<span class="title">IO_jump_t</span> *<span class="title">jmp</span>;</span></span><br><span class="line">&#123;</span><br><span class="line">  fp-&gt;_flags = _IO_MAGIC|flags;</span><br><span class="line">  fp-&gt;_IO_buf_base = <span class="literal">NULL</span>;</span><br><span class="line">  fp-&gt;_IO_buf_end = <span class="literal">NULL</span>;</span><br><span class="line">  fp-&gt;_IO_read_base = <span class="literal">NULL</span>;</span><br><span class="line">  fp-&gt;_IO_read_ptr = <span class="literal">NULL</span>;</span><br><span class="line">  fp-&gt;_IO_read_end = <span class="literal">NULL</span>;</span><br><span class="line">  fp-&gt;_IO_write_base = <span class="literal">NULL</span>;</span><br><span class="line">  fp-&gt;_IO_write_ptr = <span class="literal">NULL</span>;</span><br><span class="line">  fp-&gt;_IO_write_end = <span class="literal">NULL</span>;</span><br><span class="line">  fp-&gt;_chain = <span class="literal">NULL</span>; <span class="comment">/* Not necessary. */</span></span><br><span class="line"></span><br><span class="line">  fp-&gt;_IO_save_base = <span class="literal">NULL</span>;</span><br><span class="line">  fp-&gt;_IO_backup_base = <span class="literal">NULL</span>;</span><br><span class="line">  fp-&gt;_IO_save_end = <span class="literal">NULL</span>;</span><br><span class="line">  fp-&gt;_markers = <span class="literal">NULL</span>;</span><br><span class="line">  fp-&gt;_cur_column = <span class="number">0</span>;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> _IO_JUMPS_OFFSET</span></span><br><span class="line">  fp-&gt;_vtable_offset = <span class="number">0</span>;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> _IO_MTSAFE_IO</span></span><br><span class="line">  _IO_lock_init (*fp-&gt;_lock);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">  fp-&gt;_mode = orientation;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> defined _LIBC || defined _GLIBCPP_USE_WCHAR_T</span></span><br><span class="line">  <span class="keyword">if</span> (orientation &gt;= <span class="number">0</span>)</span><br><span class="line">    &#123;</span><br><span class="line">      fp-&gt;_wide_data = wd; <span class="comment">/* 初始化fp的_wide_data字段 */</span></span><br><span class="line">      fp-&gt;_wide_data-&gt;_IO_buf_base = <span class="literal">NULL</span>;</span><br><span class="line">      fp-&gt;_wide_data-&gt;_IO_buf_end = <span class="literal">NULL</span>;</span><br><span class="line">      fp-&gt;_wide_data-&gt;_IO_read_base = <span class="literal">NULL</span>;</span><br><span class="line">      fp-&gt;_wide_data-&gt;_IO_read_ptr = <span class="literal">NULL</span>;</span><br><span class="line">      fp-&gt;_wide_data-&gt;_IO_read_end = <span class="literal">NULL</span>;</span><br><span class="line">      fp-&gt;_wide_data-&gt;_IO_write_base = <span class="literal">NULL</span>;</span><br><span class="line">      fp-&gt;_wide_data-&gt;_IO_write_ptr = <span class="literal">NULL</span>;</span><br><span class="line">      fp-&gt;_wide_data-&gt;_IO_write_end = <span class="literal">NULL</span>;</span><br><span class="line">      fp-&gt;_wide_data-&gt;_IO_save_base = <span class="literal">NULL</span>;</span><br><span class="line">      fp-&gt;_wide_data-&gt;_IO_backup_base = <span class="literal">NULL</span>;</span><br><span class="line">      fp-&gt;_wide_data-&gt;_IO_save_end = <span class="literal">NULL</span>;</span><br><span class="line"></span><br><span class="line">      fp-&gt;_wide_data-&gt;_wide_vtable = jmp;</span><br><span class="line">    &#125;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>对 _IO_FILE_plus 里面的条目进行置空操作，对 _IO_wide_data 进行赋值并置空</p>
+<p><strong>_IO_file_init 将结构体链接进 _IO_list_all 链表</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta"># <span class="meta-keyword">define</span> _IO_new_file_init _IO_file_init</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">void</span></span><br><span class="line">_IO_new_file_init (fp)</span><br><span class="line">     <span class="class"><span class="keyword">struct</span> _<span class="title">IO_FILE_plus</span> *<span class="title">fp</span>;</span></span><br><span class="line">&#123;</span><br><span class="line">  fp-&gt;file._offset = _IO_pos_BAD;</span><br><span class="line">  fp-&gt;file._IO_file_flags |= CLOSED_FILEBUF_FLAGS;</span><br><span class="line"></span><br><span class="line">  _IO_link_in (fp);</span><br><span class="line">  fp-&gt;file._fileno = <span class="number">-1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这个函数完成了一些设置（暂时不用管）调用了 _IO_link_in </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span></span><br><span class="line">_IO_link_in (fp)</span><br><span class="line">     <span class="class"><span class="keyword">struct</span> _<span class="title">IO_FILE_plus</span> *<span class="title">fp</span>;</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">if</span> ((fp-&gt;file._flags &amp; _IO_LINKED) == <span class="number">0</span>) </span><br><span class="line">        <span class="comment">/* 检查FILE结构体是否包含_IO_LINKED标志 */</span></span><br><span class="line">      &#123;</span><br><span class="line">	fp-&gt;file._flags |= _IO_LINKED;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> _IO_MTSAFE_IO</span></span><br><span class="line">	_IO_lock_lock (list_all_lock); <span class="comment">/* 加锁 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">	fp-&gt;file._chain = (_IO_FILE *) _IO_list_all;</span><br><span class="line">	_IO_list_all = fp;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> _IO_MTSAFE_IO</span></span><br><span class="line">	_IO_lock_unlock (list_all_lock); <span class="comment">/* 解锁 */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">      &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>在 <code>_chain</code> 字段（指向FILE链表的下一个单元）写入 <code>_IO_list_all</code> ，然后在 <code>_IO_list_all</code> 写入 fp ，此时 fp 成为了FILE链表的头部（全局变量 <code>_IO_list_all</code> 永远指向了FILE链表的头部 ）</p>
+<p>​        // 标准的插头法，和 fastbin，smallbin，unsortedbin 差不多</p>
+<p><strong>_IO_file_fopen 打开文件句柄</strong></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta"># <span class="meta-keyword">define</span> _IO_new_file_fopen _IO_file_fopen</span></span><br><span class="line"></span><br><span class="line">_IO_FILE *</span><br><span class="line">_IO_new_file_fopen (fp, filename, mode, is32not64)</span><br><span class="line">     _IO_FILE *fp;</span><br><span class="line">     <span class="keyword">const</span> <span class="keyword">char</span> *filename;</span><br><span class="line">     <span class="keyword">const</span> <span class="keyword">char</span> *mode;</span><br><span class="line">     <span class="keyword">int</span> is32not64;</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">int</span> oflags = <span class="number">0</span>, omode;</span><br><span class="line">  <span class="keyword">int</span> read_write;</span><br><span class="line">  <span class="keyword">int</span> oprot = <span class="number">0666</span>;</span><br><span class="line">  <span class="keyword">int</span> i;</span><br><span class="line">  _IO_FILE *result;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> _LIBC</span></span><br><span class="line">  <span class="keyword">const</span> <span class="keyword">char</span> *cs;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (_IO_file_is_open (fp)) <span class="comment">/* 检查文件描述符是否打开 */</span></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">  <span class="keyword">switch</span> (*mode) <span class="comment">/* 设置文件打开的模式(权限&amp;类型) */</span></span><br><span class="line">    &#123;</span><br><span class="line">    <span class="keyword">case</span> <span class="string">&#x27;r&#x27;</span>:</span><br><span class="line">      omode = O_RDONLY; <span class="comment">/* 只读 */</span></span><br><span class="line">      read_write = _IO_NO_WRITES;</span><br><span class="line">      <span class="keyword">break</span>;</span><br><span class="line">    <span class="keyword">case</span> <span class="string">&#x27;w&#x27;</span>:</span><br><span class="line">      omode = O_WRONLY; <span class="comment">/* 只写 */</span></span><br><span class="line">      oflags = O_CREAT|O_TRUNC;</span><br><span class="line">      read_write = _IO_NO_READS;</span><br><span class="line">      <span class="keyword">break</span>;</span><br><span class="line">    <span class="keyword">case</span> <span class="string">&#x27;a&#x27;</span>:</span><br><span class="line">      omode = O_WRONLY; <span class="comment">/* 只写 */</span></span><br><span class="line">      oflags = O_CREAT|O_APPEND;</span><br><span class="line">      read_write = _IO_NO_READS|_IO_IS_APPENDING;</span><br><span class="line">      <span class="keyword">break</span>;</span><br><span class="line">    <span class="keyword">default</span>:</span><br><span class="line">      __set_errno (EINVAL); <span class="comment">/* 设置错误代码 */</span></span><br><span class="line">      <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  <span class="keyword">for</span> (i = <span class="number">1</span>; i &lt; <span class="number">4</span>; ++i)</span><br><span class="line">    &#123;</span><br><span class="line">      <span class="keyword">switch</span> (*++mode) <span class="comment">/* 设置文件打开的模式(附加) */</span></span><br><span class="line">	&#123;</span><br><span class="line">	<span class="keyword">case</span> <span class="string">&#x27;\0&#x27;</span>: <span class="comment">/* 无附加 */</span></span><br><span class="line">	  <span class="keyword">break</span>;</span><br><span class="line">	<span class="keyword">case</span> <span class="string">&#x27;+&#x27;</span>: <span class="comment">/* 附加读&amp;写权限 */</span></span><br><span class="line">	  omode = O_RDWR;</span><br><span class="line">	  read_write &amp;= _IO_IS_APPENDING;</span><br><span class="line">	  <span class="keyword">continue</span>;</span><br><span class="line">	<span class="keyword">case</span> <span class="string">&#x27;x&#x27;</span>: <span class="comment">/* 附加可执行权限 */</span></span><br><span class="line">	  oflags |= O_EXCL;</span><br><span class="line">	  <span class="keyword">continue</span>;</span><br><span class="line">	<span class="keyword">case</span> <span class="string">&#x27;b&#x27;</span>: <span class="comment">/* 以二进制的形式进行读写 */</span></span><br><span class="line">	<span class="keyword">default</span>:</span><br><span class="line">	  <span class="keyword">continue</span>;</span><br><span class="line">	&#125;</span><br><span class="line">      <span class="keyword">break</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">  result = _IO_file_open (fp, filename, omode|oflags, oprot, read_write,</span><br><span class="line">			  is32not64); </span><br><span class="line">    <span class="comment">/* 调用_IO_file_open系统调用进行文件读取,后面的操作就不用管了 */</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> _LIBC</span></span><br><span class="line">  <span class="comment">/* Test whether the mode string specifies the conversion.  */</span></span><br><span class="line">  cs = <span class="built_in">strstr</span> (mode, <span class="string">&quot;,ccs=&quot;</span>);</span><br><span class="line">  <span class="keyword">if</span> (cs != <span class="literal">NULL</span>)</span><br><span class="line">    &#123;</span><br><span class="line">      <span class="comment">/* Yep.  Load the appropriate conversions and set the orientation</span></span><br><span class="line"><span class="comment">	 to wide.  */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">gconv_fcts</span> <span class="title">fcts</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> _<span class="title">IO_codecvt</span> *<span class="title">cc</span>;</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (! _IO_CHECK_WIDE (fp) || __wcsmbs_named_conv (&amp;fcts, cs + <span class="number">5</span>) != <span class="number">0</span>)</span><br><span class="line">	  &#123;</span><br><span class="line">	    <span class="comment">/* Something went wrong, we cannot load the conversion modules.</span></span><br><span class="line"><span class="comment">	       This means we cannot proceed since the user explicitly asked</span></span><br><span class="line"><span class="comment">	       for these.  */</span></span><br><span class="line">	    _IO_new_fclose (result);</span><br><span class="line">	    <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">	  &#125;</span><br><span class="line"></span><br><span class="line">	cc = fp-&gt;_codecvt = &amp;fp-&gt;_wide_data-&gt;_codecvt;</span><br><span class="line"></span><br><span class="line">	<span class="comment">/* The functions are always the same.  */</span></span><br><span class="line">	*cc = __libio_codecvt;</span><br><span class="line"></span><br><span class="line">	cc-&gt;__cd_in.__cd.__nsteps = <span class="number">1</span>; <span class="comment">/* Only one step allowed.  */</span></span><br><span class="line">	cc-&gt;__cd_in.__cd.__steps = fcts.towc;</span><br><span class="line"></span><br><span class="line">	cc-&gt;__cd_in.__cd.__data[<span class="number">0</span>].__invocation_counter = <span class="number">0</span>;</span><br><span class="line">	cc-&gt;__cd_in.__cd.__data[<span class="number">0</span>].__internal_use = <span class="number">1</span>;</span><br><span class="line">	cc-&gt;__cd_in.__cd.__data[<span class="number">0</span>].__flags = __GCONV_IS_LAST;</span><br><span class="line">	cc-&gt;__cd_in.__cd.__data[<span class="number">0</span>].__statep = &amp;result-&gt;_wide_data-&gt;_IO_state;</span><br><span class="line"></span><br><span class="line">	cc-&gt;__cd_out.__cd.__nsteps = <span class="number">1</span>; <span class="comment">/* Only one step allowed.  */</span></span><br><span class="line">	cc-&gt;__cd_out.__cd.__steps = fcts.tomb;</span><br><span class="line"></span><br><span class="line">	cc-&gt;__cd_out.__cd.__data[<span class="number">0</span>].__invocation_counter = <span class="number">0</span>;</span><br><span class="line">	cc-&gt;__cd_out.__cd.__data[<span class="number">0</span>].__internal_use = <span class="number">1</span>;</span><br><span class="line">	cc-&gt;__cd_out.__cd.__data[<span class="number">0</span>].__flags = __GCONV_IS_LAST;</span><br><span class="line">	cc-&gt;__cd_out.__cd.__data[<span class="number">0</span>].__statep = &amp;result-&gt;_wide_data-&gt;_IO_state;</span><br><span class="line"></span><br><span class="line">	<span class="comment">/* Set the mode now.  */</span></span><br><span class="line">	result-&gt;_mode = <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span>	<span class="comment">/* GNU libc */</span></span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> result;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>程序会先检查文件描述符是否打开，然后在 Switch-Case 里面设置文件打开的模式 </p>
+<hr>
+<p>fopen 只是开胃菜，还没有什么漏洞，接下来的 fread 就是重点了</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/03/29/FSOP+Unsortedbin%20attack+%E5%A0%86%E4%B8%8AORW/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1795,276 +1914,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/03/13/House%20Of%20%E7%B3%BB%E5%88%97/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/03/13/House%20Of%20%E7%B3%BB%E5%88%97/" class="post-title-link" itemprop="url">House Of 系列（持续更新）</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2022-03-13 15:35:22 / Modified: 15:40:26" itemprop="dateCreated datePublished" datetime="2022-03-13T15:35:22+08:00">2022-03-13</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/HouseOfSeries/" itemprop="url" rel="index"><span itemprop="name">HouseOfSeries</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>5.5k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>5 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="House-Of-Spirit"><a href="#House-Of-Spirit" class="headerlink" title="House Of Spirit"></a>House Of Spirit</h2><p>House Of Spirit 是一种 fastbin attack ，通过利用 free 函数来释放一个 fake chunk，将地址 free 到堆的 bin 链中，然后实现对栈地址的读写实现WAA</p>
-<p><strong>保护检查</strong></p>
-<ul>
-<li>fake chunk 的 ISMMAP 位不能为 1，因为 free 时，如果是 mmap 的 chunk，会单独处理</li>
-<li>fake chunk 地址需要对齐， MALLOC_ALIGN_MASK</li>
-<li>fake chunk 的 size 大小需要满足对应的 fastbin 的需求，同时也得对齐</li>
-<li>fake chunk 的 next chunk 的大小不能小于 <code>2 * SIZE_SZ</code>，同时也不能大于<code>av-&gt;system_mem</code></li>
-<li>fake chunk 对应的 fastbin 链表头部不能是该 fake chunk，即不能构成 double free 的情况</li>
-</ul>
-<p>主要是：当前chunk的size（chunk-&gt;size），和下一个chunk的size（nextchunk-&gt;size）</p>
-<p><strong>利用条件</strong></p>
-<ul>
-<li>可以控制 free 的参数，把它改为 fake chunk data addr（House Of Spirit的核心）</li>
-<li>可以控制 fake chunk 的 size</li>
-<li>可以控制 next chunk 的 size（程序会根据 fake chunk-&gt;size 来获取 next chunk 的位置）</li>
-</ul>
-<p><strong>利用姿势</strong></p>
-<p>现成了两种风格：</p>
-<ul>
-<li>释放栈中的 fake chunk，劫持 ret 返回地址（利用栈溢出覆盖free的参数）</li>
-<li>释放堆中的 fake chunk，劫持控制模块实现WAA（需要注意chunk结构和off-by-one）</li>
-</ul>
-<p>小技巧：</p>
-<ul>
-<li>一定要多多关注“可控区域”里的“数字”</li>
-<li>注意一些“计数器”</li>
-</ul>
-<p>用这些现成的“数字”充当 nextchunk-&gt;size 或者 chunk-&gt;size</p>
-<p><strong>版本影响</strong></p>
-<p>libc-2.23：基础检查</p>
-<p>libc-2.27：多了一个检查，nextchunk-&gt;presize 不为 0（注意 tcache 的影响）</p>
-<hr>
-<h2 id="House-Of-Force"><a href="#House-Of-Force" class="headerlink" title="House Of Force"></a>House Of Force</h2><p>house of force 是修改 top chunk size 的一种利用方法 ，利用 top chunk 分割中的漏洞来申请任意 chunk，再通过修改模块进行 GOT劫持，hook劫持</p>
-<p>假设这个时候的 top_chunk=0x601200，然后 malloc(0xffe00020)，然后对 malloc 申请的 size 进行检查，<code>0xffe00030 &lt; top_chunk_size</code> ，所以可以成功malloc内存，然后计算top_chunk的新地址：<code>0xffe00030+0x601200=0x100401230</code>, 因为是x86环境，最高位溢出了，所以<code>top_chunk=0x401230</code></p>
-<p>然后下次我们再malloc的时候，返回的地址就是<code>0x401238</code></p>
-<p><strong>保护检查</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ((<span class="keyword">unsigned</span> <span class="keyword">long</span>) (size) &gt;= (<span class="keyword">unsigned</span> <span class="keyword">long</span>) (nb + MINSIZE)) </span><br></pre></td></tr></table></figure>
-<p>只有 top chunk 的 size 大于等于申请的 size，才会有后续操作</p>
-<p><strong>利用条件</strong></p>
-<ul>
-<li>用户能够篡改 top chunk 的 size 字段（篡改为负数或很大值）</li>
-<li>用户可以申请任意大小的堆内存（包括负数）</li>
-<li>堆溢出，用于修改 top chunk-&gt;size</li>
-</ul>
-<p><strong>利用姿势</strong></p>
-<ul>
-<li>通过堆溢出将 top chunk 的 size 字段篡改成 -1（size 就变成了无符号整数中最大的值）</li>
-<li>计算偏移，申请大小为该偏移的chunk，把 top chunk 分割到可以修改的目标地址</li>
-</ul>
-<p>以下公式可以用来计算偏移：（有时 offse 有偏差也可以进行修正）</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">offset = target_addr - (top_chunk_addr + <span class="number">0x8</span>) <span class="comment"># 64位就改为&quot;+0x10&quot;</span></span><br><span class="line"><span class="comment"># target_addr：目标地址</span></span><br><span class="line"><span class="comment"># top_chunk_addr：top chunk起始地址</span></span><br></pre></td></tr></table></figure>
-<p>注意：offset 通常为负</p>
-<p><strong>版本影响</strong></p>
-<p>libc-2.23：基础检查，可以通过</p>
-<p>libc-2.27：在检查中给chunk添加了一个“范围”（min_address &amp; max_address），限制了申请chunk的地址范围，这样就导致 top chunk 无法分割到目标地址了，House Of Force 失效</p>
-<hr>
-<h2 id="House-Of-Einherjar"><a href="#House-Of-Einherjar" class="headerlink" title="House Of Einherjar"></a>House Of Einherjar</h2><p>house of einherjar 跟 house of force 差不多，最终目的都是控制 top chunk 的值，该技术可以强制使得<code>malloc</code>返回一个几乎任意地址的 chunk</p>
-<p>通过 off-by-one 把最后一个 chunk 的 pre_inuse 标志位置零，让 free 函数以为上一个 chunk 已经被 free，就会进行后向合并，根据 last chunk-&gt;fake presize 把 top chunk 合并到目标区域</p>
-<p>然后下次我们再malloc的时候，返回的地址就是目标地址</p>
-<p><strong>保护检查</strong></p>
-<p>Unlink 的检测：检查 <strong>“fake chunk-&gt;size”</strong> （必须可以通过 size 索引到“last chunk”，并且P位为“0”，这样才会进行 unlink），因为“fake_size”（offset）很大，fake chunk 会被当做是 large chunk ，所以还会格外检查 <strong>FD，BK，FDsize，BKsize</strong> </p>
-<p><strong>利用条件</strong></p>
-<ul>
-<li>用户能够篡改 top chunk 的 presize 字段（篡改为负数或很大值）</li>
-<li>有 off-by-one ，可以覆盖 last chunk 的P位为“\x00”（使其在和 top chunk 合并后还可以进行后向合并，通过“chunk-&gt;presize”索引到“fake chunk”把 top chunk 合并到“fake chunk”上）</li>
-<li>可以控制“fake chunk”</li>
-</ul>
-<p><strong>利用姿势</strong></p>
-<ul>
-<li>已有两个 chunk（最后一个chunk，和倒数第二个chunk）</li>
-<li>在倒数第二个 chunk 的最后一片内存空间（lastchunk-&gt;presize）中写入 offset（可以索引到 fakechunk），同时溢出“\x00”覆盖 lastchunk 的P位（lastchunk-&gt;size）</li>
-<li>提前在 fake chunk 处伪造好数据：presize（offset），size，FD，BK，FDsize，BKsize</li>
-<li>释放 lastchunk，这样 top chunk 就会转移到该地址</li>
-</ul>
-<p>以下公式可以用来计算偏移 presize：（有时 offse 有偏差也可以进行修正）</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">offset = lastchunk_addr - target_addr</span><br><span class="line"><span class="comment"># target_addr：目标地址</span></span><br><span class="line"><span class="comment"># lastchunk_addr：last chunk起始地址</span></span><br></pre></td></tr></table></figure>
-<p>小技巧：</p>
-<ul>
-<li>控制“fake chunk”，写入“fake_size”，在“FD，BK，FDsize，BKsize”中都写入“fake chunk addr”（target_addr）就可以通过检查（至少在 libc-2.23 是这样的）</li>
-</ul>
-<p><strong>版本影响</strong></p>
-<p>libc-2.23：基本没有影响，可以通过</p>
-<p>libc-2.27：Unlink 对 presize 的检查更为严格了，导致 House Of Einherjar 失效</p>
-<hr>
-<h2 id="House-Of-Lore"><a href="#House-Of-Lore" class="headerlink" title="House Of Lore"></a>House Of Lore</h2><p>House of Lore 攻击与 Glibc 堆管理中的 Small Bin 的机制紧密相关</p>
-<p>它的利用面很小，很容易被其他攻击技术取代</p>
-<ul>
-<li>House of Lore 可以实现 <strong>分配</strong> 任意指定位置的 chunk，从而修改任意地址的内存</li>
-<li>House of Lore 利用的前提是需要控制 Small Bin Chunk 的bk指针，并且控制指定位置 chunk 的fd指针</li>
-</ul>
-<p><strong>保护检查</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (__glibc_unlikely (bck-&gt;fd != victim))</span><br></pre></td></tr></table></figure>
-<p>检查 fakechunk-&gt;FD 是不是 victim_chunk</p>
-<p><strong>利用条件</strong></p>
-<ul>
-<li>可以构造 small bins（一般程序会用 fastbin，unsortedbin，tcache 很少用smallbin，largebin）</li>
-<li>程序可修改 small bins 中 free chunk 的 bk 指针</li>
-<li>对应伪造 fake chunk 的区域有一定控制权（可以伪造 fakechunk-&gt;FD 为 victim_chunk）</li>
-</ul>
-<p><strong>利用姿势</strong></p>
-<ul>
-<li>首先申请了一个在 fastbin 范围内的 victim chunk，然后再在栈上构造了一个 fake chunk（fake chunk 为 stack_buffer_1，还需要一个 stack_buffer_2 来打掩护）</li>
-<li>为了绕过检测，设置 stack_buffer_1 的 BK 指针指向 stack_buffer_2，设置 stack_buffer_2 的 FD 指针指向 stack_buffer_1</li>
-<li>接下来先 malloc 一个chunk，防止 free 之后与 top chunk 合并，然后 free 掉 victim，这时候 victim 会被放到 fastbin 中  </li>
-<li>接下来再去 malloc 一个 large chunk，会触发 fastbin 的合并，然后放到 unsorted bin 中，这样我们的 victim chunk 就放到了 unsorted bin 中，然后最终被 unsorted bin 分配到 small bin 中</li>
-<li>在 victim chunk 的BK指针中写入fake chunk（small bin是基于BK，从后向前申请的）</li>
-<li>再次申请 victim chunk（同时 fake chunk 进入small bin），最后申请 fake chunk </li>
-</ul>
-<p><strong>版本影响</strong></p>
-<p>libc-2.23：基础检查，可以通过</p>
-<p>libc-2.27：基础检查，还需要绕过 cache</p>
-<p>libc-2.31：House Of Lore 已经失效</p>
-<hr>
-<h2 id="House-Of-Orange"><a href="#House-Of-Orange" class="headerlink" title="House Of Orange"></a>House Of Orange</h2><p>House Of Orange 核心就是通过漏洞利用获得 free 的效果 </p>
-<p>这种操作的原理简单来说是当前堆的 top chunk 尺寸不足以满足申请分配的大小的时候，原来的 top chunk 会被释放并被置入 unsorted bin 中，通过这一点可以在没有 free 函数情况下获取到 unsorted bins</p>
-<p>后续可以配合 unsorted bin attack 和 FSOP 获取 shell</p>
-<p><strong>利用条件</strong></p>
-<ul>
-<li>有堆溢出，可以修改 top chunk size</li>
-<li>可以申请较大的空间</li>
-<li>没有释放模块（看见程序没有 free，realloc等函数时，优先考虑打House Of Orange）</li>
-</ul>
-<p>伪造的 top chunk size 的要求 ：</p>
-<ul>
-<li>0x0fe1、0x1fe1、0x2fe1、0x3fe</li>
-</ul>
-<p><strong>利用姿势</strong></p>
-<ul>
-<li>通过堆溢出修改 top chunk size为“0x0fe1”</li>
-<li>申请“0x2000”的空间</li>
-</ul>
-<p><strong>版本影响</strong></p>
-<p>libc-2.23：可用打通</p>
-<p>libc-2.24：增加了 vtable check，但仍然可以绕过</p>
-<p>libc-2.27：完全失效</p>
-<hr>
-<h2 id="House-Of-Rabbit"><a href="#House-Of-Rabbit" class="headerlink" title="House Of Rabbit"></a>House Of Rabbit</h2><p>House Of Rabbit 是一种伪造堆块的技术，一般运用在 fastbin attack 中</p>
-<ul>
-<li>缺点：条件过多并且有替代选项（unlink攻击，Double free等等）</li>
-<li>优点：对 libc 版本的“抵抗力”很强，高 libc 版本也可以打</li>
-</ul>
-<p>核心：利用 fastbin consolidate 使 fastbin 中的 fake chunk 合法化</p>
-<p><strong>利用条件</strong></p>
-<ul>
-<li>修改fastbin chunk的大小（感觉和unlink条件差不多，效果也差不多）<ul>
-<li>堆溢出（有时off-by-one也利用），可以覆盖 nextchunk-&gt;size</li>
-<li>可以申请足够大小的 chunk</li>
-<li>可以控制 free 的参数</li>
-</ul>
-</li>
-<li>修改FD指针（这种情况不用考虑，因为可以打 Double free，除非特殊情况）<ul>
-<li>有修改模块，并且有UAF（可以修改 free chunk）</li>
-<li>可以申请足够大小的 chunk</li>
-<li>可以控制 free 的参数</li>
-</ul>
-</li>
-</ul>
-<p><strong>利用姿势</strong></p>
-<ul>
-<li>修改fastbin chunk的大小：直接构造 overlap chunk，通过 fastbin consolidate 使其合法化</li>
-<li>修改FD指针：让 chunk-&gt;FD 指向一个 fake chunk，触发 fastbin consolidate 之后让这个 fake chunk 成为一个合法的 chunk（注意一下fake chunk的排列，不然会在consolidate时报错）</li>
-</ul>
-<p><strong>版本影响</strong></p>
-<p>经测试：libc-2.23 ~ libc-2.31 都可以打通</p>
-<hr>
-<h2 id="House-Of-Roman"><a href="#House-Of-Roman" class="headerlink" title="House Of Roman"></a>House Of Roman</h2><p>House of Roman 的一个核心思路就是利用 <strong>局部写</strong> 减少随机化的程度，从而给出爆破的可能</p>
-<p>这种利用手法的主要特点是不需要 <code>leak libc</code>的地址，用于 bypass ALSR，利用 12-bit 的爆破来达到获取 shell 的目的，且仅仅只需要一个 UAF 漏洞以及能创建任意大小的 chunk 的情况下，就能完成利用（当然也可以来绕 PIE）</p>
-<p>当程序没法泄露 libc_base 时，就会优先考虑 House Of Roman</p>
-<p><strong>利用条件</strong></p>
-<ul>
-<li>UAF（对 fastbin 中的“main_arena+xx”进行修改，使其指向目标地址）</li>
-<li>off-by-one（覆写“size”的大小，为了使保留有“main_arena+xx”进入fastbin）</li>
-</ul>
-<p><strong>利用姿势</strong></p>
-<ul>
-<li>利用 off-by-one 把原本不可能进入 fastbin 的 unsorted chunk 进行修改（修改 size 到 fastbin 的范围），使遗留有“main_arena+xx”的chunk进入 fastbin</li>
-<li>利用 UAF 修改遗留在 fast chunk 中的“main_arena+xx”，使其指向目标地址</li>
-</ul>
-<p><strong>版本影响</strong></p>
-<p>House Of Roman 并不依赖于 libc 源码，它的思想完全可以独立使用（覆盖main_arena）</p>
-<p>但是实现 House Of Roman 需要 fastbin attack，unsortedbin attack 等技术的配合，而它们会受 libc 版本影响：</p>
-<p>libc-2.27：</p>
-<ul>
-<li>fastbin attack 需要绕 tache（对chunk的数量有要求）</li>
-<li>unsortedbin attack 可以直接打（只检查了“victim-&gt;size”，形同虚设）</li>
-</ul>
-<p>libc-2.29：</p>
-<ul>
-<li>fastbin attack 需要绕 tache（对chunk的数量有要求）</li>
-<li>unsortedbin attack 失效（其实也有办法可以绕过，只是条件苛刻）</li>
-</ul>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2136,7 +1985,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">298</span>
+          <span class="site-state-item-count">299</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2190,7 +2039,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">63:18</span>
+    <span title="Reading time total">63:47</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
