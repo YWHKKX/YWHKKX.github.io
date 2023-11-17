@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="HIT-OSLab8 实验目的：  掌握虚拟文件系统的实现原理 实践文件、目录、文件系统等概念  实验内容：  在 Linux-0.11 上实现 procfs(proc文件系统) 内的 psinfo 节点，当读取此节点的内容的时候，可得到系统当前所有进程的状态信息 在 Linux-0.11 上实现 procfs(proc文件系统) 内的 hdinfo 节点，当读取此节点的内容的时候，可以打印出硬盘">
+<meta property="og:type" content="article">
+<meta property="og:title" content="HIT-OSLab8">
+<meta property="og:url" content="http://example.com/2023/11/17/HIT-OSLab8/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="HIT-OSLab8 实验目的：  掌握虚拟文件系统的实现原理 实践文件、目录、文件系统等概念  实验内容：  在 Linux-0.11 上实现 procfs(proc文件系统) 内的 psinfo 节点，当读取此节点的内容的时候，可得到系统当前所有进程的状态信息 在 Linux-0.11 上实现 procfs(proc文件系统) 内的 hdinfo 节点，当读取此节点的内容的时候，可以打印出硬盘">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/2023/11/17/HIT-OSLab8/1700220159392.png">
+<meta property="article:published_time" content="2023-11-17T11:27:56.000Z">
+<meta property="article:modified_time" content="2023-11-17T11:29:13.358Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="labs">
+<meta property="article:tag" content="OS">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2023/11/17/HIT-OSLab8/1700220159392.png">
+
+<link rel="canonical" href="http://example.com/2023/11/17/HIT-OSLab8/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>HIT-OSLab8 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/11/17/HIT-OSLab8/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          HIT-OSLab8
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-11-17 19:27:56 / Modified: 19:29:13" itemprop="dateCreated datePublished" datetime="2023-11-17T19:27:56+08:00">2023-11-17</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>7.9k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>7 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>HIT-OSLab8</strong></p>
+<p>实验目的：</p>
+<ul>
+<li>掌握虚拟文件系统的实现原理</li>
+<li>实践文件、目录、文件系统等概念</li>
+</ul>
+<p>实验内容：</p>
+<ul>
+<li>在 Linux-0.11 上实现 procfs(proc文件系统) 内的 psinfo 节点，当读取此节点的内容的时候，可得到系统当前所有进程的状态信息</li>
+<li>在 Linux-0.11 上实现 procfs(proc文件系统) 内的 hdinfo 节点，当读取此节点的内容的时候，可以打印出硬盘的一些信息 </li>
+<li>参考格式如下：</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> cat /proc/psinfo</span></span><br><span class="line"> pid    state    father    counter    start_time</span><br><span class="line"> 0    	1    	-1    		0     	  0</span><br><span class="line"> 1    	1    	 0    		28        1</span><br><span class="line"> 4    	1    	 1    		1    	  73</span><br><span class="line"> 3    	1    	 1    		27        63</span><br><span class="line"> 6    	0   	 4    		12        817</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> cat /proc/hdinfo</span> </span><br><span class="line">total_blocks:    62000;</span><br><span class="line">free_blocks:     39037;</span><br><span class="line">used_blocks:     22963;</span><br></pre></td></tr></table></figure>
+<p><strong>实验过程</strong></p>
+<p>procfs 是一个 Linux 内核模块，它提供了一个用于访问进程信息的文件系统</p>
+<ul>
+<li>通过 procfs，你可以查看与进程有关的信息，如进程 ID、进程名、进程的命令行参数等</li>
+<li>它使得用户可以方便地对进程进行管理和监控</li>
+</ul>
+<p>procfs 的实现依赖于内核的 proc 文件系统，它将进程信息存储在 <code>/proc</code> 目录下</p>
+<ul>
+<li>这个目录提供了一组用于访问进程信息的文件和目录</li>
+<li>通过这些文件，你可以查看进程的详细信息，如 <code>/proc/[pid]/cmdline</code> 文件可以查看进程的命令行参数</li>
+</ul>
+<p>在开始实验前，我们需要先了解 linux 中的两个关键结构 file 和 inode</p>
+<p>在 Linux 中，结构体 file 用于描述一个内存中的文件（打开的文件）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">file</span> &#123;</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">short</span> f_mode;		<span class="comment">/* 文件权限 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">short</span> f_flags;		<span class="comment">/* 文件标志 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">short</span> f_count;		<span class="comment">/* 文件计数器 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">m_inode</span> * <span class="title">f_inode</span>;</span>	<span class="comment">/* 对应inode结构体 */</span></span><br><span class="line">	<span class="keyword">off_t</span> f_pos;			   <span class="comment">/* 表示文件当前位置 */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>每种类型的文件都有一个唯一的标识符，即索引节点 inode，结构体 inode 用于描述一个在磁盘中的文件或者一个有特定功能的虚拟文件</p>
+<p>索引节点有两种类型：</p>
+<ul>
+<li>metadata inode 是用于存储文件元数据的 inode<ul>
+<li>元数据(metadata)：用来描述一个文件的特征，包含了该文件或目录的元数据，如权限、所有者、组、大小、创建时间等</li>
+</ul>
+</li>
+<li>data inode 是用于存储文件数据的 inode<ul>
+<li>数据(data)：泛指普通文件中的实际数据</li>
+</ul>
+</li>
+</ul>
+<p>在 linux-0.11 中似乎没有刻意去区别这两种类型的 inode：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">d_inode</span> &#123;</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">short</span> i_mode;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">short</span> i_uid;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> i_size;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> i_time;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span> i_gid;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span> i_nlinks;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">short</span> i_zone[<span class="number">9</span>];</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">m_inode</span> &#123;</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">short</span> i_mode;		<span class="comment">/* 文件权限 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">short</span> i_uid;		<span class="comment">/* 文件所有者 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> i_size;		<span class="comment">/* 文件大小 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> i_mtime;		<span class="comment">/* 最后修改的时间 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span> i_gid;		<span class="comment">/* 文件组 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span> i_nlinks;		<span class="comment">/* 文件链接数 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">short</span> i_zone[<span class="number">9</span>];	<span class="comment">/* 文件磁盘区域 */</span></span><br><span class="line"><span class="comment">/* these are in memory also */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> * <span class="title">i_wait</span>;</span> <span class="comment">/* 对应任务 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> i_atime;		<span class="comment">/* 访问时间 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> i_ctime;		<span class="comment">/* 修改时间 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">short</span> i_dev;		<span class="comment">/* 设备号 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">short</span> i_num;		<span class="comment">/* 文件编号 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">short</span> i_count;		<span class="comment">/* 计数器 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span> i_lock;		<span class="comment">/* 锁标记 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span> i_dirt;		<span class="comment">/* 脏标记 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span> i_pipe;		<span class="comment">/* 管道标记 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span> i_mount;		<span class="comment">/* 挂载标记 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span> i_seek;		<span class="comment">/* 在文件读取时使用的缓冲区大小 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span> i_update;		<span class="comment">/* 在更新文件时使用的缓冲区大小 */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>首先 proc 文件系统中包含一种特殊类型的文件，需要在 <code>include/sys/stat.h</code> 中进行定义：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> S_IFMT  00170000</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> S_IFREG  0100000		<span class="comment">/* 普通文件 */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> S_IFBLK  0060000		<span class="comment">/* 块设备 */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> S_IFDIR  0040000		<span class="comment">/* 目录 */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> S_IFCHR  0020000		<span class="comment">/* 字符设备 */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> S_IFIFO  0010000		<span class="comment">/* 管道 */</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> S_ISREG(m)	(((m) &amp; S_IFMT) == S_IFREG)		<span class="comment">/* 是否为普通文件 */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> S_ISDIR(m)	(((m) &amp; S_IFMT) == S_IFDIR)		<span class="comment">/* 是否为目录 */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> S_ISCHR(m)	(((m) &amp; S_IFMT) == S_IFCHR)		<span class="comment">/* 是否为字符设备 */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> S_ISBLK(m)	(((m) &amp; S_IFMT) == S_IFBLK)		<span class="comment">/* 是否为块设备 */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> S_ISFIFO(m)	(((m) &amp; S_IFMT) == S_IFIFO)		<span class="comment">/* 是否为管道 */</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> S_IFPROC 0030000		<span class="comment">/* proc文件 */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> S_ISPROC(m) (((m) &amp; S_IFMT) ==  S_IFPROC) 	<span class="comment">/* 是否为proc文件 */</span></span></span><br></pre></td></tr></table></figure>
+<p>接下来我们需要在 <code>sys_mknod sys_read</code> 中添加有关 proc 文件的判断，使其可以支持 proc 文件：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">sys_mknod</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> * filename, <span class="keyword">int</span> mode, <span class="keyword">int</span> dev)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">const</span> <span class="keyword">char</span> * basename;</span><br><span class="line">	<span class="keyword">int</span> namelen;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">m_inode</span> * <span class="title">dir</span>, * <span class="title">inode</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">buffer_head</span> * <span class="title">bh</span>;</span>	<span class="comment">/* 用于描述一块磁盘块缓冲区 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">dir_entry</span> * <span class="title">de</span>;</span>		<span class="comment">/* 用于描述一个目录项 */</span></span><br><span class="line">	</span><br><span class="line">	<span class="keyword">if</span> (!suser())</span><br><span class="line">		<span class="keyword">return</span> -EPERM;</span><br><span class="line">	<span class="keyword">if</span> (!(dir = dir_namei(filename,&amp;namelen,&amp;basename))) <span class="comment">/* 获取上层目录的inode */</span></span><br><span class="line">		<span class="keyword">return</span> -ENOENT;</span><br><span class="line">	<span class="keyword">if</span> (!namelen) &#123;</span><br><span class="line">		iput(dir); <span class="comment">/* 将一个inode从当前目录中移除 */</span></span><br><span class="line">		<span class="keyword">return</span> -ENOENT;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> (!permission(dir,MAY_WRITE)) &#123; <span class="comment">/* 检查目录的权限 */</span></span><br><span class="line">		iput(dir);</span><br><span class="line">		<span class="keyword">return</span> -EPERM;</span><br><span class="line">	&#125;</span><br><span class="line">	bh = find_entry(&amp;dir,basename,namelen,&amp;de); <span class="comment">/* 在目录中查找一个文件 */</span></span><br><span class="line">	<span class="keyword">if</span> (bh) &#123; <span class="comment">/* 文件名重复 */</span></span><br><span class="line">		brelse(bh);</span><br><span class="line">		iput(dir);</span><br><span class="line">		<span class="keyword">return</span> -EEXIST;</span><br><span class="line">	&#125;</span><br><span class="line">	inode = new_inode(dir-&gt;i_dev); <span class="comment">/* 分配一个新的index结构体 */</span></span><br><span class="line">	<span class="keyword">if</span> (!inode) &#123;</span><br><span class="line">		iput(dir);</span><br><span class="line">		<span class="keyword">return</span> -ENOSPC;</span><br><span class="line">	&#125;</span><br><span class="line">	inode-&gt;i_mode = mode;</span><br><span class="line">	<span class="keyword">if</span>(S_ISBLK(mode) || S_ISCHR(mode) || S_ISPROC(mode))</span><br><span class="line">		inode-&gt;i_zone[<span class="number">0</span>] = dev;</span><br><span class="line">	inode-&gt;i_mtime = inode-&gt;i_atime = CURRENT_TIME;</span><br><span class="line">	inode-&gt;i_dirt = <span class="number">1</span>;</span><br><span class="line">	bh = add_entry(dir,basename,namelen,&amp;de); <span class="comment">/* 添加一个新目录项 */</span></span><br><span class="line">	<span class="keyword">if</span> (!bh) &#123;</span><br><span class="line">		iput(dir);</span><br><span class="line">		inode-&gt;i_nlinks=<span class="number">0</span>;</span><br><span class="line">		iput(inode);</span><br><span class="line">		<span class="keyword">return</span> -ENOSPC;</span><br><span class="line">	&#125;</span><br><span class="line">	de-&gt;inode = inode-&gt;i_num;</span><br><span class="line">	bh-&gt;b_dirt = <span class="number">1</span>;</span><br><span class="line">	iput(dir);</span><br><span class="line">	iput(inode);</span><br><span class="line">	brelse(bh);</span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">sys_read</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> fd,<span class="keyword">char</span> * buf,<span class="keyword">int</span> count)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">file</span> * <span class="title">file</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">m_inode</span> * <span class="title">inode</span>;</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (fd&gt;=NR_OPEN || count&lt;<span class="number">0</span> || !(file=current-&gt;filp[fd]))</span><br><span class="line">		<span class="keyword">return</span> -EINVAL;</span><br><span class="line">	<span class="keyword">if</span> (!count)</span><br><span class="line">		<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">	verify_area(buf,count);</span><br><span class="line">	inode = file-&gt;f_inode;</span><br><span class="line">	<span class="keyword">if</span> (inode-&gt;i_pipe) <span class="comment">/* 处理管道 */</span></span><br><span class="line">		<span class="keyword">return</span> (file-&gt;f_mode&amp;<span class="number">1</span>)?read_pipe(inode,buf,count):-EIO;</span><br><span class="line">	<span class="keyword">if</span> (S_ISPROC(inode-&gt;i_mode)) <span class="comment">/* 处理proc文件 */</span></span><br><span class="line">		<span class="keyword">return</span> proc_read(inode-&gt;i_zone[<span class="number">0</span>],&amp;file-&gt;f_pos,buf,count);</span><br><span class="line">	<span class="keyword">if</span> (S_ISCHR(inode-&gt;i_mode)) <span class="comment">/* 处理字符设备 */</span></span><br><span class="line">		<span class="keyword">return</span> rw_char(READ,inode-&gt;i_zone[<span class="number">0</span>],buf,count,&amp;file-&gt;f_pos);</span><br><span class="line">	<span class="keyword">if</span> (S_ISBLK(inode-&gt;i_mode)) <span class="comment">/* 处理块设备 */</span></span><br><span class="line">		<span class="keyword">return</span> block_read(inode-&gt;i_zone[<span class="number">0</span>],&amp;file-&gt;f_pos,buf,count);</span><br><span class="line">	<span class="keyword">if</span> (S_ISDIR(inode-&gt;i_mode) || S_ISREG(inode-&gt;i_mode)) &#123; <span class="comment">/* 处理目录和普通文件 */</span></span><br><span class="line">		<span class="keyword">if</span> (count+file-&gt;f_pos &gt; inode-&gt;i_size)</span><br><span class="line">			count = inode-&gt;i_size - file-&gt;f_pos;</span><br><span class="line">		<span class="keyword">if</span> (count&lt;=<span class="number">0</span>)</span><br><span class="line">			<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">		<span class="keyword">return</span> file_read(inode,file,buf,count);</span><br><span class="line">	&#125;</span><br><span class="line">	printk(<span class="string">&quot;(Read)inode-&gt;i_mode=%06o\n\r&quot;</span>,inode-&gt;i_mode);</span><br><span class="line">	<span class="keyword">return</span> -EINVAL;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>然后我们需要在根文件系统加载后创建 <code>/proc</code> 目录以及其中的 <code>psinfo hdinfo</code> 文件：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">setup((<span class="keyword">void</span> *) &amp;drive_info); <span class="comment">/* 挂载根文件系统 */</span></span><br><span class="line">(<span class="keyword">void</span>) open(<span class="string">&quot;/dev/tty0&quot;</span>,O_RDWR,<span class="number">0</span>); <span class="comment">/* 创建stdin */</span></span><br><span class="line">(<span class="keyword">void</span>) dup(<span class="number">0</span>); <span class="comment">/* 创建stdout */</span></span><br><span class="line">(<span class="keyword">void</span>) dup(<span class="number">0</span>); <span class="comment">/* 创建stderr */</span></span><br><span class="line">mkdir(<span class="string">&quot;/proc&quot;</span>,<span class="number">0755</span>);</span><br><span class="line">mknod(<span class="string">&quot;/proc/psinfo&quot;</span>,S_IFPROC|<span class="number">0444</span>,<span class="number">0</span>);</span><br><span class="line">mknod(<span class="string">&quot;/proc/hdinfo&quot;</span>,S_IFPROC|<span class="number">0444</span>,<span class="number">1</span>);</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;%d buffers = %d bytes buffer space\n\r&quot;</span>,NR_BUFFERS,</span><br><span class="line">	NR_BUFFERS*BLOCK_SIZE);</span><br></pre></td></tr></table></figure>
+<p>最后的实验操作就是实现 <code>proc_read</code> 函数（新建 <code>fs/proc.c</code> 文件）：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;linux/kernel.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;linux/sched.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;asm/segment.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;linux/fs.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdarg.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> set_bit(bitnr, addr) (&#123; \</span></span><br><span class="line"><span class="meta">register int __res ; \</span></span><br><span class="line"><span class="meta">__asm__(<span class="meta-string">&quot;bt %2,%3;setb %%al&quot;</span>:<span class="meta-string">&quot;=a&quot;</span> (__res):<span class="meta-string">&quot;a&quot;</span> (0),<span class="meta-string">&quot;r&quot;</span> (bitnr),<span class="meta-string">&quot;m&quot;</span> (*(addr))); \</span></span><br><span class="line"><span class="meta">__res; &#125;)</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">char</span> proc_buf[<span class="number">4096</span>] = &#123;<span class="string">&#x27;\0&#x27;</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">extern</span> <span class="keyword">int</span> <span class="title">vsprintf</span><span class="params">(<span class="keyword">char</span> *buf, <span class="keyword">const</span> <span class="keyword">char</span> *fmt, va_list args)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">sprintf</span><span class="params">(<span class="keyword">char</span> *buf, <span class="keyword">const</span> <span class="keyword">char</span> *fmt, ...)</span></span>&#123;</span><br><span class="line">	va_list args;</span><br><span class="line">	<span class="keyword">int</span> i;</span><br><span class="line">	va_start(args, fmt);</span><br><span class="line">	i = <span class="built_in">vsprintf</span>(buf, fmt, args);</span><br><span class="line">	va_end(args);</span><br><span class="line">	<span class="keyword">return</span> i;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">get_psinfo</span><span class="params">()</span> </span>&#123;</span><br><span class="line">	<span class="keyword">int</span> read = <span class="number">0</span>;</span><br><span class="line">	read += <span class="built_in">sprintf</span>(proc_buf + read, <span class="string">&quot;%s&quot;</span>, <span class="string">&quot;pid\tstate\tfather\tcounter\tstart_time\n&quot;</span>);</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> **<span class="title">p</span>;</span></span><br><span class="line">	<span class="keyword">for</span> (p = &amp;FIRST_TASK; p &lt;= &amp;LAST_TASK; ++p) <span class="comment">/* 遍历task[NR_TASKS] */</span></span><br><span class="line">		<span class="keyword">if</span> (*p != <span class="literal">NULL</span>)&#123;</span><br><span class="line">			read += <span class="built_in">sprintf</span>(proc_buf + read, <span class="string">&quot;%d\t&quot;</span>, (*p)-&gt;pid);</span><br><span class="line">			read += <span class="built_in">sprintf</span>(proc_buf + read, <span class="string">&quot;%d\t&quot;</span>, (*p)-&gt;state);</span><br><span class="line">			read += <span class="built_in">sprintf</span>(proc_buf + read, <span class="string">&quot;%d\t&quot;</span>, (*p)-&gt;father);</span><br><span class="line">			read += <span class="built_in">sprintf</span>(proc_buf + read, <span class="string">&quot;%d\t&quot;</span>, (*p)-&gt;counter);</span><br><span class="line">			read += <span class="built_in">sprintf</span>(proc_buf + read, <span class="string">&quot;%d\n&quot;</span>, (*p)-&gt;start_time);</span><br><span class="line">		&#125;</span><br><span class="line">	<span class="keyword">return</span> read;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">get_hdinfo</span><span class="params">()</span> </span>&#123;</span><br><span class="line">	<span class="keyword">int</span> read = <span class="number">0</span>;</span><br><span class="line">	<span class="keyword">int</span> i, used;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">super_block</span> *<span class="title">sb</span>;</span></span><br><span class="line">	sb = get_super(<span class="number">0x301</span>); <span class="comment">/* 磁盘设备号:3*256+1 */</span></span><br><span class="line">	read += <span class="built_in">sprintf</span>(proc_buf + read, <span class="string">&quot;Total blocks:%d\n&quot;</span>, sb-&gt;s_nzones);</span><br><span class="line">	used = <span class="number">0</span>;</span><br><span class="line">	i = sb-&gt;s_nzones;</span><br><span class="line">	<span class="keyword">while</span> (--i &gt;= <span class="number">0</span>)&#123;</span><br><span class="line">		<span class="keyword">if</span> (set_bit(i &amp; <span class="number">8191</span>, sb-&gt;s_zmap[i &gt;&gt; <span class="number">13</span>]-&gt;b_data))</span><br><span class="line">			used++;</span><br><span class="line">	&#125;</span><br><span class="line">	read += <span class="built_in">sprintf</span>(proc_buf + read, <span class="string">&quot;Used blocks:%d\n&quot;</span>, used);</span><br><span class="line">	read += <span class="built_in">sprintf</span>(proc_buf + read, <span class="string">&quot;Free blocks:%d\n&quot;</span>, sb-&gt;s_nzones - used);</span><br><span class="line">	read += <span class="built_in">sprintf</span>(proc_buf + read, <span class="string">&quot;Total inodes:%d\n&quot;</span>, sb-&gt;s_ninodes);</span><br><span class="line">	used = <span class="number">0</span>;</span><br><span class="line">	i = sb-&gt;s_ninodes + <span class="number">1</span>;</span><br><span class="line">	<span class="keyword">while</span> (--i &gt;= <span class="number">0</span>)&#123;</span><br><span class="line">		<span class="keyword">if</span> (set_bit(i &amp; <span class="number">8191</span>, sb-&gt;s_imap[i &gt;&gt; <span class="number">13</span>]-&gt;b_data))</span><br><span class="line">			used++;</span><br><span class="line">	&#125;</span><br><span class="line">	read += <span class="built_in">sprintf</span>(proc_buf + read, <span class="string">&quot;Used inodes:%d\n&quot;</span>, used);</span><br><span class="line">	read += <span class="built_in">sprintf</span>(proc_buf + read, <span class="string">&quot;Free inodes:%d\n&quot;</span>, sb-&gt;s_ninodes - used);</span><br><span class="line">	<span class="keyword">return</span> read;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">proc_read</span><span class="params">(<span class="keyword">int</span> dev, <span class="keyword">unsigned</span> <span class="keyword">long</span> *pos, <span class="keyword">char</span> *buf, <span class="keyword">int</span> count)</span></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> i;</span><br><span class="line">	<span class="keyword">if</span> (*pos % <span class="number">1024</span> == <span class="number">0</span>)&#123;</span><br><span class="line">		<span class="keyword">if</span> (dev == <span class="number">0</span>)</span><br><span class="line">			get_psinfo();</span><br><span class="line">		<span class="keyword">if</span> (dev == <span class="number">1</span>)</span><br><span class="line">			get_hdinfo();</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">for</span> (i = <span class="number">0</span>; i &lt; count; i++)&#123;</span><br><span class="line">		<span class="keyword">if</span> (proc_buf[i + *pos] == <span class="string">&#x27;\0&#x27;</span>)</span><br><span class="line">			<span class="keyword">break</span>;</span><br><span class="line">		put_fs_byte(proc_buf[i + *pos], buf + i + *pos);</span><br><span class="line">	&#125;</span><br><span class="line">	*pos += i;</span><br><span class="line">	<span class="keyword">return</span> i;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>最后修改 <code>fs/makefile</code>：</p>
+<figure class="highlight makefile"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">OBJS=	open.o read_write.o inode.o file_table.o buffer.o super.o \</span><br><span class="line">	block_dev.o char_dev.o file_dev.o stat.o exec.o pipe.o namei.o \</span><br><span class="line">	bitmap.o fcntl.o ioctl.o truncate.o proc.o</span><br><span class="line">	</span><br><span class="line">	......</span><br><span class="line"></span><br><span class="line"><span class="section">proc.o: proc.c ../include/string.h ../include/linux/sched.h \</span></span><br><span class="line">  ../<span class="keyword">include</span>/linux/head.h ../<span class="keyword">include</span>/linux/fs.h ../<span class="keyword">include</span>/sys/types.h \</span><br><span class="line">  ../<span class="keyword">include</span>/linux/mm.h ../<span class="keyword">include</span>/signal.h ../<span class="keyword">include</span>/linux/kernel.h</span><br></pre></td></tr></table></figure>
+<p>效果如下：</p>
+<img src="/2023/11/17/HIT-OSLab8/1700220159392.png" class width="1700220159392">   
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/labs/" rel="tag"><i class="fa fa-tag"></i> labs</a>
+              <a href="/tags/OS/" rel="tag"><i class="fa fa-tag"></i> OS</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/11/16/%E5%BC%BA%E7%BD%91%E6%8B%9F%E6%80%81CTF2023/" rel="prev" title="强网拟态CTF2023">
+      <i class="fa fa-chevron-left"></i> 强网拟态CTF2023
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">304</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">13</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">156</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">4.3m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">65:07</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
