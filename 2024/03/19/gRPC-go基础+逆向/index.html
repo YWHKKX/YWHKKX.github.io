@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="RPC &amp; gRPC RPC 全称 Remote Procedure Call，中文译为远程过程调用  使用 RPC 进行通信，调用远程函数就像调用本地函数一样 RPC 底层会做好数据的序列化与传输，从而能使我们更轻松地创建分布式应用和服务  gRPC 是RPC的一种，典型特征就是使用 protobuf 作为其 IDL 接口定义语言   使用 gRPC，我们只需要定义好每个 API 的 R">
+<meta property="og:type" content="article">
+<meta property="og:title" content="gRPC-go基础+逆向">
+<meta property="og:url" content="http://example.com/2024/03/19/gRPC-go%E5%9F%BA%E7%A1%80+%E9%80%86%E5%90%91/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="RPC &amp; gRPC RPC 全称 Remote Procedure Call，中文译为远程过程调用  使用 RPC 进行通信，调用远程函数就像调用本地函数一样 RPC 底层会做好数据的序列化与传输，从而能使我们更轻松地创建分布式应用和服务  gRPC 是RPC的一种，典型特征就是使用 protobuf 作为其 IDL 接口定义语言   使用 gRPC，我们只需要定义好每个 API 的 R">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2024-03-19T11:13:06.000Z">
+<meta property="article:modified_time" content="2024-03-19T11:14:43.547Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="gRPC">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2024/03/19/gRPC-go%E5%9F%BA%E7%A1%80+%E9%80%86%E5%90%91/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>gRPC-go基础+逆向 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2024/03/19/gRPC-go%E5%9F%BA%E7%A1%80+%E9%80%86%E5%90%91/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          gRPC-go基础+逆向
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2024-03-19 19:13:06 / Modified: 19:14:43" itemprop="dateCreated datePublished" datetime="2024-03-19T19:13:06+08:00">2024-03-19</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>13k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>12 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><strong>RPC &amp; gRPC</strong></p>
+<p>RPC 全称 <code>Remote Procedure Call</code>，中文译为远程过程调用</p>
+<ul>
+<li>使用 RPC 进行通信，调用远程函数就像调用本地函数一样</li>
+<li>RPC 底层会做好数据的序列化与传输，从而能使我们更轻松地创建分布式应用和服务</li>
+</ul>
+<p>gRPC 是RPC的一种，典型特征就是使用 protobuf 作为其 IDL 接口定义语言 </p>
+<ul>
+<li>使用 gRPC，我们只需要定义好每个 API 的 Request 和 Response，剩下的 gRPC 这个框架会帮我们自动搞定 </li>
+</ul>
+<p>gRPC 的通信流程： </p>
+<ul>
+<li>定义IDL，即我们的接口文档（后缀为.proto）</li>
+<li>编译 proto 文件，得到存根（stub）文件</li>
+<li>服务端（gRPC Server）实现第一步定义的接口并启动，这些接口的定义在存根文件里面</li>
+<li>客户端借助存根文件调用服务端的函数，虽然客户端调用的函数是由服务端实现的，但是调用起来就像是本地函数一样</li>
+</ul>
+<p><strong>gRPC-go 基础知识</strong></p>
+<p>接下来用 go 语言写一个 gRPC 案例</p>
+<p>先使用如下命令进行初始化：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">go</span> mod init <span class="keyword">go</span>-test</span><br></pre></td></tr></table></figure>
+<ul>
+<li>“go-test” 为 module 名称，程序会生成一个 go.mod</li>
+</ul>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">go</span> mod tidy</span><br></pre></td></tr></table></figure>
+<ul>
+<li>更新依赖至最新版本，程序会更新 go.mod 条目并生成一个 go.sum</li>
+</ul>
+<p>定义 protobuf：</p>
+<figure class="highlight protobuf"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">syntax = <span class="string">&quot;proto3&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">package</span> greeter.srv;</span><br><span class="line"></span><br><span class="line"><span class="keyword">option</span> go_package = <span class="string">&quot;proto/greeter&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">service</span> <span class="title">Greeter</span> </span>&#123; <span class="comment">// 设置Greeter服务</span></span><br><span class="line">    <span class="function"><span class="keyword">rpc</span> SayHello (HelloRequest) <span class="keyword">returns</span> (HelloReply) </span>&#123;&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">message</span> <span class="title">HelloRequest</span> </span>&#123; <span class="comment">// 定义传参格式</span></span><br><span class="line">    <span class="built_in">string</span> name = <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">message</span> <span class="title">HelloReply</span> </span>&#123; <span class="comment">// 定义返回格式</span></span><br><span class="line">    <span class="built_in">string</span> <span class="class"><span class="keyword">message</span> = 1;</span></span><br><span class="line"><span class="class">&#125;</span></span><br></pre></td></tr></table></figure>
+<p>将 proto 文件编译为存根文件：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">protoc --proto_path=proto  --go_out=proto  --go_opt=paths=source_relative proto/greeter.proto</span><br></pre></td></tr></table></figure>
+<ul>
+<li>—proto_path：指定 import 路径 </li>
+<li>—go_out：指定输出文件路径</li>
+<li>—go_opt：指定参数（paths=source_relative 表示生成文件输出使用相对路径）</li>
+<li>被编译的 .proto 文件放在最后面</li>
+</ul>
+<p>也可以使用集成化工具 <a target="_blank" rel="noopener" href="https://github.com/storyicon/powerproto">powerproto</a> 来进行编译，安装方法如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">go</span> install github.com/storyicon/powerproto/cmd/powerproto@latest </span><br></pre></td></tr></table></figure>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">git clone https://github.com/storyicon/powerproto.git</span><br><span class="line">cd powerproto</span><br><span class="line">make</span><br><span class="line">cp dist/powerproto-linux-amd64 /usr/local/bin/powerproto</span><br></pre></td></tr></table></figure>
+<p>powerproto 常用命令如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">powerproto init <span class="comment">/* 初始化 */</span></span><br><span class="line">powerproto tidy <span class="comment">/* 整理配置文件 */</span></span><br><span class="line">powerproto build proto/greeter.proto <span class="comment">/* 编译proto */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>初始化完成后会生成 powerproto.yaml 文件，在其中我们可以设置 proto 的版本</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">scopes:</span><br><span class="line">    - ./</span><br><span class="line">protoc: v3.7.1 # 修改protoc版本</span><br><span class="line">protocWorkDir: &quot;&quot;</span><br><span class="line">plugins:</span><br><span class="line">    protoc-gen-go: google.golang.org/protobuf/cmd/protoc-gen-go@v1.26.0 # 修改protoc-gen-go版本</span><br><span class="line">    protoc-gen-go-grpc: google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0 # 修改protoc-gen-go-grpc版本</span><br><span class="line">repositories:</span><br><span class="line">    GOOGLE_APIS: https://github.com/googleapis/googleapis@75e9812478607db997376ccea247dd6928f70f45</span><br><span class="line">options:</span><br><span class="line">    - --go_out=.</span><br><span class="line">    - --go_opt=paths=source_relative</span><br><span class="line">    - --go-grpc_out=.</span><br><span class="line">    - --go-grpc_opt=paths=source_relative</span><br><span class="line">importPaths:</span><br><span class="line">    - .</span><br><span class="line">    - $GOPATH</span><br><span class="line">    - $POWERPROTO_INCLUDE</span><br><span class="line">    - $SOURCE_RELATIVE</span><br><span class="line">    - $GOOGLE_APIS/github.com/googleapis/googleapis</span><br><span class="line">postActions: []</span><br><span class="line">postShell: &quot;&quot;</span><br></pre></td></tr></table></figure>
+<p>编译完成后的存根文件部分代码如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> GreeterServer <span class="keyword">interface</span> &#123;</span><br><span class="line">	SayHello(context.Context, *HelloRequest) (*HelloReply, error)</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">/* 	context.Context:上下文</span></span><br><span class="line"><span class="comment">	HelloRequest:请求入参 */</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> GreeterClient <span class="keyword">interface</span> &#123;</span><br><span class="line">	SayHello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloReply, error)</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">/* 	context.Context:上下文</span></span><br><span class="line"><span class="comment">	HelloRequest:请求入参</span></span><br><span class="line"><span class="comment">	grpc.CallOption:定义了before方法和after方法的接口 */</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>定义了服务端和客户端关于模块函数的接口</li>
+<li>该接口对应的函数是定义在服务端上的，但客户端可以通过该接口来调用该函数</li>
+</ul>
+<p>服务端 API 的实现：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> Greeter_ServiceDesc = grpc.ServiceDesc&#123; <span class="comment">/* 创建一个ServiceDesc对象 */</span></span><br><span class="line">	ServiceName: <span class="string">&quot;greeter.srv.Greeter&quot;</span>, <span class="comment">/* 服务名称 */</span></span><br><span class="line">	HandlerType: (*GreeterServer)(<span class="literal">nil</span>), <span class="comment">/* 处理的结构体 */</span></span><br><span class="line">	Methods: []grpc.MethodDesc&#123; <span class="comment">/* 一次响应的方法集 */</span></span><br><span class="line">		&#123;</span><br><span class="line">			MethodName: <span class="string">&quot;SayHello&quot;</span>, <span class="comment">/* 模块名称 */</span></span><br><span class="line">			Handler:    _Greeter_SayHello_Handler, <span class="comment">/* 对应的handler函数 */</span></span><br><span class="line">		&#125;,</span><br><span class="line">	&#125;,</span><br><span class="line">	Streams:  []grpc.StreamDesc&#123;&#125;, </span><br><span class="line">	Metadata: <span class="string">&quot;proto/greeter.proto&quot;</span>, <span class="comment">/* 元数据,也就是proto文件 */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>grpc.ServiceDesc 对象将会作为 RegisterService 的参数</li>
+</ul>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">RegisterGreeterServer</span><span class="params">(s grpc.ServiceRegistrar, srv GreeterServer)</span></span> &#123;</span><br><span class="line">	s.RegisterService(&amp;Greeter_ServiceDesc, srv)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>RegisterService 为注册函数，将一个 grpc.ServiceDesc 对象注册到系统</li>
+</ul>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> _<span class="title">Greeter_SayHello_Handler</span><span class="params">(srv <span class="keyword">interface</span>&#123;&#125;, ctx context.Context, dec <span class="keyword">func</span>(<span class="keyword">interface</span>&#123;&#125;)</span> <span class="title">error</span>, <span class="title">interceptor</span> <span class="title">grpc</span>.<span class="title">UnaryServerInterceptor</span>) <span class="params">(<span class="keyword">interface</span>&#123;&#125;, error)</span></span> &#123;</span><br><span class="line">	in := <span class="built_in">new</span>(HelloRequest) <span class="comment">/* 开辟空间,存储客户端的请求数据 */</span></span><br><span class="line">	<span class="keyword">if</span> err := dec(in); err != <span class="literal">nil</span> &#123;</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> interceptor == <span class="literal">nil</span> &#123; <span class="comment">/* 如果没有注册拦截器,则直接调用目标函数 */</span></span><br><span class="line">		<span class="keyword">return</span> srv.(GreeterServer).SayHello(ctx, in)</span><br><span class="line">	&#125;</span><br><span class="line">	info := &amp;grpc.UnaryServerInfo&#123;</span><br><span class="line">		Server:     srv,</span><br><span class="line">		FullMethod: Greeter_SayHello_FullMethodName,</span><br><span class="line">	&#125;</span><br><span class="line">	handler := <span class="function"><span class="keyword">func</span><span class="params">(ctx context.Context, req <span class="keyword">interface</span>&#123;&#125;)</span> <span class="params">(<span class="keyword">interface</span>&#123;&#125;, error)</span></span> &#123;</span><br><span class="line">		<span class="keyword">return</span> srv.(GreeterServer).SayHello(ctx, req.(*HelloRequest))</span><br><span class="line">    &#125; <span class="comment">/* 否则调用拦截器(目标函数也会注册到拦截器中) */</span></span><br><span class="line">	<span class="keyword">return</span> interceptor(ctx, in, info, handler)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>核心点就是接收客户端的流对象，调用服务端上的函数并响应</li>
+</ul>
+<p>客户端 API 的实现：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> greeterClient <span class="keyword">struct</span> &#123; </span><br><span class="line">    cc grpc.ClientConnInterface <span class="comment">/* 定义了执行RPC方法对象需要实现的函数 */</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">NewGreeterClient</span><span class="params">(cc grpc.ClientConnInterface)</span> <span class="title">GreeterClient</span></span> &#123; </span><br><span class="line">    <span class="comment">/* 创建一个客户端:</span></span><br><span class="line"><span class="comment">    入参值:客户端和服务器端建立的连接 </span></span><br><span class="line"><span class="comment">    返回值:greeterClient结构体 */</span></span><br><span class="line">    <span class="keyword">return</span> &amp;greeterClient&#123;cc&#125; <span class="comment">/* 相当于创建了一个greeterClient结构体(用传参cc初始化),然后将该结构体返回 */</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(c *greeterClient)</span> <span class="title">SayHello</span><span class="params">(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption)</span> <span class="params">(*HelloReply, error)</span></span> &#123; <span class="comment">/* 客户端接口的实现 */</span></span><br><span class="line">	out := <span class="built_in">new</span>(HelloReply) <span class="comment">/* 创建HelloReply结构体,用于返回数据 */</span></span><br><span class="line">	err := c.cc.Invoke(ctx, Greeter_SayHello_FullMethodName, in, out, opts...) <span class="comment">/* 调用客户端连接的Inoke方法 */</span></span><br><span class="line">	<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> out, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>客户端接口的核心步骤就是调用 Inoke 方法</li>
+</ul>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> ClientConnInterface <span class="keyword">interface</span> &#123;</span><br><span class="line">	<span class="comment">// Invoke performs a unary RPC and returns after the response is received</span></span><br><span class="line">	<span class="comment">// into reply.</span></span><br><span class="line">	Invoke(ctx context.Context, method <span class="keyword">string</span>, args any, reply any, opts ...CallOption) error</span><br><span class="line">	<span class="comment">// NewStream begins a streaming RPC.</span></span><br><span class="line">	NewStream(ctx context.Context, desc *StreamDesc, method <span class="keyword">string</span>, opts ...CallOption) (ClientStream, error)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(cc *ClientConn)</span> <span class="title">Invoke</span><span class="params">(ctx context.Context, method <span class="keyword">string</span>, args, </span></span></span><br><span class="line"><span class="params"><span class="function">    reply  <span class="keyword">interface</span>&#123;&#125;, opts ...CallOption)</span> <span class="title">error</span></span> &#123;</span><br><span class="line"></span><br><span class="line">   opts = combine(cc.dopts.callOptions, opts) <span class="comment">/* 把客户端的拦截器和和调用方法入参的拦截器合并 */</span></span><br><span class="line">   <span class="keyword">if</span> cc.dopts.unaryInt != <span class="literal">nil</span> &#123;</span><br><span class="line">      <span class="keyword">return</span> cc.dopts.unaryInt(ctx, method, args, reply, cc, invoke, opts...)</span><br><span class="line">   &#125;</span><br><span class="line"></span><br><span class="line">   <span class="keyword">return</span> invoke(ctx, method, args, reply, cc, opts...)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">invoke</span><span class="params">(ctx context.Context, method <span class="keyword">string</span>, req, reply <span class="keyword">interface</span>&#123;&#125;, </span></span></span><br><span class="line"><span class="params"><span class="function">   cc *ClientConn, opts ...CallOption)</span> <span class="title">error</span></span> &#123;</span><br><span class="line">    </span><br><span class="line">   cs, err := newClientStream(ctx, unaryStreamDesc, cc, method, opts...) <span class="comment">/* 创建客户端流对象 */</span></span><br><span class="line">   <span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">      <span class="keyword">return</span> err</span><br><span class="line">   &#125;</span><br><span class="line"></span><br><span class="line">   <span class="keyword">if</span> err := cs.SendMsg(req); err != <span class="literal">nil</span> &#123; <span class="comment">/* 发送请求 */</span></span><br><span class="line">      <span class="keyword">return</span> err</span><br><span class="line">   &#125;</span><br><span class="line"></span><br><span class="line">   <span class="keyword">return</span> cs.RecvMsg(reply) <span class="comment">/* 接受响应 */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>核心点就是创建客户端流对象，发送请求并且接受响应</li>
+</ul>
+<p>PS：和 mustEmbedUnimplementedGreeterServer 相关的内容都是 protoc-gen-go-grpc 为 gRPC 设置的保护，可以直接删去</p>
+<p>服务端代码如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">	<span class="string">&quot;context&quot;</span></span><br><span class="line">	<span class="string">&quot;fmt&quot;</span></span><br><span class="line">	greeter <span class="string">&quot;go-test/proto&quot;</span></span><br><span class="line">	<span class="string">&quot;log&quot;</span></span><br><span class="line">	<span class="string">&quot;net&quot;</span></span><br><span class="line"></span><br><span class="line">	<span class="string">&quot;google.golang.org/grpc&quot;</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> server <span class="keyword">struct</span> &#123;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *server)</span> <span class="title">SayHello</span><span class="params">(ctx context.Context, req *greeter.HelloRequest)</span> <span class="params">(rsp *greeter.HelloReply, err error)</span></span> &#123;</span><br><span class="line">	rsp = &amp;greeter.HelloReply&#123;Message: <span class="string">&quot;Hello &quot;</span> + req.Name&#125;</span><br><span class="line">	<span class="keyword">return</span> rsp, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">	listener, err := net.Listen(<span class="string">&quot;tcp&quot;</span>, <span class="string">&quot;:52001&quot;</span>)</span><br><span class="line">	<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">		log.Fatalf(<span class="string">&quot;failed to listen: %v&quot;</span>, err)</span><br><span class="line">	&#125;</span><br><span class="line">	s := grpc.NewServer()</span><br><span class="line">	greeter.RegisterGreeterServer(s, &amp;server&#123;&#125;)</span><br><span class="line"></span><br><span class="line">	fmt.Println(<span class="string">&quot;gRPC server listen in 52001...&quot;</span>)</span><br><span class="line">	err = s.Serve(listener)</span><br><span class="line">	<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">		log.Fatalf(<span class="string">&quot;failed to serve: %v&quot;</span>, err)</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>客户端代码如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">	<span class="string">&quot;context&quot;</span></span><br><span class="line">	<span class="string">&quot;fmt&quot;</span></span><br><span class="line">	greeter <span class="string">&quot;go-test/proto&quot;</span></span><br><span class="line">	<span class="string">&quot;log&quot;</span></span><br><span class="line">	<span class="string">&quot;time&quot;</span></span><br><span class="line"></span><br><span class="line">	<span class="string">&quot;google.golang.org/grpc&quot;</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">	conn, err := grpc.Dial(<span class="string">&quot;127.0.0.1:52001&quot;</span>, grpc.WithInsecure())</span><br><span class="line">	<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">		log.Fatalf(<span class="string">&quot;connect failed: %v&quot;</span>, err)</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">defer</span> conn.Close()</span><br><span class="line"></span><br><span class="line">	c := greeter.NewGreeterClient(conn)</span><br><span class="line"></span><br><span class="line">	ctx, cancel := context.WithTimeout(context.Background(), time.Second*<span class="number">3</span>)</span><br><span class="line">	<span class="keyword">defer</span> cancel()</span><br><span class="line"></span><br><span class="line">	r, err := c.SayHello(ctx, &amp;greeter.HelloRequest&#123;Name: <span class="string">&quot;World&quot;</span>&#125;)</span><br><span class="line">	<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">		log.Fatalf(<span class="string">&quot;call service failed: %v&quot;</span>, err)</span><br><span class="line">	&#125;</span><br><span class="line">	fmt.Println(<span class="string">&quot;call service success: &quot;</span>, r.Message)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>在客户端上调用 SayHello 函数（客户端上没有实现），客户端通过 gRPC 将请求数据发送到服务端，服务端执行完成以后将响应数据发回客户端</p>
+<p><strong>gRPC-go 逆向分析</strong></p>
+<p>对于无符号的 go 语言逆向，可以先使用 IDAGolangHelper 初步恢复符号，然后编译一个有符号的 go 语言程序并用 bindiff 再次恢复符号</p>
+<p>由于 IDA7.7 对于 IDAGolangHelper 的兼容性不好，因此这里选择使用 <a target="_blank" rel="noopener" href="https://github.com/SentineLabs/AlphaGolang">AlphaGolang</a></p>
+<ul>
+<li>PS：这里强烈推荐 AlphaGolang，分析出来的伪代码比带符号的都好看，另外它还有其他功能</li>
+</ul>
+<p>接着就可以使用 pbtk 来从二进制文件中提取 proto 文件：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/pbtk/extractors/from_binary.py server</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>/pbtk/extractors/from_binary.py</code> 会生成一个 <code>.proto</code> 文件（可能会报错，但还是生成了文件）</li>
+<li>生成的文件和源文件几乎没有区别</li>
+</ul>
+<p>接下来我们需要利用 IDA 快速找到服务端为客户端定义的函数代码</p>
+<p>在有符号的二进制文件中搜索函数名称，很容易就能找到该函数：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">retval_7E3C40 __golang <span class="title">main__ptr_server_SayHello</span><span class="params">(</span></span></span><br><span class="line"><span class="params"><span class="function">        main_server_0 *s,</span></span></span><br><span class="line"><span class="params"><span class="function">        context_Context_0 ctx,</span></span></span><br><span class="line"><span class="params"><span class="function">        go_test_proto_HelloRequest_0 *req)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">int</span> v3; <span class="comment">// r14</span></span><br><span class="line">  <span class="keyword">int</span> v4; <span class="comment">// rax</span></span><br><span class="line">  runtime__type_0 *v5; <span class="comment">// [rsp-28h] [rbp-38h]</span></span><br><span class="line">  runtime_tmpBuf *v6; <span class="comment">// [rsp-28h] [rbp-38h]</span></span><br><span class="line">  <span class="built_in">string</span> v7; <span class="comment">// [rsp-20h] [rbp-30h]</span></span><br><span class="line">  <span class="built_in">string</span> v8; <span class="comment">// [rsp-10h] [rbp-20h]</span></span><br><span class="line">  uint8 *str; <span class="comment">// [rsp+0h] [rbp-10h]</span></span><br><span class="line">  <span class="keyword">void</span> *retaddr; <span class="comment">// [rsp+10h] [rbp+0h] BYREF</span></span><br><span class="line">  retval_7E3C40 result; <span class="comment">// [rsp+38h] [rbp+28h]</span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> ( (<span class="keyword">unsigned</span> <span class="keyword">int</span>)&amp;retaddr &lt;= *(_QWORD *)(v3 + <span class="number">16LL</span>) )</span><br><span class="line">    runtime_morestack_noctxt();</span><br><span class="line">  v7.str = (uint8 *)runtime_newobject(v5);</span><br><span class="line">  str = runtime_concatstring2(v6, v7, v8).str;</span><br><span class="line">  *((_QWORD *)str + <span class="number">6LL</span>) = <span class="string">&quot;Hello &quot;</span>;</span><br><span class="line">  <span class="keyword">if</span> ( *(_DWORD *)&amp;runtime_writeBarrier.enabled )</span><br><span class="line">    runtime_gcWriteBarrier();</span><br><span class="line">  <span class="keyword">else</span></span><br><span class="line">    *((_QWORD *)str + <span class="number">5LL</span>) = v4;</span><br><span class="line">  <span class="keyword">return</span> result;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>但该函数并没有直接被其他函数调用，我们必须通过其他方法找到其调用链：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Down	j	.text:<span class="number">00000000007E3</span>CF2	jmp     main__ptr_server_SayHello</span><br></pre></td></tr></table></figure>
+<p>有一个方法就是找到注册函数 <code>s.RegisterService</code>（在无符号的情况下也适用）：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">.text:<span class="number">00000000007E3</span>D80 E8 DB <span class="number">59</span> FE FF                call    google_golang_org_grpc_NewServer</span><br><span class="line">.text:<span class="number">00000000007E3</span>D80</span><br><span class="line">.text:<span class="number">00000000007E3</span>D85 <span class="number">48</span> <span class="number">89</span> <span class="number">44</span> <span class="number">24</span> <span class="number">28</span>                mov     [rsp+<span class="number">68</span>h+var_40], rax</span><br><span class="line">.text:<span class="number">00000000007E3</span>D8A <span class="number">90</span>                            nop</span><br><span class="line">.text:<span class="number">00000000007E3</span>D8B <span class="number">48</span> <span class="number">8B</span> <span class="number">0</span>D <span class="number">36</span> AD <span class="number">18</span> <span class="number">00</span>          mov     rcx, cs:off_96EAC8</span><br><span class="line">.text:<span class="number">00000000007E3</span>D92 <span class="number">48</span> <span class="number">8</span>D <span class="number">1</span>D <span class="number">47</span> D6 <span class="number">46</span> <span class="number">00</span>          lea     rbx, go_test_proto_Greeter_ServiceDesc</span><br><span class="line">.text:<span class="number">00000000007E3</span>D99 <span class="number">48</span> <span class="number">8</span>D <span class="number">3</span>D <span class="number">50</span> <span class="number">7</span>A <span class="number">4</span>A <span class="number">00</span>          lea     rdi, runtime_zerobase</span><br><span class="line">.text:<span class="number">00000000007E3</span>DA0 E8 <span class="number">7B</span> <span class="number">5F</span> FE FF                call    google_golang_org_grpc__ptr_Server_RegisterService</span><br></pre></td></tr></table></figure>
+<ul>
+<li>rax 为 NewServer 的返回值</li>
+<li>rbx 为 ServiceDesc 对象</li>
+<li>rcx 为定义的 interface 接口</li>
+</ul>
+<p>我们需要的信息就在第二个参数 ServiceDesc 对象中：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">type ServiceDesc <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">	ServiceName <span class="built_in">string</span></span><br><span class="line">	<span class="comment">// The pointer to the service interface. Used to check whether the user</span></span><br><span class="line">	<span class="comment">// provided implementation satisfies the interface requirements.</span></span><br><span class="line">	HandlerType any</span><br><span class="line">	Methods     []MethodDesc</span><br><span class="line">	Streams     []StreamDesc</span><br><span class="line">	Metadata    any</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">type MethodDesc <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">	MethodName <span class="built_in">string</span></span><br><span class="line">	Handler    methodHandler</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">type StreamDesc <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">	StreamName <span class="built_in">string</span>        </span><br><span class="line">	Handler    StreamHandler </span><br><span class="line"></span><br><span class="line">	ServerStreams <span class="keyword">bool</span> </span><br><span class="line">	ClientStreams <span class="keyword">bool</span> </span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">.data:<span class="number">0000000000</span>C513E0                               <span class="keyword">public</span> go_test_proto_Greeter_ServiceDesc</span><br><span class="line">.data:<span class="number">0000000000</span>C513E0                               ; google_golang_org_grpc_ServiceDesc_0 go_test_proto_Greeter_ServiceDesc</span><br><span class="line">.data:<span class="number">0000000000</span>C513E0 <span class="number">9B</span> EB <span class="number">8</span>C <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">13</span> <span class="number">00</span>+go_test_proto_Greeter_ServiceDesc google_golang_org_grpc_ServiceDesc_0 &lt;&lt;offset aGreeterSrvGree, <span class="number">13</span>h&gt;, &lt;offset unk_80B520, <span class="number">0</span>&gt;, &lt;\</span><br><span class="line">.data:<span class="number">0000000000</span>C513E0 <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">20</span> B5 <span class="number">80</span> <span class="number">00</span>+                                        ; DATA XREF: main_main+<span class="number">92</span>↑o</span><br><span class="line">.data:<span class="number">0000000000</span>C513E0 <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span>+                                      offset off_C49860, <span class="number">1</span>, <span class="number">1</span>&gt;, &lt;offset regexp_arrayNoInts, <span class="number">0</span>, <span class="number">0</span>&gt;, &lt;\ ; <span class="string">&quot;greeter.srv.Greeter&quot;</span> ...</span><br><span class="line">.data:<span class="number">0000000000</span>C513E0 <span class="number">00</span> <span class="number">00</span> <span class="number">60</span> <span class="number">98</span> C4 <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span>+                                      offset unk_8221E0, offset off_C481A0&gt;&gt;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>IDA 信息可能有点难看，这里直接看 GDB 调试信息（长度大小为 0x60）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0xc513e0</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│ rbx <span class="number">0xc513e0</span> —▸ <span class="number">0x8cebfb</span> ◂— <span class="number">0x2e72657465657267</span> (<span class="string">&#x27;greeter.&#x27;</span>) <span class="comment">/* ServiceName */</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│     <span class="number">0xc513e8</span> ◂— <span class="number">0x13</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│     <span class="number">0xc513f0</span> —▸ <span class="number">0x80b540</span> ◂— <span class="number">0x8</span> <span class="comment">/* HandlerType */</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│     <span class="number">0xc513f8</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│     <span class="number">0xc51400</span> —▸ <span class="number">0xc49860</span> —▸ <span class="number">0x8c81dc</span> ◂— <span class="number">0x6f6c6c6548796153</span> (<span class="string">&#x27;SayHello&#x27;</span>) <span class="comment">/* MethodDesc */</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│     <span class="number">0xc51408</span> ◂— <span class="number">0x1</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│     <span class="number">0xc51410</span> ◂— <span class="number">0x1</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│     <span class="number">0xc51418</span> —▸ <span class="number">0xc8b4e0</span> ◂— <span class="number">0x1010101010101</span> <span class="comment">/* StreamDesc */</span></span><br><span class="line"><span class="number">08</span>:<span class="number">0040</span>│  <span class="number">0xc51420</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">09</span>:<span class="number">0048</span>│  <span class="number">0xc51428</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">0</span>a:<span class="number">0050</span>│  <span class="number">0xc51430</span> —▸ <span class="number">0x822200</span> ◂— <span class="number">0x10</span> <span class="comment">/* Metadata */</span></span><br><span class="line"><span class="number">0b</span>:<span class="number">0058</span>│  <span class="number">0xc51438</span> —▸ <span class="number">0xc481a0</span> —▸ <span class="number">0x8cedd6</span> ◂— <span class="number">0x72672f6f746f7270</span> (<span class="string">&#x27;proto/gr&#x27;</span>) </span><br><span class="line"><span class="number">0</span>c:<span class="number">0060</span>│  <span class="number">0xc51440</span> —▸ <span class="number">0x8c4889</span> ◂— <span class="number">0x6956696156435455</span> (<span class="string">&#x27;UTCVaiVi&#x27;</span>)</span><br><span class="line"><span class="number">0</span>d:<span class="number">0068</span>│  <span class="number">0xc51448</span> ◂— <span class="number">0x3</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0xc49860</span> <span class="comment">/* MethodDesc */</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│  <span class="number">0xc49860</span> —▸ <span class="number">0x8c81dc</span> ◂— <span class="number">0x6f6c6c6548796153</span> (<span class="string">&#x27;SayHello&#x27;</span>) <span class="comment">/* MethodName */</span></span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│  <span class="number">0xc49868</span> ◂— <span class="number">0x8</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│  <span class="number">0xc49870</span> —▸ <span class="number">0x900b28</span> —▸ <span class="number">0x7e3860</span> ◂— cmp    rsp, qword ptr [r14 + <span class="number">10</span>h] <span class="comment">/* Handler */</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│  <span class="number">0xc49878</span> ◂— <span class="number">0x0</span></span><br><span class="line">... ↓     <span class="number">4</span> skipped</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在 Handler 中可以找到目标函数</li>
+</ul>
+<p>之前我们已经分析了存根文件中的 Handler 函数，但是在 IDA 逆向时发现其有很大不同：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">retval_7E3860 __golang <span class="title">go_test_proto__Greeter_SayHello_Handler</span><span class="params">(</span></span></span><br><span class="line"><span class="params"><span class="function">        interface__0 srv,</span></span></span><br><span class="line"><span class="params"><span class="function">        context_Context_0 ctx,</span></span></span><br><span class="line"><span class="params"><span class="function">        funcinterface__error dec,</span></span></span><br><span class="line"><span class="params"><span class="function">        google_golang_org_grpc_UnaryServerInterceptor interceptor)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  retval_7E3A60 (__golang *v4)(context_Context_0, interface__0); <span class="comment">// rax</span></span><br><span class="line">  retval_7E3A60 (__golang *v5)(context_Context_0, interface__0); <span class="comment">// rbx</span></span><br><span class="line">  __int64 (**v6)(<span class="keyword">void</span>); <span class="comment">// rsi</span></span><br><span class="line">  <span class="keyword">void</span> (*v7)(context_Context_0, interface__0, google_golang_org_grpc_UnaryServerInfo_0 *, google_golang_org_grpc_UnaryHandler, interface__0 *, error_0 *); <span class="comment">// r8</span></span><br><span class="line">  <span class="keyword">int</span> v8; <span class="comment">// r14</span></span><br><span class="line">  retval_7E3A60 (__golang **v9)(context_Context_0, interface__0); <span class="comment">// rax</span></span><br><span class="line">  retval_7E3A60 (__golang **v10)(context_Context_0, interface__0); <span class="comment">// rax</span></span><br><span class="line">  <span class="keyword">int</span> v11; <span class="comment">// rax</span></span><br><span class="line">  runtime__type_0 *v12; <span class="comment">// [rsp-30h] [rbp-50h]</span></span><br><span class="line">  runtime_interfacetype_0 *v13; <span class="comment">// [rsp-30h] [rbp-50h]</span></span><br><span class="line">  runtime__type_0 *v14; <span class="comment">// [rsp-30h] [rbp-50h]</span></span><br><span class="line">  runtime__type_0 *v15; <span class="comment">// [rsp-28h] [rbp-48h]</span></span><br><span class="line">  retval_7E3A60 (__golang *v16)(context_Context_0, interface__0); <span class="comment">// [rsp+10h] [rbp-10h]</span></span><br><span class="line">  <span class="keyword">void</span> *retaddr; <span class="comment">// [rsp+20h] [rbp+0h] BYREF</span></span><br><span class="line">  google_golang_org_grpc_UnaryServerInterceptor interceptora; <span class="comment">// [rsp+50h] [rbp+30h]</span></span><br><span class="line">  retval_7E3860 result; <span class="comment">// [rsp+58h] [rbp+38h]</span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> ( (<span class="keyword">unsigned</span> <span class="keyword">int</span>)&amp;retaddr &lt;= *(_QWORD *)(v8 + <span class="number">16LL</span>) )</span><br><span class="line">    runtime_morestack_noctxt();</span><br><span class="line">  interceptora = v7;</span><br><span class="line">  v16 = v4;</span><br><span class="line">  v15 = (runtime__type_0 *)runtime_newobject(v12);</span><br><span class="line">  <span class="keyword">if</span> ( !(*v6)() )</span><br><span class="line">  &#123;</span><br><span class="line">    <span class="keyword">if</span> ( interceptora )</span><br><span class="line">    &#123;</span><br><span class="line">      runtime_newobject(&amp;v13-&gt;typ);</span><br><span class="line">      *v9 = v16;</span><br><span class="line">      <span class="keyword">if</span> ( *(_DWORD *)&amp;runtime_writeBarrier.enabled )</span><br><span class="line">        runtime_gcWriteBarrierDX();</span><br><span class="line">      <span class="keyword">else</span></span><br><span class="line">        v9[<span class="number">1LL</span>] = v5;</span><br><span class="line">      v9[<span class="number">3LL</span>] = (retval_7E3A60 (__golang *)(context_Context_0, interface__0))<span class="number">29LL</span>;</span><br><span class="line">      v9[<span class="number">2LL</span>] = (retval_7E3A60 (__golang *)(context_Context_0, interface__0))<span class="string">&quot;/greeter.srv.Greeter/SayHello&quot;</span>;</span><br><span class="line">      runtime_newobject(v14);</span><br><span class="line">      *v10 = go_test_proto__Greeter_SayHello_Handler_func1;</span><br><span class="line">      v10[<span class="number">1LL</span>] = v16;</span><br><span class="line">      <span class="keyword">if</span> ( *(_DWORD *)&amp;runtime_writeBarrier.enabled )</span><br><span class="line">        runtime_gcWriteBarrierR9();</span><br><span class="line">      <span class="keyword">else</span></span><br><span class="line">        v10[<span class="number">2LL</span>] = v5;</span><br><span class="line">      (*(<span class="keyword">void</span> (**)(<span class="keyword">void</span>))interceptora)(); <span class="comment">/* 调用interceptor(注册的拦截器) */</span></span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span></span><br><span class="line">    &#123;</span><br><span class="line">      runtime_assertE2I(v13, v15);</span><br><span class="line">      (*(<span class="keyword">void</span> (**)(<span class="keyword">void</span>))(v11 + <span class="number">24LL</span>))(); <span class="comment">/* 调用目标函数 */</span></span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> result;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>通过调试即可找到目标函数的具体地址：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">► <span class="number">0x7e39ce</span>    call   rdx                           &lt;<span class="number">0x7e3c40</span>&gt; <span class="comment">/* main__ptr_server_SayHello */</span></span><br></pre></td></tr></table></figure>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/gRPC/" rel="tag"><i class="fa fa-tag"></i> gRPC</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2024/03/15/DirtyFile+CVE-2022-2602/" rel="prev" title="DirtyFile+CVE-2022-2602">
+      <i class="fa fa-chevron-left"></i> DirtyFile+CVE-2022-2602
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2024/03/21/DubheCTF2024/" rel="next" title="DubheCTF2024">
+      DubheCTF2024 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">318</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">13</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">167</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2024</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">4.8m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">72:20</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
