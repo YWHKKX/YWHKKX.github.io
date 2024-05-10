@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="变量和作用域最小µGo的编译器中没有等号，需要在 (p *Lexer) run() (tokens []token.Token) 中添加有关等号的处理： 12345678case r &#x3D;&#x3D; &amp;#x27;&#x3D;&amp;#x27;: &#x2F;&#x2F; &#x3D;, &#x3D;&#x3D;switch p.src.Read() &amp;#123;    case &amp;#x27;&#x3D;&amp;#x27;:    p.emit(token.EQL)    default:">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ugo-lab3-完善语句">
+<meta property="og:url" content="http://example.com/2024/04/23/ugo-lab3-%E5%AE%8C%E5%96%84%E8%AF%AD%E5%8F%A5/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="变量和作用域最小µGo的编译器中没有等号，需要在 (p *Lexer) run() (tokens []token.Token) 中添加有关等号的处理： 12345678case r &#x3D;&#x3D; &amp;#x27;&#x3D;&amp;#x27;: &#x2F;&#x2F; &#x3D;, &#x3D;&#x3D;switch p.src.Read() &amp;#123;    case &amp;#x27;&#x3D;&amp;#x27;:    p.emit(token.EQL)    default:">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2024-04-23T12:16:12.000Z">
+<meta property="article:modified_time" content="2024-05-07T10:42:06.651Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="labs">
+<meta property="article:tag" content="Compilers Principles">
+<meta property="article:tag" content="golang">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2024/04/23/ugo-lab3-%E5%AE%8C%E5%96%84%E8%AF%AD%E5%8F%A5/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>ugo-lab3-完善语句 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2024/04/23/ugo-lab3-%E5%AE%8C%E5%96%84%E8%AF%AD%E5%8F%A5/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          ugo-lab3-完善语句
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2024-04-23 20:16:12" itemprop="dateCreated datePublished" datetime="2024-04-23T20:16:12+08:00">2024-04-23</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2024-05-07 18:42:06" itemprop="dateModified" datetime="2024-05-07T18:42:06+08:00">2024-05-07</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>8.1k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>7 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="变量和作用域"><a href="#变量和作用域" class="headerlink" title="变量和作用域"></a>变量和作用域</h2><p>最小µGo的编译器中没有等号，需要在 <code>(p *Lexer) run() (tokens []token.Token)</code> 中添加有关等号的处理：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">case</span> r == <span class="string">&#x27;=&#x27;</span>: <span class="comment">// =, ==</span></span><br><span class="line"><span class="keyword">switch</span> p.src.Read() &#123;</span><br><span class="line">    <span class="keyword">case</span> <span class="string">&#x27;=&#x27;</span>:</span><br><span class="line">    p.emit(token.EQL)</span><br><span class="line">    <span class="keyword">default</span>:</span><br><span class="line">    p.src.Unread()</span><br><span class="line">    p.emit(token.ASSIGN)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>本次实验需要完成语法分析中的：“变量声明”，“嵌套语句块”，“赋值语句”</p>
+<p>在语法分析中对于语句的处理如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Parser)</span> <span class="title">parseStmt</span><span class="params">()</span> <span class="title">ast</span>.<span class="title">Stmt</span></span> &#123;</span><br><span class="line">	<span class="keyword">switch</span> tok := p.PeekToken(); tok.Type &#123;</span><br><span class="line">	<span class="keyword">case</span> token.EOF:</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">nil</span></span><br><span class="line">	<span class="keyword">case</span> token.ERROR:</span><br><span class="line">		p.errorf(tok.Pos, <span class="string">&quot;invalid token: %s&quot;</span>, tok.Literal)</span><br><span class="line">	<span class="keyword">case</span> token.SEMICOLON:</span><br><span class="line">		p.AcceptTokenList(token.SEMICOLON)</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">nil</span></span><br><span class="line">	<span class="keyword">case</span> token.LBRACE: <span class="comment">// 语句块</span></span><br><span class="line">		<span class="keyword">return</span> p.parseStmt_block()</span><br><span class="line">	<span class="keyword">default</span>:</span><br><span class="line">		exprList := p.parseExprList() <span class="comment">// 表达式列表 exprList</span></span><br><span class="line">		<span class="keyword">switch</span> tok := p.PeekToken(); tok.Type &#123;</span><br><span class="line">		<span class="keyword">case</span> token.SEMICOLON, token.LBRACE: <span class="comment">// exprList;</span></span><br><span class="line">			<span class="keyword">if</span> <span class="built_in">len</span>(exprList) != <span class="number">1</span> &#123;</span><br><span class="line">				p.errorf(tok.Pos, <span class="string">&quot;unknown token: %v&quot;</span>, tok.Type)</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">return</span> &amp;ast.ExprStmt&#123;</span><br><span class="line">				X: exprList[<span class="number">0</span>],</span><br><span class="line">			&#125;</span><br><span class="line">		<span class="keyword">case</span> token.DEFINE, token.ASSIGN:</span><br><span class="line">			<span class="comment">// exprList := exprList; &amp;&amp; exprList = exprList;</span></span><br><span class="line">			p.ReadToken()</span><br><span class="line">			exprValueList := p.parseExprList()</span><br><span class="line">			<span class="keyword">if</span> <span class="built_in">len</span>(exprList) != <span class="built_in">len</span>(exprValueList) &#123;</span><br><span class="line">				p.errorf(tok.Pos, <span class="string">&quot;unknown token: %v&quot;</span>, tok)</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">var</span> assignStmt = &amp;ast.AssignStmt&#123;</span><br><span class="line">				Target: <span class="built_in">make</span>([]*ast.Ident, <span class="built_in">len</span>(exprList)),</span><br><span class="line">				OpPos:  tok.Pos,</span><br><span class="line">				Op:     tok.Type,</span><br><span class="line">				Value:  <span class="built_in">make</span>([]ast.Expr, <span class="built_in">len</span>(exprList)),</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">for</span> i, target := <span class="keyword">range</span> exprList &#123;</span><br><span class="line">				assignStmt.Target[i] = target.(*ast.Ident)</span><br><span class="line">				assignStmt.Value[i] = exprValueList[i]</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">return</span> assignStmt</span><br><span class="line">		<span class="keyword">default</span>:</span><br><span class="line">			p.errorf(tok.Pos, <span class="string">&quot;unknown token: %v&quot;</span>, tok)</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="built_in">panic</span>(<span class="string">&quot;unreachable&quot;</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>对于 default 分支来说有如下3种情况：</li>
+</ul>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">exprList ;</span><br><span class="line">exprList := exprList;</span><br><span class="line">exprList = exprList;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>然后根据这3种情况分别生成赋值语句结点，该结点的 AST 结构如下：</li>
+</ul>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 一个赋值语句结点</span></span><br><span class="line"><span class="keyword">type</span> AssignStmt <span class="keyword">struct</span> &#123;</span><br><span class="line">	Target []*Ident        <span class="comment">// 要赋值的目标</span></span><br><span class="line">	OpPos  <span class="keyword">int</span>             <span class="comment">// &#x27;:=&#x27; 的位置</span></span><br><span class="line">	Op     token.TokenType <span class="comment">// &#x27;=&#x27; or &#x27;:=&#x27;</span></span><br><span class="line">	Value  []Expr          <span class="comment">// 值</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>语句块的 AST 结构体定义如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 块语句</span></span><br><span class="line"><span class="keyword">type</span> BlockStmt <span class="keyword">struct</span> &#123;</span><br><span class="line">	Lbrace <span class="keyword">int</span> <span class="comment">// &#x27;&#123;&#x27;的位置</span></span><br><span class="line">	List   []Stmt</span><br><span class="line">	Rbrace <span class="keyword">int</span> <span class="comment">// &#x27;&#125;&#x27;的位置</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>核心函数为 parseStmt_block，实现如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Parser)</span> <span class="title">parseStmt_block</span><span class="params">()</span> *<span class="title">ast</span>.<span class="title">BlockStmt</span></span> &#123;</span><br><span class="line">	block := &amp;ast.BlockStmt&#123;&#125;</span><br><span class="line">	tokBegin := p.MustAcceptToken(token.LBRACE) <span class="comment">// 获取&#x27;&#123;&#x27;的位置</span></span><br><span class="line"></span><br><span class="line">Loop:</span><br><span class="line">	<span class="keyword">for</span> &#123;</span><br><span class="line">		<span class="keyword">switch</span> tok := p.PeekToken(); tok.Type &#123;</span><br><span class="line">		<span class="keyword">case</span> token.EOF:</span><br><span class="line">			<span class="keyword">break</span> Loop</span><br><span class="line">		<span class="keyword">case</span> token.ERROR:</span><br><span class="line">			p.errorf(tok.Pos, <span class="string">&quot;invalid token: %s&quot;</span>, tok.Literal)</span><br><span class="line">		<span class="keyword">case</span> token.SEMICOLON:</span><br><span class="line">			p.AcceptTokenList(token.SEMICOLON)</span><br><span class="line">		<span class="keyword">case</span> token.RBRACE: <span class="comment">// &#125;</span></span><br><span class="line">			<span class="keyword">break</span> Loop</span><br><span class="line">		<span class="keyword">default</span>:</span><br><span class="line">			block.List = <span class="built_in">append</span>(block.List, p.parseStmt_expr()) <span class="comment">// 表达式中可能有子语句块</span></span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	tokEnd := p.MustAcceptToken(token.RBRACE) <span class="comment">// 获取&#x27;&#125;&#x27;的位置</span></span><br><span class="line">	block.Lbrace = tokBegin.Pos</span><br><span class="line">	block.Rbrace = tokEnd.Pos</span><br><span class="line">	<span class="keyword">return</span> block</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>break label 这种语法可以一次性跳出 for 和 switch</li>
+</ul>
+<p>用于管理变量的 AST 结构体如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 变量信息</span></span><br><span class="line"><span class="keyword">type</span> VarSpec <span class="keyword">struct</span> &#123;</span><br><span class="line">	VarPos <span class="keyword">int</span>    <span class="comment">// var 关键字位置</span></span><br><span class="line">	Name   *Ident <span class="comment">// 变量名字</span></span><br><span class="line">	Type   *Ident <span class="comment">// 变量类型, 可省略</span></span><br><span class="line">	Value  Expr   <span class="comment">// 变量表达式</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>变量可以为全局也可以存在于语句块中，因此需要将函数 parseStmt_var 添加入 parseStmt 和 parseStmt_block 中</p>
+<p>核心函数 parseStmt_var 实现如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Parser)</span> <span class="title">parseStmt_var</span><span class="params">()</span> *<span class="title">ast</span>.<span class="title">VarSpec</span></span> &#123;</span><br><span class="line">	tokVar := p.MustAcceptToken(token.VAR)</span><br><span class="line">	tokIdent := p.MustAcceptToken(token.IDENT)</span><br><span class="line"></span><br><span class="line">	<span class="keyword">var</span> varSpec = &amp;ast.VarSpec&#123;</span><br><span class="line">		VarPos: tokVar.Pos,</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	varSpec.Name = &amp;ast.Ident&#123;</span><br><span class="line">		NamePos: tokIdent.Pos,</span><br><span class="line">		Name:    tokIdent.Literal,</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> typ, ok := p.AcceptToken(token.IDENT); ok &#123;</span><br><span class="line">		varSpec.Type = &amp;ast.Ident&#123;</span><br><span class="line">			NamePos: typ.Pos,</span><br><span class="line">			Name:    typ.Literal,</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> _, ok := p.AcceptToken(token.ASSIGN); ok &#123;</span><br><span class="line">		varSpec.Value = p.parseExpr()</span><br><span class="line">	&#125;</span><br><span class="line">	p.AcceptToken(token.SEMICOLON)</span><br><span class="line">	<span class="keyword">return</span> varSpec</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>利用之前实现的 API 获取 AST 结点的关键信息，最后生成并返回该 AST 结点</li>
+</ul>
+<h2 id="if分支和for循环"><a href="#if分支和for循环" class="headerlink" title="if分支和for循环"></a>if分支和for循环</h2><p>在 token 类型和注册的关键字中添加 if for，以保证词法分析可以顺利匹配</p>
+<p>if 语句结点和 for 语句结点的定义如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 表示一个 if 语句节点</span></span><br><span class="line"><span class="keyword">type</span> IfStmt <span class="keyword">struct</span> &#123;</span><br><span class="line">	If   <span class="keyword">int</span>        <span class="comment">// if 关键字的位置</span></span><br><span class="line">	Init Stmt       <span class="comment">// 初始化语句</span></span><br><span class="line">	Cond Expr       <span class="comment">// if 条件, *BinaryExpr</span></span><br><span class="line">	Body *BlockStmt <span class="comment">// if 为真时对应的语句列表</span></span><br><span class="line">	Else Stmt       <span class="comment">// else 对应的语句</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 表示一个 for 语句节点</span></span><br><span class="line"><span class="keyword">type</span> ForStmt <span class="keyword">struct</span> &#123;</span><br><span class="line">	For  <span class="keyword">int</span>        <span class="comment">// for 关键字的位置</span></span><br><span class="line">	Init Stmt       <span class="comment">// 初始化语句</span></span><br><span class="line">	Cond Expr       <span class="comment">// 条件表达式</span></span><br><span class="line">	Post Stmt       <span class="comment">// 迭代语句</span></span><br><span class="line">	Body *BlockStmt <span class="comment">// 循环对应的语句列表</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>在语法分析中与 if for 语句只能在语句块中，因此需要添加入 parseStmt_block：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">case</span> token.IF:</span><br><span class="line">	block.List = <span class="built_in">append</span>(block.List, p.parseStmt_if())</span><br><span class="line"><span class="keyword">case</span> token.FOR:</span><br><span class="line">	block.List = <span class="built_in">append</span>(block.List, p.parseStmt_for())</span><br></pre></td></tr></table></figure>
+<p>对于 if 语句而言，有如下几种情况：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> x &gt; <span class="number">0</span> &#123;&#125;</span><br><span class="line"><span class="keyword">if</span> x := <span class="number">1</span>; x &gt; <span class="number">0</span> &#123;&#125;</span><br><span class="line"><span class="keyword">if</span> x &gt; <span class="number">0</span> &#123;&#125; <span class="keyword">else</span> &#123;&#125;</span><br><span class="line"><span class="keyword">if</span> x := <span class="number">1</span>; x &gt; <span class="number">0</span> &#123;&#125; <span class="keyword">else</span> &#123;&#125;</span><br></pre></td></tr></table></figure>
+<p>对应的处理函数如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Parser)</span> <span class="title">parseStmt_if</span><span class="params">()</span> *<span class="title">ast</span>.<span class="title">IfStmt</span></span> &#123;</span><br><span class="line">	tokIf := p.MustAcceptToken(token.IF)</span><br><span class="line">	ifStmt := &amp;ast.IfStmt&#123;</span><br><span class="line">		If: tokIf.Pos,</span><br><span class="line">	&#125;</span><br><span class="line">	stmt := p.parseStmt()</span><br><span class="line">	<span class="keyword">if</span> _, ok := p.AcceptToken(token.SEMICOLON); ok &#123;</span><br><span class="line">		ifStmt.Init = stmt</span><br><span class="line">		ifStmt.Cond = p.parseExpr()</span><br><span class="line">		ifStmt.Body = p.parseStmt_block()</span><br><span class="line">	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">		ifStmt.Init = <span class="literal">nil</span></span><br><span class="line">		<span class="keyword">if</span> cond, ok := stmt.(*ast.ExprStmt); ok &#123;</span><br><span class="line">			ifStmt.Cond = cond.X</span><br><span class="line">		&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">			p.errorf(tokIf.Pos, <span class="string">&quot;if cond expect expr: %#v&quot;</span>, stmt)</span><br><span class="line">		&#125;</span><br><span class="line">		ifStmt.Body = p.parseStmt_block()</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> _, ok := p.AcceptToken(token.ELSE); ok &#123;</span><br><span class="line">		<span class="keyword">switch</span> p.PeekToken().Type &#123;</span><br><span class="line">		<span class="keyword">case</span> token.IF: <span class="comment">// else if</span></span><br><span class="line">			ifStmt.Else = p.parseStmt_if()</span><br><span class="line">		<span class="keyword">default</span>:</span><br><span class="line">			ifStmt.Else = p.parseStmt_block()</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> ifStmt</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>对于 for 语句而言，有如下几种情况：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> &#123;&#125;</span><br><span class="line"><span class="keyword">for</span> x &gt; <span class="number">10</span> &#123;&#125;</span><br><span class="line"><span class="keyword">for</span> x := <span class="number">0</span>; x &lt; <span class="number">10</span>; x = x+<span class="number">1</span> &#123;&#125;</span><br></pre></td></tr></table></figure>
+<p>对应的处理函数如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Parser)</span> <span class="title">parseStmt_for</span><span class="params">()</span> *<span class="title">ast</span>.<span class="title">ForStmt</span></span> &#123;</span><br><span class="line">	tokFor := p.MustAcceptToken(token.FOR)</span><br><span class="line"></span><br><span class="line">	forStmt := &amp;ast.ForStmt&#123;</span><br><span class="line">		For: tokFor.Pos,</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="comment">// for &#123;&#125;</span></span><br><span class="line">	<span class="keyword">if</span> _, ok := p.AcceptToken(token.LBRACE); ok &#123;</span><br><span class="line">		p.UnreadToken()</span><br><span class="line">		forStmt.Body = p.parseStmt_block()</span><br><span class="line">		<span class="keyword">return</span> forStmt</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="comment">// for Cond &#123;&#125;</span></span><br><span class="line">	<span class="comment">// for Init?; Cond?; Post? &#123;&#125;</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">// for ; ...</span></span><br><span class="line">	<span class="keyword">if</span> _, ok := p.AcceptToken(token.SEMICOLON); ok &#123;</span><br><span class="line">		forStmt.Init = <span class="literal">nil</span></span><br><span class="line"></span><br><span class="line">		<span class="comment">// for ;; ...</span></span><br><span class="line">		<span class="keyword">if</span> _, ok := p.AcceptToken(token.SEMICOLON); ok &#123;</span><br><span class="line">			<span class="keyword">if</span> _, ok := p.AcceptToken(token.LBRACE); ok &#123;</span><br><span class="line">				<span class="comment">// for ;; &#123;&#125;</span></span><br><span class="line">				p.UnreadToken()</span><br><span class="line">				forStmt.Body = p.parseStmt_block()</span><br><span class="line">				<span class="keyword">return</span> forStmt</span><br><span class="line">			&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">				<span class="comment">// for ; ; postStmt &#123;&#125;</span></span><br><span class="line">				forStmt.Post = p.parseStmt()</span><br><span class="line">				forStmt.Body = p.parseStmt_block()</span><br><span class="line">				<span class="keyword">return</span> forStmt</span><br><span class="line">			&#125;</span><br><span class="line">		&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">			<span class="comment">// for ; cond ; ... &#123;&#125;</span></span><br><span class="line">			forStmt.Cond = p.parseExpr()</span><br><span class="line">			p.MustAcceptToken(token.SEMICOLON)</span><br><span class="line">			<span class="keyword">if</span> _, ok := p.AcceptToken(token.LBRACE); ok &#123;</span><br><span class="line">				<span class="comment">// for ; cond ; &#123;&#125;</span></span><br><span class="line">				p.UnreadToken()</span><br><span class="line">				forStmt.Body = p.parseStmt_block()</span><br><span class="line">				<span class="keyword">return</span> forStmt</span><br><span class="line">			&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">				<span class="comment">// for ; cond ; postStmt &#123;&#125;</span></span><br><span class="line">				forStmt.Post = p.parseStmt()</span><br><span class="line">				forStmt.Body = p.parseStmt_block()</span><br><span class="line">				<span class="keyword">return</span> forStmt</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">		stmt := p.parseStmt()</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> _, ok := p.AcceptToken(token.LBRACE); ok &#123;</span><br><span class="line">			<span class="comment">// for cond &#123;&#125;</span></span><br><span class="line">			p.UnreadToken()</span><br><span class="line">			<span class="keyword">if</span> expr, ok := stmt.(ast.Expr); ok &#123;</span><br><span class="line">				forStmt.Cond = expr</span><br><span class="line">			&#125;</span><br><span class="line">			forStmt.Body = p.parseStmt_block()</span><br><span class="line">			<span class="keyword">return</span> forStmt</span><br><span class="line">		&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">			<span class="comment">// for init;</span></span><br><span class="line">			p.MustAcceptToken(token.SEMICOLON)</span><br><span class="line">			forStmt.Init = stmt</span><br><span class="line"></span><br><span class="line">			<span class="comment">// for ;; ...</span></span><br><span class="line">			<span class="keyword">if</span> _, ok := p.AcceptToken(token.SEMICOLON); ok &#123;</span><br><span class="line">				<span class="keyword">if</span> _, ok := p.AcceptToken(token.LBRACE); ok &#123;</span><br><span class="line">					<span class="comment">// for ;; &#123;&#125;</span></span><br><span class="line">					p.UnreadToken()</span><br><span class="line">					forStmt.Body = p.parseStmt_block()</span><br><span class="line">					<span class="keyword">return</span> forStmt</span><br><span class="line">				&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">					<span class="comment">// for ; ; postStmt &#123;&#125;</span></span><br><span class="line">					forStmt.Post = p.parseStmt()</span><br><span class="line">					forStmt.Body = p.parseStmt_block()</span><br><span class="line">					<span class="keyword">return</span> forStmt</span><br><span class="line">				&#125;</span><br><span class="line">			&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">				<span class="comment">// for ; cond ; ... &#123;&#125;</span></span><br><span class="line">				forStmt.Cond = p.parseExpr()</span><br><span class="line">				p.MustAcceptToken(token.SEMICOLON)</span><br><span class="line">				<span class="keyword">if</span> _, ok := p.AcceptToken(token.LBRACE); ok &#123;</span><br><span class="line">					<span class="comment">// for ; cond ; &#123;&#125;</span></span><br><span class="line">					p.UnreadToken()</span><br><span class="line">					forStmt.Body = p.parseStmt_block()</span><br><span class="line">					<span class="keyword">return</span> forStmt</span><br><span class="line">				&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">					<span class="comment">// for ; cond ; postStmt &#123;&#125;</span></span><br><span class="line">					forStmt.Post = p.parseStmt()</span><br><span class="line">					forStmt.Body = p.parseStmt_block()</span><br><span class="line">					<span class="keyword">return</span> forStmt</span><br><span class="line">				&#125;</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="赋值语句"><a href="#赋值语句" class="headerlink" title="赋值语句"></a>赋值语句</h2><p>赋值语句出现在语句块中，直接修改 parseStmt_block 函数即可</p>
+<p>核心思路和 parseStmt 中关于变量初始化的处理一样：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">default</span>:</span><br><span class="line">	<span class="comment">// exprList ;</span></span><br><span class="line">	<span class="comment">// exprList := exprList;</span></span><br><span class="line">	<span class="comment">// exprList = exprList;</span></span><br><span class="line">	exprList := p.parseExprList()</span><br><span class="line">	<span class="keyword">switch</span> tok := p.PeekToken(); tok.Type &#123;</span><br><span class="line">	<span class="keyword">case</span> token.SEMICOLON:</span><br><span class="line">		<span class="keyword">if</span> <span class="built_in">len</span>(exprList) != <span class="number">1</span> &#123;</span><br><span class="line">			p.errorf(tok.Pos, <span class="string">&quot;unknown token: %v&quot;</span>, tok.Type)</span><br><span class="line">		&#125;</span><br><span class="line">		block.List = <span class="built_in">append</span>(block.List, &amp;ast.ExprStmt&#123;</span><br><span class="line">			X: exprList[<span class="number">0</span>],</span><br><span class="line">		&#125;)</span><br><span class="line">	<span class="keyword">case</span> token.DEFINE, token.ASSIGN:</span><br><span class="line">		p.ReadToken()</span><br><span class="line">		exprValueList := p.parseExprList()</span><br><span class="line">		<span class="keyword">if</span> <span class="built_in">len</span>(exprList) != <span class="built_in">len</span>(exprValueList) &#123;</span><br><span class="line">			p.errorf(tok.Pos, <span class="string">&quot;unknown token: %v&quot;</span>, tok)</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">var</span> assignStmt = &amp;ast.AssignStmt&#123;</span><br><span class="line">			Target: <span class="built_in">make</span>([]*ast.Ident, <span class="built_in">len</span>(exprList)),</span><br><span class="line">			OpPos:  tok.Pos,</span><br><span class="line">			Op:     tok.Type,</span><br><span class="line">			Value:  <span class="built_in">make</span>([]ast.Expr, <span class="built_in">len</span>(exprList)),</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">for</span> i, target := <span class="keyword">range</span> exprList &#123;</span><br><span class="line">			assignStmt.Target[i] = target.(*ast.Ident)</span><br><span class="line">			assignStmt.Value[i] = exprValueList[i]</span><br><span class="line">		&#125;</span><br><span class="line">		block.List = <span class="built_in">append</span>(block.List, assignStmt)</span><br><span class="line">	<span class="keyword">default</span>:</span><br><span class="line">		p.errorf(tok.Pos, <span class="string">&quot;unknown token: %v&quot;</span>, tok)</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/labs/" rel="tag"><i class="fa fa-tag"></i> labs</a>
+              <a href="/tags/Compilers-Principles/" rel="tag"><i class="fa fa-tag"></i> Compilers Principles</a>
+              <a href="/tags/golang/" rel="tag"><i class="fa fa-tag"></i> golang</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2024/04/16/ugo-lab2-%E8%A1%A8%E8%BE%BE%E5%BC%8F%E4%BC%98%E5%85%88%E7%BA%A7/" rel="prev" title="ugo-lab2-表达式优先级">
+      <i class="fa fa-chevron-left"></i> ugo-lab2-表达式优先级
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2024/05/10/ugo-lab4-%E5%AD%97%E7%AC%A6%E4%B8%B2&%E6%95%B0%E7%BB%84&%E7%BB%93%E6%9E%84%E4%BD%93/" rel="next" title="ugo-lab4-字符串&数组&结构体">
+      ugo-lab4-字符串&数组&结构体 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8F%98%E9%87%8F%E5%92%8C%E4%BD%9C%E7%94%A8%E5%9F%9F"><span class="nav-number">1.</span> <span class="nav-text">变量和作用域</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#if%E5%88%86%E6%94%AF%E5%92%8Cfor%E5%BE%AA%E7%8E%AF"><span class="nav-number">2.</span> <span class="nav-text">if分支和for循环</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%B5%8B%E5%80%BC%E8%AF%AD%E5%8F%A5"><span class="nav-number">3.</span> <span class="nav-text">赋值语句</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">325</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">13</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">169</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2024</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">4.9m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">74:01</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
