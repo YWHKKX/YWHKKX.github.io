@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="符号表本实验使用如下结构来组织符号表： 1234type SymTab struct &amp;#123;	elements []*TypeSpec	top      int&amp;#125;  PS：目前该符号表仅用于变量，在后续实验完善函数模块后会添加函数符号  与之配套的函数如下： 12345678910111213141516171819202122232425262728293031323334353">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ugo-lab5-符号表&amp;错误检测">
+<meta property="og:url" content="http://example.com/2024/05/13/ugo-lab5-%E7%AC%A6%E5%8F%B7%E8%A1%A8&%E9%94%99%E8%AF%AF%E6%A3%80%E6%B5%8B/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="符号表本实验使用如下结构来组织符号表： 1234type SymTab struct &amp;#123;	elements []*TypeSpec	top      int&amp;#125;  PS：目前该符号表仅用于变量，在后续实验完善函数模块后会添加函数符号  与之配套的函数如下： 12345678910111213141516171819202122232425262728293031323334353">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2024-05-13T02:57:51.000Z">
+<meta property="article:modified_time" content="2024-05-13T02:58:45.657Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="Compilers Principles">
+<meta property="article:tag" content="labs">
+<meta property="article:tag" content="golang">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2024/05/13/ugo-lab5-%E7%AC%A6%E5%8F%B7%E8%A1%A8&%E9%94%99%E8%AF%AF%E6%A3%80%E6%B5%8B/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>ugo-lab5-符号表&错误检测 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2024/05/13/ugo-lab5-%E7%AC%A6%E5%8F%B7%E8%A1%A8&%E9%94%99%E8%AF%AF%E6%A3%80%E6%B5%8B/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          ugo-lab5-符号表&错误检测
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2024-05-13 10:57:51 / Modified: 10:58:45" itemprop="dateCreated datePublished" datetime="2024-05-13T10:57:51+08:00">2024-05-13</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>5.9k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>5 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="符号表"><a href="#符号表" class="headerlink" title="符号表"></a>符号表</h2><p>本实验使用如下结构来组织符号表：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> SymTab <span class="keyword">struct</span> &#123;</span><br><span class="line">	elements []*TypeSpec</span><br><span class="line">	top      <span class="keyword">int</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>PS：目前该符号表仅用于变量，在后续实验完善函数模块后会添加函数符号</li>
+</ul>
+<p>与之配套的函数如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">NewSymTab</span><span class="params">()</span> *<span class="title">SymTab</span></span> &#123;</span><br><span class="line">	<span class="keyword">return</span> &amp;SymTab&#123;</span><br><span class="line">		elements: <span class="literal">nil</span>,</span><br><span class="line">		top:      <span class="number">0</span>,</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *SymTab)</span> <span class="title">Push</span><span class="params">(name, typ *Ident)</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	<span class="keyword">for</span> i := s.top - <span class="number">1</span>; i &gt;= <span class="number">0</span>; i-- &#123;</span><br><span class="line">		<span class="keyword">if</span> s.elements[i].Name.Name == name.Name &#123;</span><br><span class="line">			<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	s.elements = <span class="built_in">append</span>(s.elements, &amp;TypeSpec&#123;</span><br><span class="line">		Name: name,</span><br><span class="line">		Type: typ,</span><br><span class="line">	&#125;)</span><br><span class="line">	s.top++</span><br><span class="line">	<span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *SymTab)</span> <span class="title">Pop</span><span class="params">()</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	<span class="keyword">if</span> s.top == <span class="number">0</span> &#123;</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">	&#125;</span><br><span class="line">	s.top--</span><br><span class="line">	s.elements[s.top] = <span class="literal">nil</span></span><br><span class="line">	<span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *SymTab)</span> <span class="title">GetType</span><span class="params">(value *Ident)</span> <span class="params">(*Ident, <span class="keyword">bool</span>)</span></span> &#123;</span><br><span class="line">	<span class="keyword">for</span> i := s.top - <span class="number">1</span>; i &gt;= <span class="number">0</span>; i-- &#123;</span><br><span class="line">		<span class="keyword">if</span> s.elements[i].Name.Name == value.Name &#123;</span><br><span class="line">			<span class="keyword">return</span> s.elements[i].Type, <span class="literal">true</span></span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> <span class="literal">nil</span>, <span class="literal">false</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *SymTab)</span> <span class="title">CheckType</span><span class="params">(value, typ *Ident)</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	<span class="keyword">if</span> tmp, ok := s.GetType(value); ok &#123;</span><br><span class="line">		<span class="keyword">return</span> tmp.Name == typ.Name</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *SymTab)</span> <span class="title">ShowAll</span><span class="params">()</span></span> &#123;</span><br><span class="line">	fmt.Println(<span class="string">&quot;----------SymTab-------------------------&quot;</span>)</span><br><span class="line">	<span class="keyword">for</span> i, e := <span class="keyword">range</span> s.elements &#123;</span><br><span class="line">		fmt.Printf(<span class="string">&quot;|@%d: &#123;Name: %s,  Type: %s&#125;\t\t|\n&quot;</span>, i+<span class="number">1</span>, e.Name.Name, e.Type.Name)</span><br><span class="line">	&#125;</span><br><span class="line">	fmt.Println(<span class="string">&quot;-----------------------------------------&quot;</span>)</span><br><span class="line">	fmt.Println(<span class="string">&quot;&quot;</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="错误检测"><a href="#错误检测" class="headerlink" title="错误检测"></a>错误检测</h2><p>该错误检测不包括函数未定义和函数参数不匹配，后续实验会进行补充</p>
+<p><strong>错误类型：重复定义</strong></p>
+<p>该错误发生在变量定义的过程中，具体的函数为 parseStmt_var，需要在该函数中添加与符号表相关的代码：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ok := p.SymTab.Push(&amp;ast.Ident&#123;</span><br><span class="line">	NamePos: tokIdent.Pos,</span><br><span class="line">	Name:    tokIdent.Literal,</span><br><span class="line">&#125;, varSpec.Type); !ok &#123;</span><br><span class="line">	p.errorf(tokIdent.Pos, <span class="string">&quot;duplicate variable declaration: %s&quot;</span>, tokIdent.Literal)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>错误类型：使用时未定义</strong></p>
+<p>变量通常在表达式中使用，因此需要在 parseExpr_primary 中进行修改：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">case</span> token.IDENT: <span class="comment">// 变量 &amp;&amp; 数组 &amp;&amp; 结构体</span></span><br><span class="line">	p.MustAcceptToken(token.IDENT)</span><br><span class="line">	asti := &amp;ast.IdentAS&#123;</span><br><span class="line">		NamePos: tok.Pos,</span><br><span class="line">		Name:    tok.Literal,</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> _, ok := p.AcceptToken(token.LSB); ok &#123;</span><br><span class="line">		asti.Offset = p.parseExpr()</span><br><span class="line">		p.AcceptToken(token.RSB)</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> _, ok := p.AcceptToken(token.DOT); ok &#123;</span><br><span class="line">		asti.Offset = p.parseExpr()</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> _, ok := p.SymTab.GetType(tok.Literal); !ok &#123;</span><br><span class="line">		p.errorf(tok.Pos, <span class="string">&quot;unknown variable: %s&quot;</span>, tok.Literal)</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> asti</span><br></pre></td></tr></table></figure>
+<p><strong>错误类型：未知类型</strong></p>
+<p>在进行类型检查之前需要先创建一个类型列表用以记录已有的类型：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> TypeTab <span class="keyword">struct</span> &#123;</span><br><span class="line">	elements []<span class="keyword">string</span></span><br><span class="line">	top      <span class="keyword">int</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>相关函数可以模仿 SymTab：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">NewTypeTab</span><span class="params">()</span> *<span class="title">TypeTab</span></span> &#123;</span><br><span class="line">	<span class="keyword">var</span> re = &amp;TypeTab&#123;</span><br><span class="line">		elements: <span class="built_in">make</span>([]<span class="keyword">string</span>, <span class="number">4</span>),</span><br><span class="line">		top:      <span class="number">4</span>,</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	re.elements[<span class="number">0</span>] = <span class="string">&quot;bool&quot;</span></span><br><span class="line">	re.elements[<span class="number">1</span>] = <span class="string">&quot;char&quot;</span></span><br><span class="line">	re.elements[<span class="number">2</span>] = <span class="string">&quot;int&quot;</span></span><br><span class="line">	re.elements[<span class="number">3</span>] = <span class="string">&quot;string&quot;</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> re</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *TypeTab)</span> <span class="title">Push</span><span class="params">(typ <span class="keyword">string</span>)</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	<span class="keyword">for</span> i := s.top - <span class="number">1</span>; i &gt;= <span class="number">0</span>; i-- &#123;</span><br><span class="line">		<span class="keyword">if</span> s.elements[i] == typ &#123;</span><br><span class="line">			<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	s.elements = <span class="built_in">append</span>(s.elements, typ)</span><br><span class="line">	s.top++</span><br><span class="line">	<span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *TypeTab)</span> <span class="title">Pop</span><span class="params">()</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	<span class="keyword">if</span> s.top == <span class="number">0</span> &#123;</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">	&#125;</span><br><span class="line">	s.top--</span><br><span class="line">	<span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *TypeTab)</span> <span class="title">CheckType</span><span class="params">(typ <span class="keyword">string</span>)</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	<span class="keyword">for</span> i := s.top - <span class="number">1</span>; i &gt;= <span class="number">0</span>; i-- &#123;</span><br><span class="line">		<span class="keyword">if</span> s.elements[i] == typ &#123;</span><br><span class="line">			<span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *TypeTab)</span> <span class="title">ShowAll</span><span class="params">()</span></span> &#123;</span><br><span class="line">	fmt.Println(<span class="string">&quot;----------TypeTab------------------------&quot;</span>)</span><br><span class="line">	<span class="keyword">for</span> i, e := <span class="keyword">range</span> s.elements &#123;</span><br><span class="line">		fmt.Printf(<span class="string">&quot;|@%d: &#123;Type: %s&#125;\t\t\t|\n&quot;</span>, i+<span class="number">1</span>, e)</span><br><span class="line">	&#125;</span><br><span class="line">	fmt.Println(<span class="string">&quot;-----------------------------------------&quot;</span>)</span><br><span class="line">	fmt.Println(<span class="string">&quot;&quot;</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>类型检查发生在变量定义的过程中，也就是 parseStmt_var 函数，往其中添加有关类型检查的代码：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> typ, ok := p.AcceptToken(token.IDENT); ok &#123;</span><br><span class="line">	varSpec.Type = &amp;ast.Ident&#123;</span><br><span class="line">		NamePos: typ.Pos,</span><br><span class="line">		Name:    typ.Literal,</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> ok = p.TypeTab.CheckType(typ.Literal); !ok &#123;</span><br><span class="line">		p.errorf(typ.Pos, <span class="string">&quot;unknown type: %s&quot;</span>, typ.Literal)</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>错误类型：重复类型定义</strong></p>
+<p>该错误发生在 type 语句，需要在 parseStmt_type 函数中添加对应的检查代码：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ok := p.TypeTab.Push(tokIdent.Literal); !ok &#123;</span><br><span class="line">	p.errorf(tokIdent.Pos, <span class="string">&quot;duplicate type name: %s&quot;</span>, tokIdent.Literal)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>错误类型：类型不匹配</strong></p>
+<p>目前该编译器支持4种类型（bool，char，int，string），而需要修改的地方一共有3处</p>
+<p>用于匹配类型的函数如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *TypeTab)</span> <span class="title">MatchType</span><span class="params">(left <span class="keyword">string</span>, right <span class="keyword">interface</span>&#123;&#125;)</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	myType := reflect.TypeOf(right)</span><br><span class="line">	<span class="keyword">switch</span> &#123;</span><br><span class="line">	<span class="keyword">case</span> myType.String() == <span class="string">&quot;*ast.Strings&quot;</span>:</span><br><span class="line">		<span class="keyword">if</span> left != <span class="string">&quot;string&quot;</span> &#123;</span><br><span class="line">			<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">		&#125;</span><br><span class="line">	<span class="keyword">case</span> myType.String() == <span class="string">&quot;*ast.Number&quot;</span>:</span><br><span class="line">		<span class="keyword">if</span> left != <span class="string">&quot;int&quot;</span> &#123;</span><br><span class="line">			<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">		&#125;</span><br><span class="line">	<span class="keyword">case</span> myType.String() == <span class="string">&quot;*ast.Bool&quot;</span>:</span><br><span class="line">		<span class="keyword">if</span> left != <span class="string">&quot;bool&quot;</span> &#123;</span><br><span class="line">			<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">		&#125;</span><br><span class="line">	<span class="keyword">case</span> myType.String() == <span class="string">&quot;*ast.Char&quot;</span>:</span><br><span class="line">		<span class="keyword">if</span> left != <span class="string">&quot;char&quot;</span> &#123;</span><br><span class="line">			<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>修改 parseStmt_var，检查变量初始化的类型是否匹配：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> _, ok := p.AcceptToken(token.ASSIGN); ok &#123;</span><br><span class="line">	varSpec.Value = p.parseExpr()</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> ok = p.TypeTab.MatchType(varSpec.Type.Name, varSpec.Value); !ok &#123;</span><br><span class="line">		p.errorf(tokIdent.Pos, <span class="string">&quot;The variable:%s type:%s not match&quot;</span>, varSpec.Name.Name, varSpec.Type.Name)</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>修改 parseStmt_block，检查赋值语句的类型是否匹配：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">case</span> token.DEFINE, token.ASSIGN:</span><br><span class="line">	p.ReadToken()</span><br><span class="line">	exprValueList := p.parseExprList()</span><br><span class="line">	<span class="keyword">if</span> <span class="built_in">len</span>(exprList) != <span class="built_in">len</span>(exprValueList) &#123;</span><br><span class="line">		p.errorf(tok.Pos, <span class="string">&quot;unknown token: %v&quot;</span>, tok)</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">var</span> assignStmt = &amp;ast.AssignStmt&#123;</span><br><span class="line">		Target: <span class="built_in">make</span>([]*ast.IdentAS, <span class="built_in">len</span>(exprList)),</span><br><span class="line">		OpPos:  tok.Pos,</span><br><span class="line">		Op:     tok.Type,</span><br><span class="line">		Value:  <span class="built_in">make</span>([]ast.Expr, <span class="built_in">len</span>(exprList)),</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">for</span> i, target := <span class="keyword">range</span> exprList &#123;</span><br><span class="line">		assignStmt.Target[i] = target.(*ast.IdentAS)</span><br><span class="line">		assignStmt.Value[i] = exprValueList[i]</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> ok := p.TypeTab.MatchType(assignStmt.Target[i].Name, assignStmt.Value[i]); !ok &#123;</span><br><span class="line">			p.errorf(tok.Pos, <span class="string">&quot;The variable:%s type not match&quot;</span>, assignStmt.Target[i].Name)</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	block.List = <span class="built_in">append</span>(block.List, assignStmt)</span><br></pre></td></tr></table></figure>
+<p>修改 parseExpr_binary，只有数字才能参与运算：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">op := p.PeekToken()</span><br><span class="line"><span class="keyword">if</span> op.Type.Precedence() &lt; prec &#123;</span><br><span class="line">	<span class="keyword">return</span> x</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">myTypeX := reflect.TypeOf(x)</span><br><span class="line"><span class="keyword">if</span> myTypeX.String() != <span class="string">&quot;*ast.Number&quot;</span> &amp;&amp; myTypeX.String() != <span class="string">&quot;*ast.BinaryExpr&quot;</span> &#123;</span><br><span class="line">	p.errorf(op.Pos, <span class="string">&quot;Non-numbers cannot participate in the calculation&quot;</span>)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">p.MustAcceptToken(op.Type)</span><br><span class="line">y := p.parseExpr_binary(op.Type.Precedence() + <span class="number">1</span>)</span><br><span class="line">x = &amp;ast.BinaryExpr&#123;OpPos: op.Pos, Op: op.Type, X: x, Y: y&#125;</span><br><span class="line"></span><br><span class="line">myTypeY := reflect.TypeOf(y)</span><br><span class="line"><span class="keyword">if</span> myTypeY.String() != <span class="string">&quot;*ast.Number&quot;</span> &#123;</span><br><span class="line">	p.errorf(op.Pos, <span class="string">&quot;Non-numbers cannot participate in the calculation&quot;</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/Compilers-Principles/" rel="tag"><i class="fa fa-tag"></i> Compilers Principles</a>
+              <a href="/tags/labs/" rel="tag"><i class="fa fa-tag"></i> labs</a>
+              <a href="/tags/golang/" rel="tag"><i class="fa fa-tag"></i> golang</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2024/05/10/ugo-lab4-%E5%AD%97%E7%AC%A6%E4%B8%B2&%E6%95%B0%E7%BB%84&%E7%BB%93%E6%9E%84%E4%BD%93/" rel="prev" title="ugo-lab4-字符串&数组&结构体">
+      <i class="fa fa-chevron-left"></i> ugo-lab4-字符串&数组&结构体
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%A6%E5%8F%B7%E8%A1%A8"><span class="nav-number">1.</span> <span class="nav-text">符号表</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E9%94%99%E8%AF%AF%E6%A3%80%E6%B5%8B"><span class="nav-number">2.</span> <span class="nav-text">错误检测</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">326</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">13</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">169</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2024</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">4.9m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">74:05</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

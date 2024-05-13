@@ -156,6 +156,172 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2022/09/04/Principles%EF%BC%9Amain%E5%87%BD%E6%95%B0%E6%89%A7%E8%A1%8C%E5%89%8D%E5%90%8E%E7%9A%84%E6%B5%81%E7%A8%8B/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/09/04/Principles%EF%BC%9Amain%E5%87%BD%E6%95%B0%E6%89%A7%E8%A1%8C%E5%89%8D%E5%90%8E%E7%9A%84%E6%B5%81%E7%A8%8B/" class="post-title-link" itemprop="url">Principles：main函数执行前后的流程</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2022-09-04 23:03:24 / Modified: 23:06:10" itemprop="dateCreated datePublished" datetime="2022-09-04T23:03:24+08:00">2022-09-04</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Principles/" itemprop="url" rel="index"><span itemprop="name">Principles</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>5.6k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>5 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>execve</strong></p>
+<p>当 shell 中的那一段命令按下时，一个程序开始执行，shell 或者 GUI 会调用 execve()</p>
+<ul>
+<li>系统会为你设置栈，并且将 <code>argc</code>，<code>argv</code> 和 <code>envp</code> 压入栈中</li>
+<li>对于文件描述符 0，1 和 2（stdin，stdout 和 stderr）则保留 shell 之前的设置</li>
+<li>加载器会帮你完成重定位，调用你设置的 <strong>预初始化函数</strong></li>
+<li>最后，控制权会传递给 <code>_start()</code> </li>
+</ul>
+<p><strong>_start</strong></p>
+<p><code>_start</code> 的反汇编如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">                              <span class="keyword">public</span> _start</span><br><span class="line">                              _start proc near                      </span><br><span class="line">                              ; __unwind &#123;</span><br><span class="line">F3 <span class="number">0F</span> <span class="number">1</span>E FA                   endbr64</span><br><span class="line"><span class="number">31</span> ED                         <span class="keyword">xor</span>     ebp, ebp</span><br><span class="line"><span class="number">49</span> <span class="number">89</span> D1                      mov     r9, rdx                         ; rtld_fini</span><br><span class="line"><span class="number">5</span>E                            pop     rsi                             ; argc</span><br><span class="line"><span class="number">48</span> <span class="number">89</span> E2                      mov     rdx, rsp                        ; ubp_av</span><br><span class="line"><span class="number">48</span> <span class="number">83</span> E4 F0                   <span class="keyword">and</span>     rsp, <span class="number">0F</span>FFFFFFFFFFFFFF0h</span><br><span class="line"><span class="number">50</span>                            push    rax</span><br><span class="line"><span class="number">54</span>                            push    rsp                             ; stack_end</span><br><span class="line"><span class="number">49</span> C7 C0 <span class="number">20</span> <span class="number">12</span> <span class="number">40</span> <span class="number">00</span>          mov     r8, offset __libc_csu_fini      ; fini</span><br><span class="line"><span class="number">48</span> C7 C1 B0 <span class="number">11</span> <span class="number">40</span> <span class="number">00</span>          mov     rcx, offset __libc_csu_init     ; init</span><br><span class="line"><span class="number">48</span> C7 C7 <span class="number">56</span> <span class="number">11</span> <span class="number">40</span> <span class="number">00</span>          mov     rdi, offset main                ; main</span><br><span class="line">FF <span class="number">15</span> <span class="number">52</span> <span class="number">2F</span> <span class="number">00</span> <span class="number">00</span>             call    cs:__libc_start_main_ptr</span><br><span class="line"></span><br><span class="line">F4                            hlt</span><br><span class="line">                              _start endp</span><br></pre></td></tr></table></figure>
+<p><code>_start</code> 中会调用 <code>_libc_start_main</code>，它的原型如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> __libc_start_main(  <span class="keyword">int</span> (*main) (<span class="keyword">int</span>, <span class="keyword">char</span> * *, <span class="keyword">char</span> * *),</span><br><span class="line">                <span class="keyword">int</span> argc, <span class="keyword">char</span> * * ubp_av,</span><br><span class="line">                <span class="keyword">void</span> (*init) (<span class="keyword">void</span>),</span><br><span class="line">                <span class="keyword">void</span> (*fini) (<span class="keyword">void</span>),</span><br><span class="line">                <span class="keyword">void</span> (*rtld_fini) (<span class="keyword">void</span>),</span><br><span class="line">                <span class="keyword">void</span> (* stack_end));</span><br></pre></td></tr></table></figure>
+<p><strong>__libc_start_main</strong></p>
+<p><code>__libc_start_main</code> 函数的参数中没有 envp（<code>main</code> 中的第三个参数，envp 这个数组包含许多的指针，当中每个指针指向的是系统中的环境变量），因此会调用 <code>__libc_init_first</code> 使用内部信息去找到环境变量</p>
+<ul>
+<li>环境变量（environment variables）：一般是指在操作系统中用来指定操作系统运行环境的一些参数，环境变量可以使系统运行环境配置更加简单灵活，可以通过设置环境变量给进程传递参数信息<ul>
+<li>PATH：指定命令的搜索路径</li>
+<li>HOME：当前用户的主工作目录（即 Linux 登录时，默认的目录）</li>
+<li>SHELL：当前 shell，它的值是通常是 <code>/bin/shell</code></li>
+</ul>
+</li>
+<li>Linux 为什么要有环境变量：<ul>
+<li>因为 Linux 执行一些命令时，它会去很多目录去搜索对应的可执行程序</li>
+<li>如果可执行程序分散在不同的目录下，当搜索时，这样会非常的耗费时间</li>
+<li>所以 Linux 就约定，当执行一个命令时，就到一个指定的文件中去寻找可执行程序所在的目录，这个指定的文件就是环境变量配置文件</li>
+</ul>
+</li>
+<li>可以用 GDB 打印一下 argv &amp; envp：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">pwndbg&gt; telescope <span class="number">0x7fffffffdfc8</span></span><br><span class="line"><span class="number">00</span>:<span class="number">0000</span>│ rsi <span class="number">0x7fffffffdfc8</span> —▸ <span class="number">0x7fffffffe31a</span> ◂— <span class="number">0x68792f656d6f682f</span> (<span class="string">&#x27;/home/yh&#x27;</span>)</span><br><span class="line"><span class="number">01</span>:<span class="number">0008</span>│     <span class="number">0x7fffffffdfd0</span> —▸ <span class="number">0x7fffffffe338</span> ◂— <span class="number">0x33323100636261</span> <span class="comment">/* &#x27;abc&#x27; */</span></span><br><span class="line"><span class="number">02</span>:<span class="number">0010</span>│     <span class="number">0x7fffffffdfd8</span> —▸ <span class="number">0x7fffffffe33c</span> ◂— <span class="number">0x5f48535300333231</span> <span class="comment">/* &#x27;123&#x27; */</span></span><br><span class="line"><span class="number">03</span>:<span class="number">0018</span>│     <span class="number">0x7fffffffdfe0</span> ◂— <span class="number">0x0</span></span><br><span class="line"><span class="number">04</span>:<span class="number">0020</span>│ rdx <span class="number">0x7fffffffdfe8</span> —▸ <span class="number">0x7fffffffe340</span> ◂— <span class="string">&#x27;SSH_AUTH_SOCK=/run/user/1000/keyring/ssh&#x27;</span></span><br><span class="line"><span class="number">05</span>:<span class="number">0028</span>│     <span class="number">0x7fffffffdff0</span> —▸ <span class="number">0x7fffffffe369</span> ◂— <span class="string">&#x27;SESSION_MANAGER=local/yhellow-virtual-machine:@/tmp/.ICE-unix/1824,unix/yhellow-virtual-machine:/tmp/.ICE-unix/1824&#x27;</span></span><br><span class="line"><span class="number">06</span>:<span class="number">0030</span>│     <span class="number">0x7fffffffdff8</span> —▸ <span class="number">0x7fffffffe3dd</span> ◂— <span class="string">&#x27;GNOME_TERMINAL_SCREEN=/org/gnome/Terminal/screen/f60ef9cf_9126_4c39_b1ee_af08e3e804a7&#x27;</span></span><br><span class="line"><span class="number">07</span>:<span class="number">0038</span>│     <span class="number">0x7fffffffe000</span> —▸ <span class="number">0x7fffffffe433</span> ◂— <span class="string">&#x27;SSH_AGENT_PID=1557&#x27;</span></span><br></pre></td></tr></table></figure>
+<p>当 <code>envp</code> 建立了之后，<code>__libc_start_main</code> 函数会使用相同的小技巧，越过 envp 数组之后的 <code>NULL</code> 字符，获取另一个向量：ELF 辅助向量（ELF 加载器使用它给进程传递一些信息）</p>
+<ul>
+<li>ELF 辅助向量（Auxiliary Vectors）是 <strong>将某些内核级信息传输到用户进程的机制</strong>（例如：指向[系统调用]入口点的指针-<code>AT_SYSINFO</code>）</li>
+</ul>
+<p>设置环境变量 <code>LD_SHOW_AUXV=1</code> 就可以查看 ELF 辅助向量</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">➜  <span class="built_in">exp</span> LD_SHOW_AUXV=<span class="number">1</span> ./main </span><br><span class="line">AT_SYSINFO_EHDR:      <span class="number">0x7ffc4a3f3000</span></span><br><span class="line">AT_??? (<span class="number">0x33</span>): <span class="number">0xe30</span></span><br><span class="line">AT_HWCAP:             f8bfbff</span><br><span class="line">AT_PAGESZ:            <span class="number">4096</span></span><br><span class="line">AT_CLKTCK:            <span class="number">100</span></span><br><span class="line">AT_PHDR:              <span class="number">0x555c45893040</span></span><br><span class="line">AT_PHENT:             <span class="number">56</span></span><br><span class="line">AT_PHNUM:             <span class="number">13</span></span><br><span class="line">AT_BASE:              <span class="number">0x7fd1cbb48000</span></span><br><span class="line">AT_FLAGS:             <span class="number">0x0</span></span><br><span class="line">AT_ENTRY:             <span class="number">0x555c458941c0</span></span><br><span class="line">AT_UID:               <span class="number">1000</span></span><br><span class="line">AT_EUID:              <span class="number">1000</span></span><br><span class="line">AT_GID:               <span class="number">1000</span></span><br><span class="line">AT_EGID:              <span class="number">1000</span></span><br><span class="line">AT_SECURE:            <span class="number">0</span></span><br><span class="line">AT_RANDOM:            <span class="number">0x7ffc4a3e5899</span></span><br><span class="line">AT_HWCAP2:            <span class="number">0x2</span></span><br><span class="line">AT_EXECFN:            ./main</span><br><span class="line">AT_PLATFORM:          x86_64</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>AT_ENTRY</code> 就是 <code>_start</code> 的地址，<code>AT_PHDR</code> 是 ELF program header 的位置，<code>AT_PHENT</code> 是header entry 的字节数 ，还输出了 UID、UID 和 GID</li>
+<li>这些都是内核态才能拿到的数据，但是用户态程序又需要这些数据，于是就通过 ELF 辅助向量将这些信息传输给用户态进程</li>
+</ul>
+<p>当进程获取到必要的数据后，就会执行 <code>__libc_start_main</code> 函数的主要功能：</p>
+<ul>
+<li>处理关于 <code>setuid、setgid</code> 程序的安全问题</li>
+<li>启动线程</li>
+<li>把 <code>fini</code> 函数（实际上是 <code>__libc_csu_fini</code>）和 <code>rtld_fini</code> 函数作为参数传递给 <code>at_exit</code> 调用（使它们在 <code>at_exit</code> 里被调用，从而完成用户程序和加载器的调用结束之后的清理工作）</li>
+<li>调用其 <code>init</code> 参数（实际上是执行 <code>__libc_csu_init</code> 函数）</li>
+<li>调用 <code>main</code> 函数，并把 <code>argc</code> 和 <code>argv</code> 参数、环境变量传递给它</li>
+<li>调用 <code>exit</code> 函数（会在其中调用 <code>__libc_csu_fini</code>），并将 <code>main</code> 函数的返回值传递给它</li>
+</ul>
+<p><strong><strong>libc_csu_init &amp; </strong>libc_csu_fini</strong></p>
+<p>对于任意的可执行程序都可以有一个C函数的“构造函数” <code>__libc_csu_init</code> 和C函数的“析构函数” <code>__libc_csu_fini</code>，在构造函数内部，可执行程序会找到全局C函数组成的构造函数集，并且调用它们</p>
+<p>构造函数和析构函数是 Cpp 中的概念：</p>
+<ul>
+<li>构造函数：是一种特殊的函数，用来在对象实例化的时候初始化对象的成员变量</li>
+<li>析构函数：是构造函数的互补，当对象超出作用域或动态分配的对象被删除时，将自动调用析构函数 </li>
+</ul>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Line</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">   <span class="keyword">public</span>: <span class="comment">/* 构造函数/析构函数都要放到public中 */</span></span><br><span class="line">      <span class="function"><span class="keyword">void</span> <span class="title">setLength</span><span class="params">(<span class="keyword">double</span> len)</span></span>;</span><br><span class="line">      <span class="function"><span class="keyword">double</span> <span class="title">getLength</span><span class="params">(<span class="keyword">void</span>)</span></span>;</span><br><span class="line">      <span class="built_in">Line</span>();   <span class="comment">/* 这是构造函数声明(与类名相同) */</span></span><br><span class="line">      ~<span class="built_in">Line</span>();  <span class="comment">/* 这是析构函数声明(与类名相同,在前面加~) */</span></span><br><span class="line">   <span class="keyword">private</span>:</span><br><span class="line">      <span class="keyword">double</span> length;</span><br><span class="line">&#125;;</span><br><span class="line">Line::<span class="built_in">Line</span>(<span class="keyword">void</span>)&#123; <span class="comment">/* 构造函数的定义 */</span></span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;Object is being created&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line">Line::~<span class="built_in">Line</span>(<span class="keyword">void</span>)&#123; <span class="comment">/* 析构函数的定义 */</span></span><br><span class="line">    cout &lt;&lt; <span class="string">&quot;Object is being deleted&quot;</span> &lt;&lt; endl;</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">Line::setLength</span><span class="params">(<span class="keyword">double</span> len)</span></span>&#123;</span><br><span class="line">    length = len;</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">double</span> <span class="title">Line::getLength</span><span class="params">(<span class="keyword">void</span>)</span></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> length;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">( )</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">   Line line; <span class="comment">/* 执行构造函数 */</span></span><br><span class="line">   line.<span class="built_in">setLength</span>(<span class="number">6</span>);</span><br><span class="line">   cout &lt;&lt; <span class="string">&quot;Length of line : &quot;</span> &lt;&lt; line.<span class="built_in">getLength</span>() &lt;&lt;endl; </span><br><span class="line">   <span class="keyword">return</span> <span class="number">0</span>; <span class="comment">/* 执行析构函数 */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Object is being created</span><br><span class="line">Length of line : <span class="number">6</span></span><br><span class="line">Object is being deleted</span><br></pre></td></tr></table></figure>
+<p>C 语言没有构造函数和析构函数的概念，但 gcc 为函数提供了几种类型的属性，其中包含：</p>
+<ul>
+<li>构造函数(constructors)：<code>static void start(void) __attribute__ ((constructor))</code></li>
+<li>析构函数(destructors)：<code>static void stop(void) __attribute__ ((destructor))</code></li>
+<li>带有“构造函数”属性的函数将在 <code>main</code> 函数之前被执行，而声明为“析构函数”属性的函数则将在 <code>main</code> 退出时执行（其实就有点像针对 <code>main</code> 的构造函数）</li>
+</ul>
+<p>源码如下：（根据 IDA 反编译出来的代码改的）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> _libc_csu_init()&#123;</span><br><span class="line">    init_proc(); <span class="comment">/* 初始化 */</span></span><br><span class="line">    <span class="keyword">const</span> <span class="keyword">size_t</span> size = &amp;_do_global_dtors_aux_fini_array_entry - &amp;_frame_dummy_init_array_entry;</span><br><span class="line">    <span class="keyword">if</span> (size)&#123;</span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">size_t</span> i = <span class="number">0LL</span>; i != size; ++i)</span><br><span class="line">            <span class="comment">/* 遍历并调用&#x27;_frame_dummy_init_array_entry+i&#x27;中的函数 */</span></span><br><span class="line">            (*(&amp;_frame_dummy_init_array_entry + i))();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>_frame_dummy_init_array_entry</code> 中的数据如下：（提前写好了“构造函数”）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">.init_array:<span class="number">0000000000003</span>D88 <span class="number">40</span> <span class="number">11</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span>       __frame_dummy_init_array_entry dq offset frame_dummy</span><br><span class="line">.init_array:<span class="number">0000000000003</span>D90 <span class="number">49</span> <span class="number">11</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span>       dq offset a_constructor</span><br><span class="line">.init_array:<span class="number">0000000000003</span>D98 <span class="number">60</span> <span class="number">11</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span>       dq offset b_constructor</span><br><span class="line">.init_array:<span class="number">0000000000003</span>DA0 <span class="number">77</span> <span class="number">11</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span>       dq offset c_constructor</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>_do_global_dtors_aux_fini_array_entry</code> 中的数据如下：（提前写好了“析构函数”）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">.fini_array:<span class="number">0000000000003</span>DA8 <span class="number">00</span> <span class="number">11</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span>       __do_global_dtors_aux_fini_array_entry dq offset __do_global_dtors_aux</span><br><span class="line">.fini_array:<span class="number">0000000000003</span>DB0 <span class="number">8</span>E <span class="number">11</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span>       dq offset A_destructor</span><br><span class="line">.fini_array:<span class="number">0000000000003</span>DB8 A5 <span class="number">11</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span>       dq offset B_destructor</span><br><span class="line">.fini_array:<span class="number">0000000000003</span>DC0 BC <span class="number">11</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span>       dq offset C_destructor</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p><strong>main 函数执行前后的流程</strong></p>
+<p>函数调用关系图：</p>
+<img src="/2022/09/04/Principles%EF%BC%9Amain%E5%87%BD%E6%95%B0%E6%89%A7%E8%A1%8C%E5%89%8D%E5%90%8E%E7%9A%84%E6%B5%81%E7%A8%8B/1662295532372.png" class width="1662295532372"> 
+<ul>
+<li>首先程序调用 execve 生成一个进程，并且设置好数据</li>
+<li>然后调用 <code>_start</code> 简单设置后就调用 <code>__libc_start_main</code></li>
+<li><code>__libc_start_main</code> 会先调用 <code>__libc_init_first</code> 获取环境变量 envp（作为 main 的第三个参数），然后越过 envp 数组之后的 <code>NULL</code> 字符，获取 ELF 辅助向量</li>
+<li>把 <code>fini</code> 和 <code>rtld_fini</code> 作为参数传递给 <code>at_exit</code> 调用</li>
+<li>调用其 <code>init</code> 参数，执行 <code>__libc_csu_init</code></li>
+<li>调用 <code>main</code> 函数，并把 <code>argc</code> 和 <code>argv</code> 参数、环境变量传递给它</li>
+<li>调用 <code>exit</code> 函数，执行其中的 <code>__libc_csu_fini</code></li>
+</ul>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/09/04/Principles%EF%BC%9APIE%E5%8E%9F%E7%90%86/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -2305,119 +2471,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2022/08/19/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9A%E7%BD%91%E7%BB%9C%E6%8A%93%E5%8C%85%E5%8E%9F%E7%90%86/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/08/19/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9A%E7%BD%91%E7%BB%9C%E6%8A%93%E5%8C%85%E5%8E%9F%E7%90%86/" class="post-title-link" itemprop="url">网络相关知识：网络抓包原理</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2022-08-19 10:51:24" itemprop="dateCreated datePublished" datetime="2022-08-19T10:51:24+08:00">2022-08-19</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2022-10-21 19:24:58" itemprop="dateModified" datetime="2022-10-21T19:24:58+08:00">2022-10-21</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>2.3k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>2 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="手机-App-抓包"><a href="#手机-App-抓包" class="headerlink" title="手机 App 抓包"></a>手机 App 抓包</h2><p>要实现对 App 的网络数据抓包，需要监控 App 与服务器交互之间的网络节点，监控其中任意一个网络节点（网卡），获取所有经过网卡中的数据，对这些数据按照网络协议进行解析，这就是抓包的基本原理</p>
-<p>但是中间网络节点，不受我们控制，所以基本无法实现抓包的，只能在客户端和服务端进行抓包</p>
-<p>通常我们监控本地网卡数据，如下图： </p>
-<img src="/2022/08/19/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9A%E7%BD%91%E7%BB%9C%E6%8A%93%E5%8C%85%E5%8E%9F%E7%90%86/1660838000697-1666351497464.png" class width="1660838000697"> 
-<p><code>本地网络</code> 指的是WIFI的路由，如果直接抓路由器的包还是比较麻烦的，因此我们会在 <code>手机</code> 和 <code>本地路由</code> 之间加一层 <code>代理服务</code>，这样只要抓代理服务的网络数据即可：</p>
-<img src="/2022/08/19/%E7%BD%91%E7%BB%9C%E7%9B%B8%E5%85%B3%E7%9F%A5%E8%AF%86%EF%BC%9A%E7%BD%91%E7%BB%9C%E6%8A%93%E5%8C%85%E5%8E%9F%E7%90%86/1660838017257-1666351497464.png" class width="1660838017257"> 
-<h2 id="Linux-抓包"><a href="#Linux-抓包" class="headerlink" title="Linux 抓包"></a>Linux 抓包</h2><p>Linux 抓包是通过 <strong>注册一种虚拟的底层网络协议</strong> 来完成对网络报文（准确的说是网络设备）消息的处理权</p>
-<ul>
-<li>当网卡接收到一个网络报文之后，它会遍历系统中所有已经注册的网络协议（例如，以太网协议，x25协议处理模块）来尝试进行报文的解析处理（这一点和一些文件系统的挂载相似，就是让系统中所有的已经注册的文件系统来进行尝试挂载，如果哪一个认为自己可以处理，那么就完成挂载）</li>
-<li>当抓包模块把自己伪装成一个网络协议的时候，系统在收到报文的时候就会给这个伪协议一次机会，让它来对网卡收到的报文进行一次处理，此时该模块就会趁机对报文进行窥探，也就是把这个报文完完整整的复制一份，假装是自己接收到的报文，汇报给抓包模块 </li>
-</ul>
-<p>具体是使用 libpcap 获取被监听网络接口的数据 </p>
-<p>在 Linux 内核中，使用网络过滤器的数据包捕获是通过附加钩子来完成的：</p>
-<ul>
-<li>可以根据需要在路径中的不同位置指定钩子，后跟内核网络数据包</li>
-<li>可以在此处找到组织结构图，其中包含路线后跟包裹以及钩子的可能区域</li>
-</ul>
-<p>钩子 hook 是通过以下结构定义的：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">typedef</span> <span class="keyword">unsigned</span> <span class="keyword">int</span> <span class="title">nf_hookfn</span><span class="params">(<span class="keyword">void</span> *priv,</span></span></span><br><span class="line"><span class="params"><span class="function">			       struct sk_buff *skb,</span></span></span><br><span class="line"><span class="params"><span class="function">			       <span class="keyword">const</span> struct nf_hook_state *state)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">nf_hook_ops</span> &#123;</span></span><br><span class="line">      nf_hookfn               *hook; <span class="comment">/* 捕获网络数据包(作为结构发送的数据包)时,调用的处理程序(该字段是传递给处理程序的私有信息) */</span></span><br><span class="line">      <span class="class"><span class="keyword">struct</span> <span class="title">net_device</span>       *<span class="title">dev</span>;</span> <span class="comment">/* 要捕获的设备(网络接口) */</span></span><br><span class="line">      <span class="keyword">void</span>                    *priv; </span><br><span class="line">      <span class="keyword">u_int8_t</span>                pf; <span class="comment">/* 包装类型(PF_INET等) */</span></span><br><span class="line">      <span class="keyword">unsigned</span> <span class="keyword">int</span>            hooknum; <span class="comment">/* hook编号 */</span></span><br><span class="line">      <span class="keyword">int</span>                     priority; <span class="comment">/* 优先级 */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<ul>
-<li>钩子函数 hook 的签名中有一个 <code>nf_hook_state</code> 结构体，用于描述 hook 的状态信息，关键条目如下：</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">nf_hook_state</span> &#123;</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> hook;	   <span class="comment">/* hook编号 */</span></span><br><span class="line">	<span class="keyword">u_int8_t</span> pf; 		  <span class="comment">/* 包装类型 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">net_device</span> *<span class="title">in</span>;</span> <span class="comment">/* 输入接口 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">net_device</span> *<span class="title">out</span>;</span> <span class="comment">/* 输出接口 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">sock</span> *<span class="title">sk</span>;</span> <span class="comment">/* 对应的sock(INET套接字) */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">net</span> *<span class="title">net</span>;</span>  <span class="comment">/* 对应的net(内核网络命名空间) */</span></span><br><span class="line">	<span class="keyword">int</span> (*okfn)(struct net *, struct sock *, struct sk_buff *);</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<p>相关 API 如下：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">nf_register_net_hook</span><span class="params">(struct net *net, <span class="keyword">const</span> struct nf_hook_ops *ops)</span></span>; <span class="comment">/* 用于注册挂钩点 */</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">nf_unregister_net_hook</span><span class="params">(struct net *net, <span class="keyword">const</span> struct nf_hook_ops *ops)</span></span>; <span class="comment">/* 用于注销挂钩点 */</span></span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">nf_register_net_hooks</span><span class="params">(struct net *net, <span class="keyword">const</span> struct nf_hook_ops *reg,</span></span></span><br><span class="line"><span class="params"><span class="function">                        <span class="keyword">unsigned</span> <span class="keyword">int</span> n)</span></span>; <span class="comment">/* 调用n次nf_register_net_hook */</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">nf_unregister_net_hooks</span><span class="params">(struct net *net, <span class="keyword">const</span> struct nf_hook_ops *reg,</span></span></span><br><span class="line"><span class="params"><span class="function">                           <span class="keyword">unsigned</span> <span class="keyword">int</span> n)</span></span>; <span class="comment">/* 调用n次nf_unregister_net_hook */</span></span><br></pre></td></tr></table></figure>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">nf_register_net_hooks</span><span class="params">(struct net *net, <span class="keyword">const</span> struct nf_hook_ops *reg,</span></span></span><br><span class="line"><span class="params"><span class="function">			  <span class="keyword">unsigned</span> <span class="keyword">int</span> n)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> i;</span><br><span class="line">	<span class="keyword">int</span> err = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span> (i = <span class="number">0</span>; i &lt; n; i++) &#123;</span><br><span class="line">		err = nf_register_net_hook(net, &amp;reg[i]);</span><br><span class="line">		<span class="keyword">if</span> (err)</span><br><span class="line">			<span class="keyword">goto</span> err;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> err;</span><br><span class="line"></span><br><span class="line">err:</span><br><span class="line">	<span class="keyword">if</span> (i &gt; <span class="number">0</span>)</span><br><span class="line">		nf_unregister_net_hooks(net, reg, i);</span><br><span class="line">	<span class="keyword">return</span> err;</span><br><span class="line">&#125;</span><br><span class="line">EXPORT_SYMBOL(nf_register_net_hooks);</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">nf_unregister_net_hooks</span><span class="params">(struct net *net, <span class="keyword">const</span> struct nf_hook_ops *reg,</span></span></span><br><span class="line"><span class="params"><span class="function">			     <span class="keyword">unsigned</span> <span class="keyword">int</span> hookcount)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> i;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span> (i = <span class="number">0</span>; i &lt; hookcount; i++)</span><br><span class="line">		nf_unregister_net_hook(net, &amp;reg[i]);</span><br><span class="line">&#125;</span><br><span class="line">EXPORT_SYMBOL(nf_unregister_net_hooks);</span><br></pre></td></tr></table></figure>
-<p>Linux 抓包的具体实现就是依靠该 hook 机制完成的，当网络过滤器捕获数据时，就可以依靠抓包程序的 hook 把数据包传输到对应的软件中</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2489,7 +2542,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">325</span>
+          <span class="site-state-item-count">326</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2543,7 +2596,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">74:01</span>
+    <span title="Reading time total">74:05</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
