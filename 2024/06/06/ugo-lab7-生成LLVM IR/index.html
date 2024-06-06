@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="作用域处理AST 语法树翻译到 LLVM-IR 需要处理嵌套的词法域问题，在 LLVM-IR 中，通常使用 scope 语句来处理作用域问题 作用域属于语义解析，只有 compiler 包产生 LLVM 汇编代码时需要，因此在 compiler 包定义 Scope 管理词法域： 12345678910type Scope struct &amp;#123;	Outer   *Scope	Objects m">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ugo-lab7-生成LLVM IR">
+<meta property="og:url" content="http://example.com/2024/06/06/ugo-lab7-%E7%94%9F%E6%88%90LLVM%20IR/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="作用域处理AST 语法树翻译到 LLVM-IR 需要处理嵌套的词法域问题，在 LLVM-IR 中，通常使用 scope 语句来处理作用域问题 作用域属于语义解析，只有 compiler 包产生 LLVM 汇编代码时需要，因此在 compiler 包定义 Scope 管理词法域： 12345678910type Scope struct &amp;#123;	Outer   *Scope	Objects m">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2024-06-06T12:15:34.000Z">
+<meta property="article:modified_time" content="2024-06-06T12:16:06.245Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="Compilers Principles">
+<meta property="article:tag" content="labs">
+<meta property="article:tag" content="golang">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2024/06/06/ugo-lab7-%E7%94%9F%E6%88%90LLVM%20IR/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>ugo-lab7-生成LLVM IR | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2024/06/06/ugo-lab7-%E7%94%9F%E6%88%90LLVM%20IR/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          ugo-lab7-生成LLVM IR
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2024-06-06 20:15:34 / Modified: 20:16:06" itemprop="dateCreated datePublished" datetime="2024-06-06T20:15:34+08:00">2024-06-06</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>12k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>11 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="作用域处理"><a href="#作用域处理" class="headerlink" title="作用域处理"></a>作用域处理</h2><p>AST 语法树翻译到 LLVM-IR 需要处理嵌套的词法域问题，在 LLVM-IR 中，通常使用 scope 语句来处理作用域问题</p>
+<p>作用域属于语义解析，只有 compiler 包产生 LLVM 汇编代码时需要，因此在 compiler 包定义 Scope 管理词法域：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> Scope <span class="keyword">struct</span> &#123;</span><br><span class="line">	Outer   *Scope</span><br><span class="line">	Objects <span class="keyword">map</span>[<span class="keyword">string</span>]*Object</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> Object <span class="keyword">struct</span> &#123;</span><br><span class="line">	Name        <span class="keyword">string</span></span><br><span class="line">	MangledName <span class="keyword">string</span></span><br><span class="line">	ast.Node</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>Scope 内的 Outer 指向外层的 Scope，比如 main 函数的外层 Scope 是文件 </li>
+<li>Object 表示一个命名对象，其中 Name 是实体在 uGo 代码中词法域的名字，LLName 是映射到 LLVM 汇编语言的名字，其中还有指向的 AST 节点，可以用于识别更多的信息</li>
+</ul>
+<p>对应的辅助函数如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">NewScope</span><span class="params">(outer *Scope)</span> *<span class="title">Scope</span></span> &#123;</span><br><span class="line">	<span class="keyword">return</span> &amp;Scope&#123;</span><br><span class="line">		Outer:   outer,</span><br><span class="line">		Objects: <span class="built_in">make</span>(<span class="keyword">map</span>[<span class="keyword">string</span>]*Object),</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *Scope)</span> <span class="title">HasName</span><span class="params">(name <span class="keyword">string</span>)</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	_, ok := s.Objects[name]</span><br><span class="line">	<span class="keyword">return</span> ok</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *Scope)</span> <span class="title">Lookup</span><span class="params">(name <span class="keyword">string</span>)</span> <span class="params">(*Scope, *Object)</span></span> &#123;</span><br><span class="line">	<span class="keyword">for</span> ; s != <span class="literal">nil</span>; s = s.Outer &#123;</span><br><span class="line">		<span class="keyword">if</span> obj := s.Objects[name]; obj != <span class="literal">nil</span> &#123;</span><br><span class="line">			<span class="keyword">return</span> s, obj</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> <span class="literal">nil</span>, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *Scope)</span> <span class="title">Insert</span><span class="params">(obj *Object)</span> <span class="params">(alt *Object)</span></span> &#123;</span><br><span class="line">	<span class="keyword">if</span> alt = s.Objects[obj.Name]; alt != <span class="literal">nil</span> &#123;</span><br><span class="line">		s.Objects[obj.Name] = obj</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *Scope)</span> <span class="title">String</span><span class="params">()</span> <span class="title">string</span></span> &#123;</span><br><span class="line">	<span class="keyword">var</span> buf bytes.Buffer</span><br><span class="line">	fmt.Fprintf(&amp;buf, <span class="string">&quot;scope %p&quot;</span>, s)</span><br><span class="line">	<span class="keyword">if</span> s != <span class="literal">nil</span> &amp;&amp; <span class="built_in">len</span>(s.Objects) &gt; <span class="number">0</span> &#123;</span><br><span class="line">		fmt.Fprintln(&amp;buf)</span><br><span class="line">		<span class="keyword">for</span> _, obj := <span class="keyword">range</span> s.Objects &#123;</span><br><span class="line">			fmt.Fprintf(&amp;buf, <span class="string">&quot;\t%T %s\n&quot;</span>, obj.Node, obj.Name)</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	fmt.Fprintf(&amp;buf, <span class="string">&quot;&#125;\n&quot;</span>)</span><br><span class="line">	<span class="keyword">return</span> buf.String()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>基于 Scope，我们可以构造出 Compiler 类用于描述编译器：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> Compiler <span class="keyword">struct</span> &#123;</span><br><span class="line">	file   *ast.File</span><br><span class="line">	scope  *Scope</span><br><span class="line">	nextId <span class="keyword">int</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>通过如下两个函数来进入和退出内层的 Scope： </p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Compiler)</span> <span class="title">enterScope</span><span class="params">()</span></span> &#123;</span><br><span class="line">	p.scope = NewScope(p.scope)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Compiler)</span> <span class="title">leaveScope</span><span class="params">()</span></span> &#123;</span><br><span class="line">	p.scope = p.scope.Outer</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Compiler)</span> <span class="title">restoreScope</span><span class="params">(scope *Scope)</span></span> &#123;</span><br><span class="line">	p.scope = scope</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>我们需要在编译文件、块语句时进入新的 Scope，以便于存储新词法域定义的新变量</li>
+</ul>
+<p>至于全局变量则在编译文件时处理，具体而言就是 compileFile 函数</p>
+<h2 id="翻译为-LLVM-IR"><a href="#翻译为-LLVM-IR" class="headerlink" title="翻译为 LLVM IR"></a>翻译为 LLVM IR</h2><p>接下来的工作就是把 AST 翻译为 LLVM IR（这里我把类型检查的操作提前到了语法分析中，因此不需要考虑报错检查的问题）</p>
+<p>核心函数如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Compiler)</span> <span class="title">genHeader</span><span class="params">(w io.Writer, file *ast.File)</span></span> &#123;</span><br><span class="line">	fmt.Fprintf(w, <span class="string">&quot;; package %s\n&quot;</span>, file.Pkg.Name)</span><br><span class="line">	fmt.Fprint(w, Header)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Compiler)</span> <span class="title">genMain</span><span class="params">(w io.Writer, file *ast.File)</span></span> &#123;</span><br><span class="line">	<span class="keyword">if</span> file.Pkg.Name != <span class="string">&quot;main&quot;</span> &#123;</span><br><span class="line">		<span class="keyword">return</span></span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">for</span> _, fn := <span class="keyword">range</span> file.Funcs &#123;</span><br><span class="line">		<span class="keyword">if</span> fn.Name.Name == <span class="string">&quot;main&quot;</span> &#123;</span><br><span class="line">			fmt.Fprint(w, MainMain)</span><br><span class="line">			<span class="keyword">return</span></span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Compiler)</span> <span class="title">Run</span><span class="params">(file *ast.File)</span> <span class="title">string</span></span> &#123;</span><br><span class="line">	<span class="keyword">var</span> buf bytes.Buffer</span><br><span class="line"></span><br><span class="line">	p.file = file</span><br><span class="line"></span><br><span class="line">	p.genHeader(&amp;buf, file)</span><br><span class="line">	p.compileFile(&amp;buf, file)</span><br><span class="line">	p.genMain(&amp;buf, file)</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> buf.String()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>函数 compileFile 就是 LLVM IR 翻译的起点，其详细代码如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Compiler)</span> <span class="title">compileFile</span><span class="params">(w io.Writer, file *ast.File)</span></span> &#123;</span><br><span class="line">	<span class="keyword">defer</span> p.restoreScope(p.scope)</span><br><span class="line">	p.enterScope()</span><br><span class="line">	<span class="keyword">for</span> _, g := <span class="keyword">range</span> file.Globals &#123;</span><br><span class="line">		<span class="keyword">var</span> mangledName = fmt.Sprintf(<span class="string">&quot;@ugo_%s_%s&quot;</span>, file.Pkg.Name, g.Name.Name)</span><br><span class="line">		p.scope.Insert(&amp;Object&#123;</span><br><span class="line">			Name:        g.Name.Name,</span><br><span class="line">			MangledName: mangledName,</span><br><span class="line">			Node:        g,</span><br><span class="line">		&#125;)</span><br><span class="line">		fmt.Fprintf(w, <span class="string">&quot;%s = global i32 0\n&quot;</span>, mangledName)</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span> _, g := <span class="keyword">range</span> file.Funcs &#123;</span><br><span class="line">		<span class="keyword">var</span> mangledName = fmt.Sprintf(<span class="string">&quot;declare i32 @ugo_%s_%s&quot;</span>, file.Pkg.Name, g.Name.Name)</span><br><span class="line">		p.scope.Insert(&amp;Object&#123;</span><br><span class="line">			Name:        g.Name.Name,</span><br><span class="line">			MangledName: mangledName,</span><br><span class="line">			Node:        g,</span><br><span class="line">		&#125;)</span><br><span class="line">		fmt.Fprintf(w, <span class="string">&quot;%s(%s)\n&quot;</span>, mangledName, p.changeType(g.Type.Name))</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> <span class="built_in">len</span>(file.Globals) != <span class="number">0</span> &#123;</span><br><span class="line">		fmt.Fprintln(w)</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">for</span> _, fn := <span class="keyword">range</span> file.Funcs &#123;</span><br><span class="line">		p.compileFunc(w, file, fn)</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	p.genInit(w, file)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>在函数开始之前执行 enterScope 代表进入新的命名空间</li>
+<li>在函数结束时执行 restoreScope 退出到上一级的命名空间</li>
+<li>对于一个 ugo 代码而言，File 层就是最外层的命名空间，函数和全局变量都在此记录</li>
+</ul>
+<p>下面是对函数的处理：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Compiler)</span> <span class="title">compileFunc</span><span class="params">(w io.Writer, file *ast.File, fn *ast.FuncDecl)</span></span> &#123;</span><br><span class="line">	<span class="keyword">defer</span> p.restoreScope(p.scope)</span><br><span class="line">	p.enterScope()</span><br><span class="line"></span><br><span class="line">	<span class="keyword">var</span> mangledName = fmt.Sprintf(<span class="string">&quot;@ugo_%s_%s&quot;</span>, file.Pkg.Name, fn.Name.Name)</span><br><span class="line"></span><br><span class="line">	p.scope.Insert(&amp;Object&#123;</span><br><span class="line">		Name:        fn.Name.Name,</span><br><span class="line">		MangledName: mangledName,</span><br><span class="line">		Node:        fn,</span><br><span class="line">	&#125;)</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> fn.Body == <span class="literal">nil</span> &#123;</span><br><span class="line">		fmt.Fprintf(w, <span class="string">&quot;declare i32 @ugo_%s_%s()\n&quot;</span>, file.Pkg.Name, fn.Name.Name)</span><br><span class="line">		<span class="keyword">return</span></span><br><span class="line">	&#125;</span><br><span class="line">	fmt.Fprintln(w)</span><br><span class="line"></span><br><span class="line">	fmt.Fprintf(w, <span class="string">&quot;define i32 @ugo_%s_%s() &#123;\n&quot;</span>, file.Pkg.Name, fn.Name.Name)</span><br><span class="line">	p.compileStmt(w, fn.Body)</span><br><span class="line">	fmt.Fprintln(w, <span class="string">&quot;\tret i32 0&quot;</span>)</span><br><span class="line">	fmt.Fprintln(w, <span class="string">&quot;&#125;&quot;</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>每一个函数都要使用 scope.Insert 在当前命名空间中注册函数符号</li>
+<li>基础的处理过后就交给 compileStmt 处理语句块</li>
+</ul>
+<p>函数 compileStmt 的核心步骤就是处理如下几种语句：</p>
+<ul>
+<li>VarSpec：变量定义</li>
+<li>AssignStmt：赋值语句</li>
+<li>BlockStmt：语句块</li>
+<li>ExprStmt：表达式语句</li>
+<li>RetStmt：返回语句</li>
+<li>IfStmt：if 语句</li>
+<li>ForStmt：for 语句</li>
+</ul>
+<p>除了 if 语句，for 语句和表达式语句的实现代码都比较简单，这里直接给出：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">case</span> *ast.VarSpec:</span><br><span class="line">	<span class="keyword">var</span> localName = <span class="string">&quot;0&quot;</span></span><br><span class="line">	<span class="keyword">if</span> stmt.Value != <span class="literal">nil</span> &#123;</span><br><span class="line">		localName = p.compileExpr(w, stmt.Value)</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">var</span> mangledName = fmt.Sprintf(<span class="string">&quot;%%local_%s.pos.%d&quot;</span>, stmt.Name.Name, stmt.VarPos)</span><br><span class="line">	p.scope.Insert(&amp;Object&#123;</span><br><span class="line">		Name:        stmt.Name.Name,</span><br><span class="line">		MangledName: mangledName,</span><br><span class="line">		Node:        stmt,</span><br><span class="line">	&#125;)</span><br><span class="line"></span><br><span class="line">	fmt.Fprintf(w, <span class="string">&quot;\t%s = alloca i32, align 4\n&quot;</span>, mangledName)</span><br><span class="line">	fmt.Fprintf(</span><br><span class="line">		w, <span class="string">&quot;\tstore i32 %s, i32* %s\n&quot;</span>,</span><br><span class="line">		localName, mangledName,</span><br><span class="line">	)</span><br><span class="line"></span><br><span class="line"><span class="keyword">case</span> *ast.AssignStmt:</span><br><span class="line">	p.compileStmt_assign(w, stmt)</span><br><span class="line"></span><br><span class="line"><span class="keyword">case</span> *ast.BlockStmt:</span><br><span class="line">	<span class="keyword">defer</span> p.restoreScope(p.scope)</span><br><span class="line">	p.enterScope()</span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span> _, x := <span class="keyword">range</span> stmt.List &#123;</span><br><span class="line">		p.compileStmt(w, x)</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">case</span> *ast.ExprStmt:</span><br><span class="line">	p.compileExpr(w, stmt.X)</span><br><span class="line"></span><br><span class="line"><span class="keyword">case</span> *ast.RetStmt:</span><br><span class="line">	<span class="keyword">var</span> retValue = p.compileExpr(w, stmt.Expr)</span><br><span class="line">	fmt.Fprintf(w, <span class="string">&quot;\tret i32 %s\n&quot;</span>, retValue)</span><br></pre></td></tr></table></figure>
+<p>处理 if 语句时需要考虑各个部分的作用域范围，因此使用匿名函数立即执行的写法，在匿名函数中添加 enterScope 和 restoreScope 来控制作用域范围</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">case</span> *ast.IfStmt:</span><br><span class="line">	<span class="keyword">defer</span> p.restoreScope(p.scope)</span><br><span class="line">	p.enterScope()</span><br><span class="line"></span><br><span class="line">	ifPos := fmt.Sprintf(<span class="string">&quot;%d&quot;</span>, p.posLine())</span><br><span class="line">	ifInit := p.genLabelId(<span class="string">&quot;if.init.line&quot;</span> + ifPos)</span><br><span class="line">	ifCond := p.genLabelId(<span class="string">&quot;if.cond.line&quot;</span> + ifPos)</span><br><span class="line">	ifBody := p.genLabelId(<span class="string">&quot;if.body.line&quot;</span> + ifPos)</span><br><span class="line">	ifElse := p.genLabelId(<span class="string">&quot;if.else.line&quot;</span> + ifPos)</span><br><span class="line">	ifEnd := p.genLabelId(<span class="string">&quot;if.end.line&quot;</span> + ifPos)</span><br><span class="line"></span><br><span class="line">	<span class="comment">// br if.init</span></span><br><span class="line">	fmt.Fprintf(w, <span class="string">&quot;\tbr label %%%s\n&quot;</span>, ifInit)</span><br><span class="line"></span><br><span class="line">	<span class="comment">// if.init</span></span><br><span class="line">	fmt.Fprintf(w, <span class="string">&quot;\n%s:\n&quot;</span>, ifInit)</span><br><span class="line">	<span class="function"><span class="keyword">func</span><span class="params">()</span></span> &#123;</span><br><span class="line">		<span class="keyword">defer</span> p.restoreScope(p.scope)</span><br><span class="line">		p.enterScope()</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> stmt.Init != <span class="literal">nil</span> &#123;</span><br><span class="line">			p.compileStmt(w, stmt.Init)</span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\tbr label %%%s\n&quot;</span>, ifCond)</span><br><span class="line">		&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\tbr label %%%s\n&quot;</span>, ifCond)</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="comment">// if.cond</span></span><br><span class="line">		&#123;</span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\n%s:\n&quot;</span>, ifCond)</span><br><span class="line">			condValue := p.compileExpr(w, stmt.Cond)</span><br><span class="line">			<span class="keyword">if</span> stmt.Else != <span class="literal">nil</span> &#123;</span><br><span class="line">				fmt.Fprintf(w, <span class="string">&quot;\tbr i1 %s , label %%%s, label %%%s\n&quot;</span>, condValue, ifBody, ifElse)</span><br><span class="line">			&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">				fmt.Fprintf(w, <span class="string">&quot;\tbr i1 %s , label %%%s, label %%%s\n&quot;</span>, condValue, ifBody, ifEnd)</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="comment">// if.body</span></span><br><span class="line">		<span class="function"><span class="keyword">func</span><span class="params">()</span></span> &#123;</span><br><span class="line">			<span class="keyword">defer</span> p.restoreScope(p.scope)</span><br><span class="line">			p.enterScope()</span><br><span class="line"></span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\n%s:\n&quot;</span>, ifBody)</span><br><span class="line">			<span class="keyword">if</span> stmt.Else != <span class="literal">nil</span> &#123;</span><br><span class="line">				p.compileStmt(w, stmt.Body)</span><br><span class="line">				fmt.Fprintf(w, <span class="string">&quot;\tbr label %%%s\n&quot;</span>, ifElse)</span><br><span class="line">			&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">				p.compileStmt(w, stmt.Body)</span><br><span class="line">				fmt.Fprintf(w, <span class="string">&quot;\tbr label %%%s\n&quot;</span>, ifEnd)</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;()</span><br><span class="line"></span><br><span class="line">		<span class="comment">// if.else</span></span><br><span class="line">		<span class="function"><span class="keyword">func</span><span class="params">()</span></span> &#123;</span><br><span class="line">			<span class="keyword">defer</span> p.restoreScope(p.scope)</span><br><span class="line">			p.enterScope()</span><br><span class="line"></span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\n%s:\n&quot;</span>, ifElse)</span><br><span class="line">			<span class="keyword">if</span> stmt.Else != <span class="literal">nil</span> &#123;</span><br><span class="line">				p.compileStmt(w, stmt.Else)</span><br><span class="line">				fmt.Fprintf(w, <span class="string">&quot;\tbr label %%%s\n&quot;</span>, ifEnd)</span><br><span class="line">			&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">				fmt.Fprintf(w, <span class="string">&quot;\tbr label %%%s\n&quot;</span>, ifEnd)</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;()</span><br><span class="line">	&#125;()</span><br><span class="line"></span><br><span class="line">	<span class="comment">// end</span></span><br><span class="line">	fmt.Fprintf(w, <span class="string">&quot;\n%s:\n&quot;</span>, ifEnd)</span><br></pre></td></tr></table></figure>
+<p>处理 for 语句时也是同样的思路：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">case</span> *ast.ForStmt:</span><br><span class="line">	<span class="keyword">defer</span> p.restoreScope(p.scope)</span><br><span class="line">	p.enterScope()</span><br><span class="line"></span><br><span class="line">	forPos := fmt.Sprintf(<span class="string">&quot;%d&quot;</span>, p.posLine())</span><br><span class="line">	forInit := p.genLabelId(<span class="string">&quot;for.init.line&quot;</span> + forPos)</span><br><span class="line">	forCond := p.genLabelId(<span class="string">&quot;for.cond.line&quot;</span> + forPos)</span><br><span class="line">	forPost := p.genLabelId(<span class="string">&quot;for.post.line&quot;</span> + forPos)</span><br><span class="line">	forBody := p.genLabelId(<span class="string">&quot;for.body.line&quot;</span> + forPos)</span><br><span class="line">	forEnd := p.genLabelId(<span class="string">&quot;for.end.line&quot;</span> + forPos)</span><br><span class="line"></span><br><span class="line">	<span class="comment">// br for.init</span></span><br><span class="line">	fmt.Fprintf(w, <span class="string">&quot;\tbr label %%%s\n&quot;</span>, forInit)</span><br><span class="line"></span><br><span class="line">	<span class="comment">// for.init</span></span><br><span class="line">	<span class="function"><span class="keyword">func</span><span class="params">()</span></span> &#123;</span><br><span class="line">		<span class="keyword">defer</span> p.restoreScope(p.scope)</span><br><span class="line">		p.enterScope()</span><br><span class="line"></span><br><span class="line">		fmt.Fprintf(w, <span class="string">&quot;\n%s:\n&quot;</span>, forInit)</span><br><span class="line">		<span class="keyword">if</span> stmt.Init != <span class="literal">nil</span> &#123;</span><br><span class="line">			p.compileStmt(w, stmt.Init)</span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\tbr label %%%s\n&quot;</span>, forCond)</span><br><span class="line">		&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\tbr label %%%s\n&quot;</span>, forCond)</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="comment">// for.cond</span></span><br><span class="line">		fmt.Fprintf(w, <span class="string">&quot;\n%s:\n&quot;</span>, forCond)</span><br><span class="line">		<span class="keyword">if</span> stmt.Cond != <span class="literal">nil</span> &#123;</span><br><span class="line">			condValue := p.compileExpr(w, stmt.Cond)</span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\tbr i1 %s , label %%%s, label %%%s\n&quot;</span>, condValue, forBody, forEnd)</span><br><span class="line">		&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\tbr label %%%s\n&quot;</span>, forBody)</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="comment">// for.body</span></span><br><span class="line">		<span class="function"><span class="keyword">func</span><span class="params">()</span></span> &#123;</span><br><span class="line">			<span class="keyword">defer</span> p.restoreScope(p.scope)</span><br><span class="line">			p.enterScope()</span><br><span class="line"></span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\n%s:\n&quot;</span>, forBody)</span><br><span class="line">			p.compileStmt(w, stmt.Body)</span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\tbr label %%%s\n&quot;</span>, forPost)</span><br><span class="line">		&#125;()</span><br><span class="line"></span><br><span class="line">		<span class="comment">// for.post</span></span><br><span class="line">		&#123;</span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\n%s:\n&quot;</span>, forPost)</span><br><span class="line">			<span class="keyword">if</span> stmt.Post != <span class="literal">nil</span> &#123;</span><br><span class="line">				p.compileStmt(w, stmt.Post)</span><br><span class="line">				fmt.Fprintf(w, <span class="string">&quot;\tbr label %%%s\n&quot;</span>, forCond)</span><br><span class="line">			&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">				fmt.Fprintf(w, <span class="string">&quot;\tbr label %%%s\n&quot;</span>, forCond)</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;()</span><br><span class="line"></span><br><span class="line">	<span class="comment">// end</span></span><br><span class="line">	fmt.Fprintf(w, <span class="string">&quot;\n%s:\n&quot;</span>, forEnd)</span><br></pre></td></tr></table></figure>
+<p>最后是表达式语句的处理，具体而言就是 compileExpr 函数：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Compiler)</span> <span class="title">compileExpr</span><span class="params">(w io.Writer, expr ast.Expr)</span> <span class="params">(localName <span class="keyword">string</span>)</span></span> &#123;</span><br><span class="line">	<span class="keyword">switch</span> expr := expr.(<span class="keyword">type</span>) &#123;</span><br><span class="line">	<span class="keyword">case</span> *ast.CallExpr:</span><br><span class="line">		<span class="keyword">if</span> _, obj := p.scope.Lookup(expr.FuncName.Name); obj != <span class="literal">nil</span> &#123;</span><br><span class="line">			localName = p.genId()</span><br><span class="line">			varStr := fmt.Sprintf(<span class="string">&quot;\t%s = call i32(i32) @ugo_main_%s(&quot;</span>,</span><br><span class="line">				localName, expr.FuncName.Name,</span><br><span class="line">			)</span><br><span class="line">			<span class="keyword">for</span> i, arg := <span class="keyword">range</span> expr.Args &#123;</span><br><span class="line">				<span class="keyword">if</span> i == <span class="number">0</span> &#123;</span><br><span class="line">					varStr += p.changeType(obj.Node.(*ast.FuncDecl).Type.Name) + <span class="string">&quot; &quot;</span> + p.compileExpr(w, arg)</span><br><span class="line">				&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">					varStr += <span class="string">&quot;, &quot;</span> + p.changeType(obj.Node.(*ast.FuncDecl).Type.Name) + <span class="string">&quot; &quot;</span> + p.compileExpr(w, arg)</span><br><span class="line">				&#125;</span><br><span class="line"></span><br><span class="line">			&#125;</span><br><span class="line">			varStr += <span class="string">&quot;)\n&quot;</span></span><br><span class="line"></span><br><span class="line">			fmt.Fprint(w, varStr)</span><br><span class="line"></span><br><span class="line">		&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">			<span class="built_in">panic</span>(fmt.Sprintf(<span class="string">&quot;func %s undefined&quot;</span>, expr.FuncName.Name))</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">return</span> localName</span><br><span class="line">	<span class="keyword">case</span> *ast.Ident:</span><br><span class="line">		<span class="keyword">var</span> varName <span class="keyword">string</span></span><br><span class="line">		<span class="keyword">if</span> _, obj := p.scope.Lookup(expr.Name); obj != <span class="literal">nil</span> &#123;</span><br><span class="line">			varName = obj.MangledName</span><br><span class="line">		&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">			<span class="built_in">panic</span>(fmt.Sprintf(<span class="string">&quot;var %s undefined&quot;</span>, expr.Name))</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		localName = p.genId()</span><br><span class="line">		fmt.Fprintf(w, <span class="string">&quot;\t%s = load i32, i32* %s, align 4\n&quot;</span>,</span><br><span class="line">			localName, varName,</span><br><span class="line">		)</span><br><span class="line">		<span class="keyword">return</span> localName</span><br><span class="line">	<span class="keyword">case</span> *ast.IdentAS:</span><br><span class="line">		<span class="keyword">var</span> varName <span class="keyword">string</span></span><br><span class="line">		<span class="keyword">if</span> _, obj := p.scope.Lookup(expr.Name); obj != <span class="literal">nil</span> &#123;</span><br><span class="line">			varName = obj.MangledName</span><br><span class="line"></span><br><span class="line">			call, ok := expr.Offset.(*ast.CallExpr)</span><br><span class="line">			<span class="keyword">if</span> ok &#123;</span><br><span class="line">				varName = p.compileExpr(w, call)</span><br><span class="line">			&#125;</span><br><span class="line">		&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">			<span class="built_in">panic</span>(fmt.Sprintf(<span class="string">&quot;var %s undefined&quot;</span>, expr.Name))</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		localName = p.genId()</span><br><span class="line">		fmt.Fprintf(w, <span class="string">&quot;\t%s = load i32, i32* %s, align 4\n&quot;</span>,</span><br><span class="line">			localName, varName,</span><br><span class="line">		)</span><br><span class="line">		<span class="keyword">return</span> localName</span><br><span class="line">	<span class="keyword">case</span> *ast.Number:</span><br><span class="line">		localName = p.genId()</span><br><span class="line">		fmt.Fprintf(w, <span class="string">&quot;\t%s = %s i32 %v, %v\n&quot;</span>,</span><br><span class="line">			localName, <span class="string">&quot;add&quot;</span>, <span class="string">`0`</span>, expr.Value,</span><br><span class="line">		)</span><br><span class="line">		<span class="keyword">return</span> localName</span><br><span class="line">	<span class="keyword">case</span> *ast.BinaryExpr:</span><br><span class="line">		localName = p.genId()</span><br><span class="line">		<span class="keyword">switch</span> expr.Op &#123;</span><br><span class="line">		<span class="keyword">case</span> token.ADD:</span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\t%s = %s i32 %v, %v\n&quot;</span>,</span><br><span class="line">				localName, <span class="string">&quot;add&quot;</span>, p.compileExpr(w, expr.X), p.compileExpr(w, expr.Y),</span><br><span class="line">			)</span><br><span class="line">			<span class="keyword">return</span> localName</span><br><span class="line">		<span class="keyword">case</span> token.SUB:</span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\t%s = %s i32 %v, %v\n&quot;</span>,</span><br><span class="line">				localName, <span class="string">&quot;sub&quot;</span>, p.compileExpr(w, expr.X), p.compileExpr(w, expr.Y),</span><br><span class="line">			)</span><br><span class="line">			<span class="keyword">return</span> localName</span><br><span class="line">		<span class="keyword">case</span> token.MUL:</span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\t%s = %s i32 %v, %v\n&quot;</span>,</span><br><span class="line">				localName, <span class="string">&quot;mul&quot;</span>, p.compileExpr(w, expr.X), p.compileExpr(w, expr.Y),</span><br><span class="line">			)</span><br><span class="line">			<span class="keyword">return</span> localName</span><br><span class="line">		<span class="keyword">case</span> token.DIV:</span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\t%s = %s i32 %v, %v\n&quot;</span>,</span><br><span class="line">				localName, <span class="string">&quot;div&quot;</span>, p.compileExpr(w, expr.X), p.compileExpr(w, expr.Y),</span><br><span class="line">			)</span><br><span class="line">			<span class="keyword">return</span> localName</span><br><span class="line">		<span class="keyword">case</span> token.MOD:</span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\t%s = %s i32 %v, %v\n&quot;</span>,</span><br><span class="line">				localName, <span class="string">&quot;srem&quot;</span>, p.compileExpr(w, expr.X), p.compileExpr(w, expr.Y),</span><br><span class="line">			)</span><br><span class="line">			<span class="keyword">return</span> localName</span><br><span class="line">		<span class="keyword">case</span> token.EQL: <span class="comment">// ==</span></span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\t%s = %s i32 %v, %v\n&quot;</span>,</span><br><span class="line">				localName, <span class="string">&quot;icmp eq&quot;</span>, p.compileExpr(w, expr.X), p.compileExpr(w, expr.Y),</span><br><span class="line">			)</span><br><span class="line">			<span class="keyword">return</span> localName</span><br><span class="line">		<span class="keyword">case</span> token.NEQ: <span class="comment">// !=</span></span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\t%s = %s i32 %v, %v\n&quot;</span>,</span><br><span class="line">				localName, <span class="string">&quot;icmp ne&quot;</span>, p.compileExpr(w, expr.X), p.compileExpr(w, expr.Y),</span><br><span class="line">			)</span><br><span class="line">			<span class="keyword">return</span> localName</span><br><span class="line">		<span class="keyword">case</span> token.LSS: <span class="comment">// &lt;</span></span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\t%s = %s i32 %v, %v\n&quot;</span>,</span><br><span class="line">				localName, <span class="string">&quot;icmp slt&quot;</span>, p.compileExpr(w, expr.X), p.compileExpr(w, expr.Y),</span><br><span class="line">			)</span><br><span class="line">			<span class="keyword">return</span> localName</span><br><span class="line">		<span class="keyword">case</span> token.LEQ: <span class="comment">// &lt;=</span></span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\t%s = %s i32 %v, %v\n&quot;</span>,</span><br><span class="line">				localName, <span class="string">&quot;icmp sle&quot;</span>, p.compileExpr(w, expr.X), p.compileExpr(w, expr.Y),</span><br><span class="line">			)</span><br><span class="line">			<span class="keyword">return</span> localName</span><br><span class="line">		<span class="keyword">case</span> token.GTR: <span class="comment">// &gt;</span></span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\t%s = %s i32 %v, %v\n&quot;</span>,</span><br><span class="line">				localName, <span class="string">&quot;icmp sgt&quot;</span>, p.compileExpr(w, expr.X), p.compileExpr(w, expr.Y),</span><br><span class="line">			)</span><br><span class="line">			<span class="keyword">return</span> localName</span><br><span class="line">		<span class="keyword">case</span> token.GEQ: <span class="comment">// &gt;=</span></span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\t%s = %s i32 %v, %v\n&quot;</span>,</span><br><span class="line">				localName, <span class="string">&quot;icmp sge&quot;</span>, p.compileExpr(w, expr.X), p.compileExpr(w, expr.Y),</span><br><span class="line">			)</span><br><span class="line">			<span class="keyword">return</span> localName</span><br><span class="line">		<span class="keyword">default</span>:</span><br><span class="line">			<span class="built_in">panic</span>(fmt.Sprintf(<span class="string">&quot;unknown: %[1]T, %[1]v&quot;</span>, expr))</span><br><span class="line">		&#125;</span><br><span class="line">	<span class="keyword">case</span> *ast.UnaryExpr:</span><br><span class="line">		<span class="keyword">if</span> expr.Op == token.SUB &#123;</span><br><span class="line">			localName = p.genId()</span><br><span class="line">			fmt.Fprintf(w, <span class="string">&quot;\t%s = %s i32 %v, %v\n&quot;</span>,</span><br><span class="line">				localName, <span class="string">&quot;sub&quot;</span>, <span class="string">`0`</span>, p.compileExpr(w, expr.X),</span><br><span class="line">			)</span><br><span class="line">			<span class="keyword">return</span> localName</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">return</span> p.compileExpr(w, expr.X)</span><br><span class="line">	<span class="keyword">case</span> *ast.ParenExpr:</span><br><span class="line">		<span class="keyword">return</span> p.compileExpr(w, expr.X)</span><br><span class="line"></span><br><span class="line">	<span class="keyword">default</span>:</span><br><span class="line">		<span class="built_in">panic</span>(fmt.Sprintf(<span class="string">&quot;unknown: %[1]T, %[1]v&quot;</span>, expr))</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/Compilers-Principles/" rel="tag"><i class="fa fa-tag"></i> Compilers Principles</a>
+              <a href="/tags/labs/" rel="tag"><i class="fa fa-tag"></i> labs</a>
+              <a href="/tags/golang/" rel="tag"><i class="fa fa-tag"></i> golang</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2024/05/17/ugo-lab6-%E5%87%BD%E6%95%B0%E8%A1%A8&%E5%AE%8C%E5%96%84%E5%87%BD%E6%95%B0/" rel="prev" title="ugo-lab6-函数表&完善函数">
+      <i class="fa fa-chevron-left"></i> ugo-lab6-函数表&完善函数
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BD%9C%E7%94%A8%E5%9F%9F%E5%A4%84%E7%90%86"><span class="nav-number">1.</span> <span class="nav-text">作用域处理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BF%BB%E8%AF%91%E4%B8%BA-LLVM-IR"><span class="nav-number">2.</span> <span class="nav-text">翻译为 LLVM IR</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">328</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">13</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">169</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2024</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">4.9m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">74:22</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>

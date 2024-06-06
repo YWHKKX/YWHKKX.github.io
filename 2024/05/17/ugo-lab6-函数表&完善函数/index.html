@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="完善函数语句对于一个函数而已，关键信息有：函数名，参数列表，返回类型，语句块 对应的 AST 结点结构如下： 12345678910111213&#x2F;&#x2F; 全局函数&#x2F;方法type FuncDecl struct &amp;#123;	FuncPos int        &#x2F;&#x2F; func 关键字位置	Params  *FieldList &#x2F;&#x2F; 传参类型	Name    *Ident     &#x2F;&#x2F; 函数名	Type">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ugo-lab6-函数表&amp;完善函数">
+<meta property="og:url" content="http://example.com/2024/05/17/ugo-lab6-%E5%87%BD%E6%95%B0%E8%A1%A8&%E5%AE%8C%E5%96%84%E5%87%BD%E6%95%B0/index.html">
+<meta property="og:site_name" content="Pwn进你的心">
+<meta property="og:description" content="完善函数语句对于一个函数而已，关键信息有：函数名，参数列表，返回类型，语句块 对应的 AST 结点结构如下： 12345678910111213&#x2F;&#x2F; 全局函数&#x2F;方法type FuncDecl struct &amp;#123;	FuncPos int        &#x2F;&#x2F; func 关键字位置	Params  *FieldList &#x2F;&#x2F; 传参类型	Name    *Ident     &#x2F;&#x2F; 函数名	Type">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2024-05-17T08:51:48.000Z">
+<meta property="article:modified_time" content="2024-05-17T08:52:40.315Z">
+<meta property="article:author" content="yhellow">
+<meta property="article:tag" content="Compilers Principles">
+<meta property="article:tag" content="labs">
+<meta property="article:tag" content="golang">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://example.com/2024/05/17/ugo-lab6-%E5%87%BD%E6%95%B0%E8%A1%A8&%E5%AE%8C%E5%96%84%E5%87%BD%E6%95%B0/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'en'
+  };
+</script>
+
+  <title>ugo-lab6-函数表&完善函数 | Pwn进你的心</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Pwn进你的心</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2024/05/17/ugo-lab6-%E5%87%BD%E6%95%B0%E8%A1%A8&%E5%AE%8C%E5%96%84%E5%87%BD%E6%95%B0/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          ugo-lab6-函数表&完善函数
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2024-05-17 16:51:48 / Modified: 16:52:40" itemprop="dateCreated datePublished" datetime="2024-05-17T16:51:48+08:00">2024-05-17</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Views" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="eye"></i>
+              </span>
+              <span class="post-meta-item-text">Views: </span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>6.2k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>6 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="完善函数语句"><a href="#完善函数语句" class="headerlink" title="完善函数语句"></a>完善函数语句</h2><p>对于一个函数而已，关键信息有：函数名，参数列表，返回类型，语句块</p>
+<p>对应的 AST 结点结构如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 全局函数/方法</span></span><br><span class="line"><span class="keyword">type</span> FuncDecl <span class="keyword">struct</span> &#123;</span><br><span class="line">	FuncPos <span class="keyword">int</span>        <span class="comment">// func 关键字位置</span></span><br><span class="line">	Params  *FieldList <span class="comment">// 传参类型</span></span><br><span class="line">	Name    *Ident     <span class="comment">// 函数名</span></span><br><span class="line">	Type    *Ident     <span class="comment">// 返回类型</span></span><br><span class="line">	Body    *BlockStmt <span class="comment">// 函数内的语句块</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 参数/属性 列表</span></span><br><span class="line"><span class="keyword">type</span> FieldList <span class="keyword">struct</span> &#123;</span><br><span class="line">	List []*Field</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>暂时不涉及多值返回</li>
+</ul>
+<p><strong>处理函数定义</strong></p>
+<p>函数 parseFunc 用于解析函数定义，其初步实现如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Parser)</span> <span class="title">parseFunc</span><span class="params">()</span> *<span class="title">ast</span>.<span class="title">FuncDecl</span></span> &#123;</span><br><span class="line">	tokFunc := p.MustAcceptToken(token.FUNC)</span><br><span class="line">	tokFuncIdent := p.MustAcceptToken(token.IDENT)</span><br><span class="line"></span><br><span class="line">	p.MustAcceptToken(token.LPAREN)</span><br><span class="line">	funcFieldList := &amp;ast.FieldList&#123;&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> _, ok := p.AcceptToken(token.RPAREN); !ok &#123;</span><br><span class="line">		<span class="keyword">for</span> &#123;</span><br><span class="line">			tokVal := p.MustAcceptToken(token.IDENT)</span><br><span class="line">			tokTyp := p.MustAcceptToken(token.IDENT)</span><br><span class="line">			funcField := &amp;ast.Field&#123;</span><br><span class="line">				Name: &amp;ast.Ident&#123;</span><br><span class="line">					NamePos: tokVal.Pos,</span><br><span class="line">					Name:    tokVal.Literal,</span><br><span class="line">				&#125;,</span><br><span class="line">				Type: &amp;ast.Ident&#123;</span><br><span class="line">					NamePos: tokTyp.Pos,</span><br><span class="line">					Name:    tokTyp.Literal,</span><br><span class="line">				&#125;&#125;</span><br><span class="line">			funcFieldList.List = <span class="built_in">append</span>(funcFieldList.List, funcField)</span><br><span class="line">			<span class="keyword">if</span> ok = p.SymTab.Push(funcField.Name, funcField.Type); !ok &#123;</span><br><span class="line">				p.errorf(tokVal.Pos, <span class="string">&quot;duplicate variable declaration: %s&quot;</span>, tokVal.Literal)</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">if</span> _, ok := p.AcceptToken(token.COMMA); !ok &#123;</span><br><span class="line">				<span class="keyword">break</span></span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line">		p.MustAcceptToken(token.RPAREN)</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	funcName := &amp;ast.Ident&#123;</span><br><span class="line">		NamePos: tokFuncIdent.Pos,</span><br><span class="line">		Name:    tokFuncIdent.Literal,</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	funcType := &amp;ast.Ident&#123;&#125;</span><br><span class="line">	<span class="keyword">if</span> tokTypeIdent, ok := p.AcceptToken(token.IDENT); ok &#123;</span><br><span class="line">		funcType = &amp;ast.Ident&#123;</span><br><span class="line">			NamePos: tokTypeIdent.Pos,</span><br><span class="line">			Name:    tokTypeIdent.Literal,</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> &amp;ast.FuncDecl&#123;</span><br><span class="line">		FuncPos: tokFunc.Pos,</span><br><span class="line">		Params:  funcFieldList,</span><br><span class="line">		Name:    funcName,</span><br><span class="line">		Type:    funcType,</span><br><span class="line">		Body:    p.parseStmt_block(),</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>暂时不支持Go语言中多个参数共用一个类型的写法</li>
+<li>函数参数将会被暂时添加入符号表中</li>
+</ul>
+<p>对于一个函数而言，需要在函数返回之后在符号表中清除其传参和临时变量，这里的处理方式为：记录语句块中传参和临时变量的个数，然后在语句块结束之后执行对应数量的 Pop</p>
+<p>这样做有一个好处，那就是当遇到嵌套语句块时也可以区分各个变量的作用域</p>
+<p>为此需要在 SymTab 中新添加一个条目：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> SymTab <span class="keyword">struct</span> &#123;</span><br><span class="line">	elements []*TypeSpec</span><br><span class="line">	block    []<span class="keyword">int</span></span><br><span class="line">	top      <span class="keyword">int</span></span><br><span class="line">	level    <span class="keyword">int</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>每一层都有一个数字来记录当前语句块中有多少个变量</li>
+</ul>
+<p>修改一下 Push 和 Pop 语句，并添加一个 Pops 用于弹出全部的传参和临时变量：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *SymTab)</span> <span class="title">Push</span><span class="params">(name, typ *Ident)</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	<span class="keyword">for</span> i := s.top - <span class="number">1</span>; i &gt;= <span class="number">0</span>; i-- &#123;</span><br><span class="line">		<span class="keyword">if</span> s.elements[i].Name.Name == name.Name &#123;</span><br><span class="line">			<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	s.elements = <span class="built_in">append</span>(s.elements, &amp;TypeSpec&#123;</span><br><span class="line">		Name: name,</span><br><span class="line">		Type: typ,</span><br><span class="line">	&#125;)</span><br><span class="line">	s.top++</span><br><span class="line">	s.block[s.level]++</span><br><span class="line">	<span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *SymTab)</span> <span class="title">Pop</span><span class="params">()</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	<span class="keyword">if</span> s.top == <span class="number">0</span> &#123;</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">	&#125;</span><br><span class="line">	s.top--</span><br><span class="line">	s.elements = s.elements[:<span class="built_in">len</span>(s.elements)<span class="number">-1</span>]</span><br><span class="line">	<span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *SymTab)</span> <span class="title">Pops</span><span class="params">()</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	<span class="keyword">for</span> s.block[s.level] &gt; <span class="number">0</span> &#123;</span><br><span class="line">		<span class="keyword">if</span> ok := s.Pop(); !ok &#123;</span><br><span class="line">			<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">		&#125;</span><br><span class="line">		s.block[s.level]--</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>添加两个辅助函数用于换层：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *SymTab)</span> <span class="title">AddLevel</span><span class="params">()</span></span> &#123;</span><br><span class="line">	s.level++</span><br><span class="line">	s.block = <span class="built_in">append</span>(s.block, <span class="number">0</span>)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(s *SymTab)</span> <span class="title">SubLevel</span><span class="params">()</span></span> &#123;</span><br><span class="line">	s.level--</span><br><span class="line">	s.block = s.block[:<span class="built_in">len</span>(s.block)<span class="number">-1</span>]</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>最后修改 parseStmt_block 和 parseFunc，往其中添加换层与清空临时变量的代码：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Parser)</span> <span class="title">parseStmt_block</span><span class="params">()</span> *<span class="title">ast</span>.<span class="title">BlockStmt</span></span> &#123;</span><br><span class="line">	block := &amp;ast.BlockStmt&#123;&#125;</span><br><span class="line">	tokBegin := p.MustAcceptToken(token.LBRACE) <span class="comment">// 获取&#x27;&#123;&#x27;的位置</span></span><br><span class="line"></span><br><span class="line">	p.SymTab.AddLevel()</span><br><span class="line">    </span><br><span class="line">    ......</span><br><span class="line"></span><br><span class="line">	tokEnd := p.MustAcceptToken(token.RBRACE) <span class="comment">// 获取&#x27;&#125;&#x27;的位置</span></span><br><span class="line">	block.Lbrace = tokBegin.Pos</span><br><span class="line">	block.Rbrace = tokEnd.Pos</span><br><span class="line"></span><br><span class="line">	p.SymTab.Pops()</span><br><span class="line">	p.SymTab.SubLevel()</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> block</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Parser)</span> <span class="title">parseFunc</span><span class="params">()</span> *<span class="title">ast</span>.<span class="title">FuncDecl</span></span> &#123;</span><br><span class="line">	tokFunc := p.MustAcceptToken(token.FUNC)</span><br><span class="line">	tokFuncIdent := p.MustAcceptToken(token.IDENT)</span><br><span class="line"></span><br><span class="line">	p.MustAcceptToken(token.LPAREN)</span><br><span class="line">	funcFieldList := &amp;ast.FieldList&#123;&#125;</span><br><span class="line"></span><br><span class="line">	p.SymTab.AddLevel()</span><br><span class="line">    </span><br><span class="line">    ......</span><br><span class="line"></span><br><span class="line">	p.SymTab.Pops()</span><br><span class="line">	p.SymTab.SubLevel()</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> &amp;ast.FuncDecl&#123;</span><br><span class="line">		FuncPos: tokFunc.Pos,</span><br><span class="line">		Params:  funcFieldList,</span><br><span class="line">		Name:    funcName,</span><br><span class="line">		Type:    funcType,</span><br><span class="line">		Body:    funcBody,</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>处理返回语句</strong></p>
+<p>return 语句对应的 AST 结点结构如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 表示一个 return 语句节点</span></span><br><span class="line"><span class="keyword">type</span> RetStmt <span class="keyword">struct</span> &#123;</span><br><span class="line">	Ret  <span class="keyword">int</span>  <span class="comment">// return 关键字的位置</span></span><br><span class="line">	Expr Expr <span class="comment">// 返回值表达式</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>核心函数 parseStmt_return 如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Parser)</span> <span class="title">parseStmt_return</span><span class="params">()</span> *<span class="title">ast</span>.<span class="title">RetStmt</span></span> &#123;</span><br><span class="line">	tokRet := p.MustAcceptToken(token.RETURN)</span><br><span class="line">	tokExp := p.parseExpr()</span><br><span class="line"></span><br><span class="line">	myTypeX := reflect.TypeOf(tokExp)</span><br><span class="line">	<span class="keyword">if</span> myTypeX.String() == <span class="string">&quot;*ast.Strings&quot;</span> || myTypeX.String() == <span class="string">&quot;*ast.Bool&quot;</span> &#123;</span><br><span class="line">		p.errorf(tokExp.Pos(), <span class="string">&quot;Non-numbers cannot participate in the calculation&quot;</span>)</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> &amp;ast.RetStmt&#123;</span><br><span class="line">		Ret:  tokRet.Pos,</span><br><span class="line">		Expr: tokExp,</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>处理函数调用</strong></p>
+<p>函数调用对应的 AST 结点结构如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 表示一个函数调用</span></span><br><span class="line"><span class="keyword">type</span> CallExpr <span class="keyword">struct</span> &#123;</span><br><span class="line">	FuncName *Ident <span class="comment">// 函数名字</span></span><br><span class="line">	Lparen   <span class="keyword">int</span>    <span class="comment">// &#x27;(&#x27; 位置</span></span><br><span class="line">	Args     []Expr <span class="comment">// 调用参数列表</span></span><br><span class="line">	Rparen   <span class="keyword">int</span>    <span class="comment">// &#x27;)&#x27; 位置</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>函数调用发生在表达式中，需要处理的函数为 parseExpr_primary：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> lp, ok := p.AcceptToken(token.LPAREN); ok &#123;</span><br><span class="line">	<span class="keyword">var</span> rp token.Token</span><br><span class="line">	astc := &amp;ast.CallExpr&#123;</span><br><span class="line">		FuncName: &amp;ast.Ident&#123;</span><br><span class="line">			NamePos: tok.Pos,</span><br><span class="line">			Name:    tok.Literal,</span><br><span class="line">		&#125;,</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">for</span> &#123;</span><br><span class="line">		<span class="keyword">if</span> rp, ok = p.AcceptToken(token.RPAREN); ok &#123;</span><br><span class="line">			<span class="keyword">break</span></span><br><span class="line">		&#125;</span><br><span class="line">		arg := p.parseExpr()</span><br><span class="line">		astc.Args = <span class="built_in">append</span>(astc.Args, arg)</span><br><span class="line">		p.AcceptToken(token.COMMA)</span><br><span class="line">	&#125;</span><br><span class="line">	astc.Lparen = lp.Pos</span><br><span class="line">	astc.Rparen = rp.Pos</span><br><span class="line">	asti.Offset = astc</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> asti</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="函数表"><a href="#函数表" class="headerlink" title="函数表"></a>函数表</h2><p>函数表被记录于全局函数中，这里主要是通过函数表完成与函数有关的各种错误检查</p>
+<p><strong>错误类型：函数重复定义</strong></p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Parser)</span> <span class="title">checkFuncName</span><span class="params">(name <span class="keyword">string</span>)</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	<span class="keyword">for</span> _, fu := <span class="keyword">range</span> p.file.Funcs &#123;</span><br><span class="line">		<span class="keyword">if</span> fu.Name.Name == name &#123;</span><br><span class="line">			<span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">tokFunc := p.MustAcceptToken(token.FUNC)</span><br><span class="line">tokFuncIdent := p.MustAcceptToken(token.IDENT)</span><br><span class="line"><span class="keyword">if</span> ok := p.checkFuncName(tokFuncIdent.Literal); ok &#123;</span><br><span class="line">	p.errorf(tokFuncIdent.Pos, <span class="string">&quot;duplicate function declaration: %s&quot;</span>, tokFuncIdent.Literal)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>错误类型：函数未定义</strong></p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> lp, ok := p.AcceptToken(token.LPAREN); ok &#123;</span><br><span class="line">	<span class="keyword">if</span> ok = p.checkFuncName(tok.Literal); !ok &#123;</span><br><span class="line">		p.errorf(lp.Pos, <span class="string">&quot;Function name:%s not find&quot;</span>, tok.Literal)</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">var</span> rp token.Token</span><br><span class="line">	astc := &amp;ast.CallExpr&#123;</span><br><span class="line">		FuncName: &amp;ast.Ident&#123;</span><br><span class="line">			NamePos: tok.Pos,</span><br><span class="line">			Name:    tok.Literal,</span><br><span class="line">		&#125;,</span><br><span class="line">	&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>错误类型：传参不匹配</strong></p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *Parser)</span> <span class="title">checkFuncArgs</span><span class="params">(name <span class="keyword">string</span>, args []ast.Expr)</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	<span class="keyword">for</span> _, fu := <span class="keyword">range</span> p.file.Funcs &#123;</span><br><span class="line">		<span class="keyword">if</span> fu.Name.Name != name &#123;</span><br><span class="line">			<span class="keyword">continue</span></span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> <span class="built_in">len</span>(args) != <span class="built_in">len</span>(fu.Params.List) &#123;</span><br><span class="line">			<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="keyword">for</span> i, arg := <span class="keyword">range</span> fu.Params.List &#123;</span><br><span class="line">			myType := reflect.TypeOf(args[i])</span><br><span class="line">			<span class="keyword">if</span> arg.Type.Name == <span class="string">&quot;string&quot;</span> &amp;&amp; myType.String() != <span class="string">&quot;*ast.Strings&quot;</span> &#123;</span><br><span class="line">				<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">if</span> arg.Type.Name == <span class="string">&quot;bool&quot;</span> &amp;&amp; myType.String() != <span class="string">&quot;*ast.Bool&quot;</span> &#123;</span><br><span class="line">				<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">break</span></span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> &#123;</span><br><span class="line">	<span class="keyword">if</span> rp, ok = p.AcceptToken(token.RPAREN); ok &#123;</span><br><span class="line">		<span class="keyword">break</span></span><br><span class="line">	&#125;</span><br><span class="line">	arg := p.parseExpr()</span><br><span class="line">	astc.Args = <span class="built_in">append</span>(astc.Args, arg)</span><br><span class="line">	p.AcceptToken(token.COMMA)</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">if</span> ok = p.checkFuncArgs(tok.Literal, astc.Args); !ok &#123;</span><br><span class="line">	p.errorf(lp.Pos, <span class="string">&quot;The function parameters do not match&quot;</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/Compilers-Principles/" rel="tag"><i class="fa fa-tag"></i> Compilers Principles</a>
+              <a href="/tags/labs/" rel="tag"><i class="fa fa-tag"></i> labs</a>
+              <a href="/tags/golang/" rel="tag"><i class="fa fa-tag"></i> golang</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2024/05/13/ugo-lab5-%E7%AC%A6%E5%8F%B7%E8%A1%A8&%E9%94%99%E8%AF%AF%E6%A3%80%E6%B5%8B/" rel="prev" title="ugo-lab5-符号表&错误检测">
+      <i class="fa fa-chevron-left"></i> ugo-lab5-符号表&错误检测
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2024/06/06/ugo-lab7-%E7%94%9F%E6%88%90LLVM%20IR/" rel="next" title="ugo-lab7-生成LLVM IR">
+      ugo-lab7-生成LLVM IR <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%8C%E5%96%84%E5%87%BD%E6%95%B0%E8%AF%AD%E5%8F%A5"><span class="nav-number">1.</span> <span class="nav-text">完善函数语句</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%87%BD%E6%95%B0%E8%A1%A8"><span class="nav-number">2.</span> <span class="nav-text">函数表</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="yhellow"
+      src="/images/avatar.gif">
+  <p class="site-author-name" itemprop="name">yhellow</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">328</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">13</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">169</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2019 – 
+  <span itemprop="copyrightYear">2024</span>
+  <span class="with-love">
+    <i class="heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">yhellow</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="Symbols count total">4.9m</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="Reading time total">74:22</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="user"></i>
+      </span>
+      <span class="site-uv" title="Total Visitors">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="eye"></i>
+      </span>
+      <span class="site-pv" title="Total Views">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
