@@ -156,6 +156,263 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/11/08/HIT-OSLab6/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2023/11/08/HIT-OSLab6/" class="post-title-link" itemprop="url">HIT-OSLab6</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-11-08 18:47:50 / Modified: 18:49:34" itemprop="dateCreated datePublished" datetime="2023-11-08T18:47:50+08:00">2023-11-08</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>12k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>11 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>HIT-OSLab6</strong></p>
+<p>实验目的：</p>
+<ul>
+<li>深入理解操作系统的段、页式内存管理，深入理解段表、页表、逻辑地址、线性地址、物理地址等概念</li>
+<li>实现段、页式内存管理的地址映射过程</li>
+<li>编程实现段、页式内存管理上的内存共享，从而深入理解操作系统的内存管理</li>
+</ul>
+<p>实验内容：</p>
+<ul>
+<li>用 Bochs 调试工具跟踪 Linux-0.11 的地址翻译(地址映射)过程，了解 IA-32(Intel Architecture 32-bit) 的CPU架构下的地址翻译</li>
+<li>在 Linux-0.11 中实现 Linux-0.11 的内存管理机制，具体来说就是实现如下3个系统调用：<ul>
+<li>sys_shmget：获取一个共享内存块</li>
+<li>sys_shmat：映射一个共享内存块</li>
+</ul>
+</li>
+<li>在 Ubuntu 上编写多进程的生产者-消费者程序，用共享内存做缓冲区（上一个实验是用文件做缓冲区）</li>
+<li>在上一个实验（信号量的实现和在 pc.c 程序上的应用）的基础上，为 Linux-0.11 增加共享内存功能，并将生产者-消费者程序移植到 Linux-0.11</li>
+</ul>
+<p><strong>实验过程</strong></p>
+<p>本实验基于上个实验，因此需要保存上个实验的代码</p>
+<p>逻辑地址，虚拟地址，线性地址，物理地址是计算机内存管理中的重要概念：</p>
+<ul>
+<li>逻辑地址：<ul>
+<li>逻辑地址是程序使用的地址</li>
+<li>编译器编译程序时，会为程序生成代码段和数据段，然后将所有代码放到代码段中，将所有数据放到数据段中，最后程序中的每句代码和每条数据都会有自己的逻辑地址 </li>
+</ul>
+</li>
+<li>虚拟地址：<ul>
+<li>虚拟地址是操作系统为每个进程分配的地址空间，保证了进程之间的隔离和安全性</li>
+</ul>
+</li>
+<li>线性地址：<ul>
+<li>由虚拟地址通过 “分段” / “分页” 机制转换而来的地址</li>
+</ul>
+</li>
+<li>物理地址：<ul>
+<li>物理地址是指内存中的实际地址，它是硬件访问的地址</li>
+<li>如果 CPU 没有分页机制，那么线性地址等于物理地址 </li>
+<li>如果 CPU 有分页机制，那么线性地址必须通过转换才能变成物理地址</li>
+</ul>
+</li>
+</ul>
+<p>逻辑地址，虚拟地址，线性地址，物理地址之间的关系是：</p>
+<ul>
+<li>在程序编写时，汇编指令使用的地址为逻辑地址（编译器为各个符号分配的地址）</li>
+<li>当程序被加载到内存中时，操作系统会将逻辑地址转化为虚拟地址</li>
+<li>在 x86 架构中：<ul>
+<li>虚拟地址通过段选择器和段描述符转化为线性地址</li>
+<li>线性地址通过页表转化为物理地址</li>
+</ul>
+</li>
+</ul>
+<p>实验要求跟踪调试 Linux-0.11 的地址映射过程，测试代码如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span> i = <span class="number">0x12345678</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;LQD The logical/virtual address of i is 0x%08x&quot;</span>, &amp;i);</span><br><span class="line">    fflush(<span class="built_in">stdout</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">while</span> (i);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>运行后程序死循环</li>
+</ul>
+<p>我们的目标就是调试分析变量 i 的物理地址，修改该地址使程序停止死循环：</p>
+<img src="/2023/11/08/HIT-OSLab6/1699297121439.png" class width="1699297121439">  
+<ul>
+<li>程序运行之后输出的 0x3004 就是变量 i 的虚拟地址</li>
+</ul>
+<p>线性地址由段选择器和段描述符计算而来，因此我们需要先查找到段描述符</p>
+<p>进程的段描述符记录在该进程的 LDT 表中，而 LDT 表则记录在 GDT 表中（LDTR 寄存器记录 LDT 表存放在 GDT 表的位置，GDTR 寄存器则记录有 GDT 表的物理地址）</p>
+<p>用 <code>sreg</code> 命令可以显示所有寄存器的信息：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">&lt;bochs:<span class="number">3</span>&gt; sreg</span><br><span class="line">es:<span class="number">0x0017</span>, dh=<span class="number">0x10c0f300</span>, dl=<span class="number">0x00003fff</span>, valid=<span class="number">1</span></span><br><span class="line">	Data segment, base=<span class="number">0x10000000</span>, limit=<span class="number">0x03ffffff</span>, Read/Write, Accessed</span><br><span class="line">cs:<span class="number">0x000f</span>, dh=<span class="number">0x10c0fb00</span>, dl=<span class="number">0x00000002</span>, valid=<span class="number">1</span></span><br><span class="line">	Code segment, base=<span class="number">0x10000000</span>, limit=<span class="number">0x00002fff</span>, Execute/Read, Non-Conforming, Accessed, <span class="number">32</span>-bit</span><br><span class="line">ss:<span class="number">0x0017</span>, dh=<span class="number">0x10c0f300</span>, dl=<span class="number">0x00003fff</span>, valid=<span class="number">1</span></span><br><span class="line">	Data segment, base=<span class="number">0x10000000</span>, limit=<span class="number">0x03ffffff</span>, Read/Write, Accessed</span><br><span class="line">ds:<span class="number">0x0017</span>, dh=<span class="number">0x10c0f300</span>, dl=<span class="number">0x00003fff</span>, valid=<span class="number">3</span></span><br><span class="line">	Data segment, base=<span class="number">0x10000000</span>, limit=<span class="number">0x03ffffff</span>, Read/Write, Accessed</span><br><span class="line">fs:<span class="number">0x0017</span>, dh=<span class="number">0x10c0f300</span>, dl=<span class="number">0x00003fff</span>, valid=<span class="number">1</span></span><br><span class="line">	Data segment, base=<span class="number">0x10000000</span>, limit=<span class="number">0x03ffffff</span>, Read/Write, Accessed</span><br><span class="line">gs:<span class="number">0x0017</span>, dh=<span class="number">0x10c0f300</span>, dl=<span class="number">0x00003fff</span>, valid=<span class="number">1</span></span><br><span class="line">	Data segment, base=<span class="number">0x10000000</span>, limit=<span class="number">0x03ffffff</span>, Read/Write, Accessed</span><br><span class="line">ldtr:<span class="number">0x0068</span>, dh=<span class="number">0x000082fe</span>, dl=<span class="number">0x92d00068</span>, valid=<span class="number">1</span></span><br><span class="line">tr:<span class="number">0x0060</span>, dh=<span class="number">0x00008bfe</span>, dl=<span class="number">0x92e80068</span>, valid=<span class="number">1</span></span><br><span class="line">gdtr:base=<span class="number">0x0000000000005cb8</span>, limit=<span class="number">0x7ff</span></span><br><span class="line">idtr:base=<span class="number">0x00000000000054b8</span>, limit=<span class="number">0x7ff</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>GDTR 寄存器中的值为 0x5cb8</li>
+<li>LDTR 寄存器中的值为 0x0068</li>
+<li>DS 寄存器中的值为 0x0017（<code>0b000000000010111</code>，索引值为 <code>0b10</code>）</li>
+</ul>
+<p>用 <code>xp</code> 命令可以打印指定内存的数据：</p>
+<ul>
+<li>查看 GDT 表信息，LDT 表的物理地址为 <code>0xfe92d0</code></li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">&lt;bochs:<span class="number">5</span>&gt; xp /<span class="number">8</span>w <span class="number">0x00005cb8</span>+<span class="number">0x68</span></span><br><span class="line">[bochs]:</span><br><span class="line"><span class="number">0x0000000000005d20</span> &lt;bogus+       <span class="number">0</span>&gt;:	<span class="number">0x92d00068</span>	<span class="number">0x000082fe</span>	<span class="number">0xb2e80068</span>	<span class="number">0x000089f8</span></span><br><span class="line"><span class="number">0x0000000000005d30</span> &lt;bogus+      <span class="number">16</span>&gt;:	<span class="number">0xb2d00068</span>	<span class="number">0x000082f8</span>	<span class="number">0x00000000</span>	<span class="number">0x00000000</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>查看对应 LDT 表信息，DS 段的索引为 <code>0x2</code>，对应 <code>0x00003fff    0x10c0f300</code></li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">&lt;bochs:<span class="number">6</span>&gt; xp /<span class="number">8</span>w <span class="number">0xfe92d0</span></span><br><span class="line">[bochs]:</span><br><span class="line"><span class="number">0x0000000000fe92d0</span> &lt;bogus+       <span class="number">0</span>&gt;:	<span class="number">0x00000000</span>	<span class="number">0x00000000</span>	<span class="number">0x00000002</span>	<span class="number">0x10c0fb00</span></span><br><span class="line"><span class="number">0x0000000000fe92e0</span> &lt;bogus+      <span class="number">16</span>&gt;:	<span class="number">0x00003fff</span>	<span class="number">0x10c0f300</span>	<span class="number">0x00000000</span>	<span class="number">0x00fea000</span></span><br></pre></td></tr></table></figure>
+<p>段描述符的结构如下：</p>
+<img src="/2023/11/08/HIT-OSLab6/1699298535080.png" class width="1699298535080"> 
+<ul>
+<li>段基址由3部分组合而成：<code>[0,8)，[24,32)，[48,64)</code></li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">bin(<span class="number">0x00003fff10c0f300</span>) =&gt;</span><br><span class="line"><span class="number">0b</span>[<span class="number">0000000000000000</span>]<span class="number">0011111111111111</span>[<span class="number">00010000</span>]<span class="number">1100000011110011</span>[<span class="number">00000000</span>]</span><br></pre></td></tr></table></figure>
+<ul>
+<li>计算得基地址为 <code>0x10000000</code></li>
+<li>因此线性地址为 <code>0x10003004</code></li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">In [<span class="number">1</span>]: hex(<span class="number">0b00010000000000000000000000000000</span>)</span><br><span class="line">Out[<span class="number">1</span>]: <span class="string">&#x27;0x10000000&#x27;</span></span><br></pre></td></tr></table></figure>
+<p>用 <code>calc</code> 命令验证线性地址是否正确：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">&lt;bochs:<span class="number">7</span>&gt; calc ds:<span class="number">0x3004</span></span><br><span class="line"><span class="number">0x10003004</span> <span class="number">268447748</span></span><br></pre></td></tr></table></figure>
+<p>线性地址的结构如下：</p>
+<img src="/2023/11/08/HIT-OSLab6/1699319659335.png" class width="1699319659335"> 
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">bin(<span class="number">0x10003004</span>) =&gt;</span><br><span class="line"><span class="number">0b</span>[<span class="number">1000000</span>][<span class="number">0000000011</span>][<span class="number">000000000100</span>]</span><br></pre></td></tr></table></figure>
+<ul>
+<li>0-11：页内偏移 - 4</li>
+<li>12-21：页表索引 - 3</li>
+<li>22-31：页目录索引 - 64（二级页表索引）</li>
+</ul>
+<p>在 IA-32(英特尔的32位CPU架构) 下，页目录表的位置由 CR3 寄存器指引，用 <code>creg</code> 命令可以看到：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">&lt;bochs:<span class="number">2</span>&gt; creg</span><br><span class="line">CR0=<span class="number">0x8000001b</span>: PG cd nw ac wp ne ET TS em MP PE</span><br><span class="line">CR2=page fault laddr=<span class="number">0x0000000010002fb0</span></span><br><span class="line">CR3=<span class="number">0x000000000000</span></span><br><span class="line">    PCD=page-level cache disable=<span class="number">0</span></span><br><span class="line">    PWT=page-level write-through=<span class="number">0</span></span><br><span class="line">CR4=<span class="number">0x00000000</span>: cet pke smap smep osxsave pcid fsgsbase smx vmx osxmmexcpt umip osfxsr pce pge mce pae pse de tsd pvi vme</span><br><span class="line">CR8: <span class="number">0x0</span></span><br><span class="line">EFER=<span class="number">0x00000000</span>: ffxsr nxe lma lme sce</span><br></pre></td></tr></table></figure>
+<ul>
+<li>页目录表所在物理地址为 <code>0x0</code></li>
+<li>页目录表和页表中的内容很简单，是1024个32位数，这32位中前20位是物理页框号，后面是一些属性信息（最重要的是最后一位P）</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">&lt;bochs:<span class="number">4</span>&gt; xp /<span class="number">8</span>w <span class="number">0</span>+<span class="number">64</span>*<span class="number">4</span></span><br><span class="line">[bochs]:</span><br><span class="line"><span class="number">0x0000000000000100</span> &lt;bogus+       <span class="number">0</span>&gt;:	<span class="number">0x00fa6027</span>	<span class="number">0x00000000</span>	<span class="number">0x00000000</span>	<span class="number">0x00000000</span></span><br><span class="line"><span class="number">0x0000000000000110</span> &lt;bogus+      <span class="number">16</span>&gt;:	<span class="number">0x00000000</span>	<span class="number">0x00000000</span>	<span class="number">0x00000000</span>	<span class="number">0x00000000</span></span><br><span class="line"><span class="number">0x0000000000000120</span> &lt;bogus+      <span class="number">32</span>&gt;:	<span class="number">0x00000000</span>	<span class="number">0x00000000</span>	<span class="number">0x00000000</span>	<span class="number">0x00000000</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>页表所在的物理页框号为 <code>0x00fa6</code>，即页表在物理内存为 <code>0x00fa6000</code> 处</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">&lt;bochs:<span class="number">5</span>&gt; xp /<span class="number">8</span>w <span class="number">0x00fa6000</span> + <span class="number">3</span>*<span class="number">4</span></span><br><span class="line">[bochs]:</span><br><span class="line"><span class="number">0x0000000000fa600c</span> &lt;bogus+       <span class="number">0</span>&gt;:	<span class="number">0x00f99067</span>	<span class="number">0x00000000</span>	<span class="number">0x00000000</span>	<span class="number">0x00000000</span></span><br><span class="line"><span class="number">0x0000000000fa601c</span> &lt;bogus+      <span class="number">16</span>&gt;:	<span class="number">0x00000000</span>	<span class="number">0x00000000</span>	<span class="number">0x00000000</span>	<span class="number">0x00000000</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>物理页所在的物理页框号为 <code>0x00f99</code>，即物理页在物理内存为 <code>0x00f99000</code> 处 </li>
+<li>因此变量 i 的物理地址为 <code>0x00f99004</code></li>
+</ul>
+<p>用 <code>page</code> 命令验证物理地址是否正确：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">&lt;bochs:<span class="number">6</span>&gt; page <span class="number">0x10003004</span></span><br><span class="line"> PDE: <span class="number">0x0000000000fa6027</span>    ps         A pcd pwt U W P</span><br><span class="line"> PTE: <span class="number">0x0000000000f99067</span>       g pat D A pcd pwt U W P</span><br><span class="line">linear page <span class="number">0x0000000010003000</span> maps to physical page <span class="number">0x000000f99000</span></span><br></pre></td></tr></table></figure>
+<p>打印该地址的数据即可发现 <code>0x12345678</code>：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">&lt;bochs:<span class="number">8</span>&gt; xp /w <span class="number">0x00f99004</span></span><br><span class="line">[bochs]:</span><br><span class="line"><span class="number">0x0000000000f99004</span> &lt;bogus+       <span class="number">0</span>&gt;:	<span class="number">0x12345678</span></span><br></pre></td></tr></table></figure>
+<p>最后使用 <code>setpmem</code> 命令修改内存即可：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">&lt;bochs:<span class="number">10</span>&gt; setpmem <span class="number">0x00f99004</span> <span class="number">4</span> <span class="number">0</span></span><br><span class="line">&lt;bochs:<span class="number">11</span>&gt; xp /w <span class="number">0x00f99004</span></span><br><span class="line">[bochs]:</span><br><span class="line"><span class="number">0x0000000000f99004</span> &lt;bogus+       <span class="number">0</span>&gt;:	<span class="number">0x00000000</span></span><br></pre></td></tr></table></figure>
+<img src="/2023/11/08/HIT-OSLab6/1699320824200.png" class width="1699320824200">   
+<ul>
+<li>程序成功退出</li>
+</ul>
+<p>Linux 和 Unix 系统中，共享内存（Shared Memory）是一种在多进程环境下实现进程间通信的技术，它允许多个进程同时访问同一块内存区域，从而实现数据的共享和通信</p>
+<p>在为 linux-0.11 编写共享内存代码前，我们需要先分析一下 linux-0.11 对页面的管理机制</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PAGING_MEMORY (15*1024*1024)</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> PAGING_PAGES (PAGING_MEMORY&gt;&gt;12)</span></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">unsigned</span> <span class="keyword">char</span> mem_map [ PAGING_PAGES ] = &#123;<span class="number">0</span>,&#125;;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>mem_map</code> 是一个全局数组，在 Linux 0.11 中用于存储物理内存的映射</li>
+<li>其索引代表线性地址，每个元素代表一个物理页框</li>
+</ul>
+<img src="/2023/11/08/HIT-OSLab6/1699422373776.png" class width="1699422373776"> 
+<p>在 Linux-0.11 中，物理内存由一系列页框组成，每个页框的大小为 4KB，<code>mem_map</code> 数组存储了所有已经分配的物理页框的地址，当进程需要分配内存时，会从 <code>mem_map</code> 中查找一个空闲的页框，将其分配给进程，并将该页框的地址返回给进程</p>
+<p>初始化 <code>mem_map</code> 数组的函数为 <code>mem_init</code>，在 swapper 进程中会调用一次：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> MAP_NR(addr) (((addr)-LOW_MEM)&gt;&gt;12)</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> USED 100</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">mem_init</span><span class="params">(<span class="keyword">long</span> start_mem, <span class="keyword">long</span> end_mem)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> i;</span><br><span class="line"></span><br><span class="line">	HIGH_MEMORY = end_mem;</span><br><span class="line">	<span class="keyword">for</span> (i=<span class="number">0</span> ; i&lt;PAGING_PAGES ; i++)</span><br><span class="line">		mem_map[i] = USED;</span><br><span class="line">	i = MAP_NR(start_mem);</span><br><span class="line">	end_mem -= start_mem;</span><br><span class="line">	end_mem &gt;&gt;= <span class="number">12</span>;</span><br><span class="line">	<span class="keyword">while</span> (end_mem--&gt;<span class="number">0</span>)</span><br><span class="line">		mem_map[i++]=<span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>空闲页面分配的函数 <code>get_free_page</code> 代码如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> LOW_MEM 0x100000</span></span><br><span class="line"><span class="function"><span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="title">get_free_page</span><span class="params">(<span class="keyword">void</span>)</span> <span class="comment">/* 获取一个空闲页 */</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line"><span class="function"><span class="keyword">register</span> <span class="keyword">unsigned</span> <span class="keyword">long</span> __res <span class="title">asm</span><span class="params">(<span class="string">&quot;ax&quot;</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">__asm__(<span class="string">&quot;std ; repne ; scasb\n\t&quot;</span> <span class="comment">/* 查找一个末尾为&quot;\0&quot;的page,记录在edi中 */</span></span><br><span class="line">	<span class="string">&quot;jne 1f\n\t&quot;</span>		   <span class="comment">/* 如果scasb指令返回非零值,说明页框已经被占用 */</span></span><br><span class="line">	<span class="string">&quot;movb $1,1(%%edi)\n\t&quot;</span>	<span class="comment">/* [edi+1]=1,对应页面设置为&#x27;1&#x27; */</span></span><br><span class="line">	<span class="string">&quot;sall $12,%%ecx\n\t&quot;</span>	</span><br><span class="line">	<span class="string">&quot;addl %2,%%ecx\n\t&quot;</span></span><br><span class="line">	<span class="string">&quot;movl %%ecx,%%edx\n\t&quot;</span></span><br><span class="line">	<span class="string">&quot;movl $1024,%%ecx\n\t&quot;</span></span><br><span class="line">	<span class="string">&quot;leal 4092(%%edx),%%edi\n\t&quot;</span></span><br><span class="line">	<span class="string">&quot;rep ; stosl\n\t&quot;</span></span><br><span class="line">	<span class="string">&quot;movl %%edx,%%eax\n&quot;</span></span><br><span class="line">	<span class="string">&quot;1:&quot;</span></span><br><span class="line">	:<span class="string">&quot;=a&quot;</span> (__res)</span><br><span class="line">	:<span class="string">&quot;0&quot;</span> (<span class="number">0</span>),<span class="string">&quot;i&quot;</span> (LOW_MEM),<span class="string">&quot;c&quot;</span> (PAGING_PAGES), <span class="comment">/* 设置i为LOW_MEM(从LOW_MEM开始计数) */</span></span><br><span class="line">	<span class="string">&quot;D&quot;</span> (mem_map+PAGING_PAGES<span class="number">-1</span>)</span><br><span class="line">	);</span><br><span class="line"><span class="keyword">return</span> __res;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><code>repne scasb</code> 用于将寄存器的内容与内存中的数据进行比较（一直重复直到 <code>edi</code> 末尾为 “\0”）</li>
+<li>核心操作就是遍历一遍 <code>mem_map</code>，返回合适的空闲页面</li>
+</ul>
+<p>释放已分配页面的函数 <code>get_free_page</code> 代码如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">free_page</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">long</span> addr)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">if</span> (addr &lt; LOW_MEM) <span class="keyword">return</span>;</span><br><span class="line">	<span class="keyword">if</span> (addr &gt;= HIGH_MEMORY)</span><br><span class="line">		panic(<span class="string">&quot;trying to free nonexistent page&quot;</span>);</span><br><span class="line">	addr -= LOW_MEM;</span><br><span class="line">	addr &gt;&gt;= <span class="number">12</span>;</span><br><span class="line">	<span class="keyword">if</span> (mem_map[addr]--) <span class="keyword">return</span>;</span><br><span class="line">	mem_map[addr]=<span class="number">0</span>;</span><br><span class="line">	panic(<span class="string">&quot;trying to free free page&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>将对应的 <code>mem_map[addr]</code> 末尾置为 “\x00”</li>
+</ul>
+<p>函数 <code>put_page</code> 用于将线性地址与物理页进行映射，其实现如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="title">put_page</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">long</span> page,<span class="keyword">unsigned</span> <span class="keyword">long</span> address)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> tmp, *page_table;</span><br><span class="line"></span><br><span class="line"><span class="comment">/* NOTE !!! This uses the fact that _pg_dir=0 */</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (page &lt; LOW_MEM || page &gt;= HIGH_MEMORY)</span><br><span class="line">		printk(<span class="string">&quot;Trying to put page %p at %p\n&quot;</span>,page,address);</span><br><span class="line">	<span class="keyword">if</span> (mem_map[(page-LOW_MEM)&gt;&gt;<span class="number">12</span>] != <span class="number">1</span>)</span><br><span class="line">		printk(<span class="string">&quot;mem_map disagrees with %p at %p\n&quot;</span>,page,address);</span><br><span class="line">	page_table = (<span class="keyword">unsigned</span> <span class="keyword">long</span> *) ((address&gt;&gt;<span class="number">20</span>) &amp; <span class="number">0xffc</span>);</span><br><span class="line">	<span class="keyword">if</span> ((*page_table)&amp;<span class="number">1</span>)</span><br><span class="line">		page_table = (<span class="keyword">unsigned</span> <span class="keyword">long</span> *) (<span class="number">0xfffff000</span> &amp; *page_table);</span><br><span class="line">	<span class="keyword">else</span> &#123;</span><br><span class="line">		<span class="keyword">if</span> (!(tmp=get_free_page()))</span><br><span class="line">			<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">		*page_table = tmp|<span class="number">7</span>;</span><br><span class="line">		page_table = (<span class="keyword">unsigned</span> <span class="keyword">long</span> *) tmp;</span><br><span class="line">	&#125;</span><br><span class="line">	page_table[(address&gt;&gt;<span class="number">12</span>) &amp; <span class="number">0x3ff</span>] = page | <span class="number">7</span>;</span><br><span class="line"><span class="comment">/* no need for invalidate */</span></span><br><span class="line">	<span class="keyword">return</span> page;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>本实验要求我们实现共享内存，首先我们需要添加共享内存的系统调用号：（在 <code>/include/unistd.h</code> 中）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> __NR_shmget		76</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> __NR_shmat 		77</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>需要注意的是：这里同时需要修改 <code>hdc-0.11.img</code> 中的 <code>hdc/usr/include/unistd.h</code> 文件，如果想在虚拟机中使用 gcc 编译的话，会导入虚拟机 <code>hdc/usr/include/</code> 中的文件为头文件</li>
+</ul>
+<p>接着修改系统调用号的总数：（在 <code>/kernel/system_call.s</code> 中）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">nr_system_calls = <span class="number">78</span></span><br></pre></td></tr></table></figure>
+<p>最后添加新的系统调用定义：（在 <code>/include/linux/sys.h</code> 中）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">extern</span> <span class="keyword">int</span> <span class="title">sys_shmget</span><span class="params">()</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">extern</span> <span class="keyword">void</span> *<span class="title">sys_shmat</span><span class="params">()</span></span>;</span><br><span class="line"></span><br><span class="line">fn_ptr sys_call_table[] = &#123;......, sys_shmget, sys_shmat&#125;;</span><br></pre></td></tr></table></figure>
+<p>头文件以及宏定义：（在 <code>/kernel</code> 中新建文件 <code>shm.c</code>）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;asm/segment.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;linux/kernel.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;linux/sched.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SHM_COUNT 20</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SHM_NAME_SIZE 20</span></span><br></pre></td></tr></table></figure>
+<p>核心结构体 <code>struct_shm_tables</code>：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">struct_shm_tables</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">	<span class="keyword">char</span> name[SHM_NAME_SIZE];</span><br><span class="line">	<span class="keyword">long</span> addr;</span><br><span class="line">&#125; shm_tables[SHM_COUNT];</span><br></pre></td></tr></table></figure>
+<p>基础字符串函数：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">strcmp_shm</span><span class="params">(<span class="keyword">char</span>* name,<span class="keyword">char</span>* tmp)</span></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> i;</span><br><span class="line">	<span class="keyword">for</span>(i = <span class="number">0</span>; i&lt;<span class="number">20</span>; i++)&#123;</span><br><span class="line">		<span class="keyword">if</span>(name[i] != tmp[i]) </span><br><span class="line">            <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">        <span class="keyword">if</span>(tmp[i] ==<span class="string">&#x27;\0&#x27;</span> &amp;&amp; name[i] == <span class="string">&#x27;\0&#x27;</span>) <span class="keyword">break</span>;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">strcpy_shm</span><span class="params">(<span class="keyword">char</span>* name,<span class="keyword">char</span>* tmp)</span></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> i;</span><br><span class="line">	<span class="keyword">for</span>(i = <span class="number">0</span>; i&lt;<span class="number">20</span>; i++)&#123;</span><br><span class="line">		name[i] = tmp[i];</span><br><span class="line">        <span class="keyword">if</span>(tmp[i] ==<span class="string">&#x27;\0&#x27;</span>) <span class="keyword">break</span>;</span><br><span class="line">	&#125;</span><br><span class="line">    <span class="keyword">return</span> i;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">find_shm_location</span><span class="params">(<span class="keyword">char</span> *name)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> i;</span><br><span class="line">	<span class="keyword">for</span> (i = <span class="number">0</span>; i &lt; SHM_COUNT; i++)&#123;</span><br><span class="line">		<span class="keyword">if</span> (!strcmp_shm(name, shm_tables[i].name))&#123;</span><br><span class="line">			<span class="keyword">return</span> i;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>系统调用 sys_shmget：获取一片共享内存</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">sys_shmget</span><span class="params">(<span class="keyword">char</span> *name)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> i, shmid;</span><br><span class="line">	<span class="keyword">char</span> tmp[SHM_NAME_SIZE];</span><br><span class="line">	<span class="keyword">for</span> (i = <span class="number">0</span>; i &lt; SHM_NAME_SIZE; i++)&#123;</span><br><span class="line">		tmp[i] = get_fs_byte(name + i);</span><br><span class="line">		<span class="keyword">if</span> (tmp[i] == <span class="string">&#x27;\0&#x27;</span>)</span><br><span class="line">			<span class="keyword">break</span>;</span><br><span class="line">	&#125;</span><br><span class="line">	shmid = find_shm_location(tmp);</span><br><span class="line">	<span class="keyword">if</span> (shmid != <span class="number">-1</span>)&#123;</span><br><span class="line">		<span class="keyword">return</span> shmid;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">for</span> (i = <span class="number">0</span>; i &lt; SHM_COUNT; i++)&#123;</span><br><span class="line">		<span class="keyword">if</span> (shm_tables[i].name[<span class="number">0</span>] == <span class="string">&quot;\0&quot;</span>)&#123;</span><br><span class="line">			strcpy_shm(shm_tables[i].name, tmp);</span><br><span class="line">			shm_tables[i].addr = get_free_page(); <span class="comment">/* 获取一个空闲的页帧 */</span></span><br><span class="line">			<span class="keyword">return</span> i;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	printk(<span class="string">&quot;SHM Number limited!\n&quot;</span>);</span><br><span class="line">	<span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>系统调用 sys_shmat：映射一片共享内存</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> *<span class="title">sys_shmat</span><span class="params">(<span class="keyword">int</span> shmid)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">if</span> (shm_tables[shmid].name[<span class="number">0</span>] == <span class="string">&quot;\0&quot;</span>)&#123;</span><br><span class="line">		printk(<span class="string">&quot;SHM not exists!\n&quot;</span>);</span><br><span class="line">		<span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">	&#125;</span><br><span class="line">	put_page(shm_tables[shmid].addr, current-&gt;brk + current-&gt;start_code); <span class="comment">/* 创建页表,建立起虚拟地址到物理地址的映射关系 */</span></span><br><span class="line">	<span class="keyword">return</span> (<span class="keyword">void</span> *)current-&gt;brk;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>最后修改 makefile：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">OBJS  = sched.o system_call.o traps.o <span class="keyword">asm</span>.o fork.o \</span><br><span class="line">	panic.o printk.o <span class="built_in">vsprintf</span>.o sys.o <span class="built_in">exit</span>.o \</span><br><span class="line">	signal.o mktime.o sem.o shm.o</span><br><span class="line">	</span><br><span class="line">sem.s sem.o: sem.c ../include/linux/kernel.h ../include/unistd.h</span><br><span class="line">shm.s shm.o: shm.c ../include/linux/kernel.h ../include/unistd.h</span><br></pre></td></tr></table></figure>
+<p>接下来我们需要修改上一个实验的生产者-消费者程序，并用共享内存做缓冲区：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span>   __LIBRARY__</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/types.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"></span><br><span class="line">_syscall2(<span class="keyword">int</span>,sem_open,<span class="keyword">const</span> <span class="keyword">char</span> *,name,<span class="keyword">unsigned</span> <span class="keyword">int</span>,value);</span><br><span class="line">_syscall1(<span class="keyword">int</span>,sem_wait,<span class="keyword">int</span>,sem);</span><br><span class="line">_syscall1(<span class="keyword">int</span>,sem_post,<span class="keyword">int</span>,sem);</span><br><span class="line">_syscall1(<span class="keyword">int</span>,sem_unlink,<span class="keyword">const</span> <span class="keyword">char</span> *,name);</span><br><span class="line"></span><br><span class="line">_syscall1(<span class="keyword">int</span>,shmget,<span class="keyword">char</span>*,name);</span><br><span class="line">_syscall1(<span class="keyword">int</span>,shmat,<span class="keyword">int</span>,shmid);</span><br><span class="line"></span><br><span class="line"><span class="keyword">const</span> <span class="keyword">int</span> consumerNum = <span class="number">3</span>;</span><br><span class="line"><span class="keyword">const</span> <span class="keyword">int</span> itemNum = <span class="number">6</span>;</span><br><span class="line"><span class="keyword">const</span> <span class="keyword">int</span> bufSize = <span class="number">10</span>;</span><br><span class="line"><span class="keyword">int</span> buf_in = <span class="number">0</span>,buf_out = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> sem_empty, sem_full, sem_mutex;</span><br><span class="line">    <span class="keyword">int</span> *buffer;</span><br><span class="line">    <span class="keyword">int</span> shmid;</span><br><span class="line">    <span class="keyword">int</span> stat;</span><br><span class="line">    <span class="keyword">pid_t</span> p;</span><br><span class="line">    <span class="keyword">int</span> i,j,k,fd;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span>((sem_empty = sem_open(<span class="string">&quot;empty&quot;</span>,<span class="number">1</span>)) &lt; <span class="number">0</span>)&#123;</span><br><span class="line">        perror(<span class="string">&quot;empty error!\n&quot;</span>);</span><br><span class="line">        <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span>((sem_full = sem_open(<span class="string">&quot;full&quot;</span>,<span class="number">0</span>)) &lt; <span class="number">0</span>)&#123;</span><br><span class="line">        perror(<span class="string">&quot;full error!\n&quot;</span>);</span><br><span class="line">        <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span>((sem_mutex = sem_open(<span class="string">&quot;mutex&quot;</span>,<span class="number">10</span>)) &lt; <span class="number">0</span>)&#123;</span><br><span class="line">        perror(<span class="string">&quot;mutex error!\n&quot;</span>);</span><br><span class="line">        <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    shmid = shmget(<span class="string">&quot;buffer&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span>(!(p = fork()))&#123;</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;A(%d) create\n&quot;</span>,<span class="number">0</span>);</span><br><span class="line">        buffer = (<span class="keyword">int</span> *)shmat(shmid);</span><br><span class="line">        <span class="keyword">for</span>(i = <span class="number">0</span>; i &lt; itemNum; i++)&#123;</span><br><span class="line">            sem_wait(sem_empty);</span><br><span class="line">            sem_wait(sem_mutex);</span><br><span class="line"></span><br><span class="line">            <span class="built_in">printf</span>(<span class="string">&quot;A(%d) &gt;&gt; buf_in:%d\n&quot;</span>,<span class="number">0</span>,buf_in);</span><br><span class="line">            buffer[<span class="number">0</span>] = buf_in;</span><br><span class="line">            buf_in = (buf_in+<span class="number">1</span>) % bufSize;</span><br><span class="line"></span><br><span class="line">            sem_post(sem_mutex);</span><br><span class="line">            sem_post(sem_full);</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;A(%d) done\n&quot;</span>,<span class="number">0</span>);</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span> <span class="keyword">if</span>(p &lt; <span class="number">0</span>)&#123;</span><br><span class="line">        perror(<span class="string">&quot;fork error!\n&quot;</span>);</span><br><span class="line">        <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span>(j = <span class="number">0</span>; j &lt; consumerNum; j++)&#123;</span><br><span class="line">        <span class="keyword">if</span>(!(p = fork()))&#123;</span><br><span class="line">            <span class="built_in">printf</span>(<span class="string">&quot;B(%d) create\n&quot;</span>,j);</span><br><span class="line">            buffer = (<span class="keyword">int</span> *)shmat(shmid);</span><br><span class="line">            <span class="keyword">for</span>(k = <span class="number">0</span>; k &lt; itemNum/consumerNum; k++)&#123;</span><br><span class="line">                sem_wait(sem_full);</span><br><span class="line">                sem_wait(sem_mutex);</span><br><span class="line"></span><br><span class="line">                buf_out = buffer[<span class="number">0</span>];</span><br><span class="line">                <span class="built_in">printf</span>(<span class="string">&quot;B(%d) &gt;&gt; buf_out:%d\n&quot;</span>,j,buf_out);</span><br><span class="line"></span><br><span class="line">                buf_out = (buf_out + <span class="number">1</span>) % bufSize;</span><br><span class="line">                buffer[<span class="number">0</span>] = buf_out;</span><br><span class="line"></span><br><span class="line">                sem_post(sem_mutex);</span><br><span class="line">                sem_post(sem_empty);</span><br><span class="line"></span><br><span class="line">            &#125;</span><br><span class="line">            <span class="built_in">printf</span>(<span class="string">&quot;B(%d) done\n&quot;</span>,j);</span><br><span class="line">            <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span>(p &lt; <span class="number">0</span>)&#123;</span><br><span class="line">            perror(<span class="string">&quot;fork error!\n&quot;</span>);</span><br><span class="line">            <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">while</span> ((wait(&amp;stat)) &gt; <span class="number">0</span>); </span><br><span class="line">    sem_unlink(<span class="string">&quot;empty&quot;</span>);</span><br><span class="line">    sem_unlink(<span class="string">&quot;full&quot;</span>);</span><br><span class="line">    sem_unlink(<span class="string">&quot;mutex&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;all done&quot;</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这里有一个点需要注意，由于共享页面同时存在于两个进程中，因此会在 <code>do_exit</code> 中被释放两次</p>
+<p>为了不触发内核报错，这里需要修改 <code>free_page</code> 函数：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">free_page</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">long</span> addr)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">if</span> (addr &lt; LOW_MEM) <span class="keyword">return</span>;</span><br><span class="line">	<span class="keyword">if</span> (addr &gt;= HIGH_MEMORY)</span><br><span class="line">		panic(<span class="string">&quot;trying to free nonexistent page&quot;</span>);</span><br><span class="line">	addr -= LOW_MEM;</span><br><span class="line">	addr &gt;&gt;= <span class="number">12</span>;</span><br><span class="line"></span><br><span class="line">	mem_map[addr] = mem_map[addr] &amp; ~(<span class="number">1</span>) ; </span><br><span class="line"></span><br><span class="line">	<span class="comment">/*</span></span><br><span class="line"><span class="comment">	if (mem_map[addr]--) return;</span></span><br><span class="line"><span class="comment">	mem_map[addr]=0;</span></span><br><span class="line"><span class="comment">	panic(&quot;trying to free free page&quot;);</span></span><br><span class="line"><span class="comment">	*/</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>最终的效果如下：</p>
+<img src="/2023/11/08/HIT-OSLab6/1699440187243.png" class width="1699440187243">  
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2023/11/07/%E9%B9%8F%E7%A8%8B%E6%9D%AFCTF2023/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1897,151 +2154,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2023/10/20/HIT-OSLab0/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2023/10/20/HIT-OSLab0/" class="post-title-link" itemprop="url">HIT-OSLab0</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2023-10-20 00:40:11" itemprop="dateCreated datePublished" datetime="2023-10-20T00:40:11+08:00">2023-10-20</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">Edited on</span>
-                <time title="Modified: 2023-10-26 13:49:14" itemprop="dateModified" datetime="2023-10-26T13:49:14+08:00">2023-10-26</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>4.4k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>4 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>cHIT-OSLab0</strong></p>
-<p>实验环境搭建：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">git clone https://github.com/DeathKing/hit-oslab.git</span><br><span class="line">cd hit-oslab </span><br><span class="line">./setup.sh </span><br></pre></td></tr></table></figure>
-<ul>
-<li>在用户目录下会生成一个 oslab 目录，这里面就是实验的环境（阉割版的 Linux 0.11）</li>
-</ul>
-<p>Linux 0.11 需要 gcc-3.4 进行编译，使用如下命令添加并切换 gcc-3.4 的链接组：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-3.4 50</span><br><span class="line">sudo update-alternatives --config gcc</span><br></pre></td></tr></table></figure>
-<p>再使用如下命令进行切换：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">  选择       路径            优先级  状态</span><br><span class="line">------------------------------------------------------------</span><br><span class="line">  <span class="number">0</span>            /usr/bin/gcc<span class="number">-5</span>     <span class="number">50</span>        自动模式</span><br><span class="line">  <span class="number">1</span>            /usr/bin/gcc<span class="number">-11</span>    <span class="number">50</span>        手动模式</span><br><span class="line">* <span class="number">2</span>            /usr/bin/gcc<span class="number">-3.4</span>   <span class="number">50</span>        手动模式</span><br><span class="line">  <span class="number">3</span>            /usr/bin/gcc<span class="number">-5</span>     <span class="number">50</span>        手动模式</span><br><span class="line">  <span class="number">4</span>            /usr/bin/gcc<span class="number">-7</span>     <span class="number">50</span>        手动模式</span><br><span class="line">  <span class="number">5</span>            /usr/bin/gcc<span class="number">-9</span>     <span class="number">50</span>        手动模式</span><br></pre></td></tr></table></figure>
-<p>Linux 0.11 是 Linux 操作系统的第一版本，于 1991 年发布，它的源码结构反映了 Linux 的发展历程和设计思想 </p>
-<p>Linux 0.11 的源码结构比较简单，主要由以下几个部分组成：</p>
-<ul>
-<li>内核（kernel）</li>
-<li>系统调用（syscall）</li>
-<li>用户空间应用程序（userland apps）</li>
-<li>配置文件（config files）</li>
-</ul>
-<p>实验目录的结构如下：（部分缺失的功能将由后续实验完成）</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br></pre></td><td class="code"><pre><span class="line">.</span><br><span class="line">├── bochs <span class="comment">/* QEMU模拟器插件 */</span></span><br><span class="line">│   ├── BIOS-bochs-latest</span><br><span class="line">│   ├── bochsrc.bxrc</span><br><span class="line">│   ├── bochsrc-gdb.bxrc</span><br><span class="line">│   └── vgabios.bin</span><br><span class="line">├── files</span><br><span class="line">│   ├── memtest</span><br><span class="line">│   ├── process.c</span><br><span class="line">│   ├── stat_log.py</span><br><span class="line">│   ├── testlab2.c</span><br><span class="line">│   └── testlab2.sh</span><br><span class="line">├── hdc</span><br><span class="line">│   └── umounted</span><br><span class="line">├── hdc<span class="number">-0.11</span>.img</span><br><span class="line">├── linux<span class="number">-0.11</span> <span class="comment">/* linux-0.11源码 */</span></span><br><span class="line">│   ├── boot <span class="comment">/* 引导程序 */</span></span><br><span class="line">│   │   ├── bootsect.s</span><br><span class="line">│   │   ├── head.s</span><br><span class="line">│   │   └── setup.s</span><br><span class="line">│   ├── fs <span class="comment">/* 内核文件系统 */</span></span><br><span class="line">│   │   ├── bitmap.c</span><br><span class="line">│   │   ├── block_dev.c</span><br><span class="line">│   │   ├── buffer.c</span><br><span class="line">│   │   ├── char_dev.c</span><br><span class="line">│   │   ├── exec.c</span><br><span class="line">│   │   ├── fcntl.c</span><br><span class="line">│   │   ├── file_dev.c</span><br><span class="line">│   │   ├── file_table.c</span><br><span class="line">│   │   ├── inode.c</span><br><span class="line">│   │   ├── ioctl.c</span><br><span class="line">│   │   ├── Makefile</span><br><span class="line">│   │   ├── namei.c</span><br><span class="line">│   │   ├── open.c</span><br><span class="line">│   │   ├── pipe.c</span><br><span class="line">│   │   ├── read_write.c</span><br><span class="line">│   │   ├── stat.c</span><br><span class="line">│   │   ├── super.c</span><br><span class="line">│   │   └── truncate.c</span><br><span class="line">│   ├── include <span class="comment">/* 内核头文件 */</span></span><br><span class="line">│   │   ├── a.out.h</span><br><span class="line">│   │   ├── <span class="keyword">asm</span></span><br><span class="line">│   │   │   ├── io.h</span><br><span class="line">│   │   │   ├── memory.h</span><br><span class="line">│   │   │   ├── segment.h</span><br><span class="line">│   │   │   └── system.h</span><br><span class="line">│   │   ├── <span class="keyword">const</span>.h</span><br><span class="line">│   │   ├── ctype.h</span><br><span class="line">│   │   ├── errno.h</span><br><span class="line">│   │   ├── fcntl.h</span><br><span class="line">│   │   ├── linux</span><br><span class="line">│   │   │   ├── config.h</span><br><span class="line">│   │   │   ├── fdreg.h</span><br><span class="line">│   │   │   ├── fs.h</span><br><span class="line">│   │   │   ├── hdreg.h</span><br><span class="line">│   │   │   ├── head.h</span><br><span class="line">│   │   │   ├── kernel.h</span><br><span class="line">│   │   │   ├── mm.h</span><br><span class="line">│   │   │   ├── sched.h</span><br><span class="line">│   │   │   ├── sched.h.cur1</span><br><span class="line">│   │   │   ├── sched.h.old</span><br><span class="line">│   │   │   ├── sys.h</span><br><span class="line">│   │   │   └── tty.h</span><br><span class="line">│   │   ├── signal.h</span><br><span class="line">│   │   ├── stdarg.h</span><br><span class="line">│   │   ├── stddef.h</span><br><span class="line">│   │   ├── <span class="built_in">string</span>.h</span><br><span class="line">│   │   ├── sys</span><br><span class="line">│   │   │   ├── stat.h</span><br><span class="line">│   │   │   ├── times.h</span><br><span class="line">│   │   │   ├── types.h</span><br><span class="line">│   │   │   ├── utsname.h</span><br><span class="line">│   │   │   └── wait.h</span><br><span class="line">│   │   ├── termios.h</span><br><span class="line">│   │   ├── time.h</span><br><span class="line">│   │   ├── unistd.h</span><br><span class="line">│   │   └── utime.h</span><br><span class="line">│   ├── init <span class="comment">/* init进程 */</span></span><br><span class="line">│   │   └── main.c</span><br><span class="line">│   ├── kernel <span class="comment">/* 内核 */</span></span><br><span class="line">│   │   ├── <span class="keyword">asm</span>.s</span><br><span class="line">│   │   ├── blk_drv <span class="comment">/* 内核块驱动 */</span></span><br><span class="line">│   │   │   ├── blk.h</span><br><span class="line">│   │   │   ├── floppy.c</span><br><span class="line">│   │   │   ├── hd.c</span><br><span class="line">│   │   │   ├── ll_rw_blk.c</span><br><span class="line">│   │   │   ├── Makefile</span><br><span class="line">│   │   │   └── ramdisk.c</span><br><span class="line">│   │   ├── chr_drv <span class="comment">/* 内核字符驱动 */</span></span><br><span class="line">│   │   │   ├── console.c</span><br><span class="line">│   │   │   ├── keyboard.S</span><br><span class="line">│   │   │   ├── Makefile</span><br><span class="line">│   │   │   ├── rs_io.s</span><br><span class="line">│   │   │   ├── serial.c</span><br><span class="line">│   │   │   ├── tty_io.c</span><br><span class="line">│   │   │   └── tty_ioctl.c</span><br><span class="line">│   │   ├── <span class="built_in">exit</span>.c</span><br><span class="line">│   │   ├── fork.c</span><br><span class="line">│   │   ├── Makefile</span><br><span class="line">│   │   ├── math</span><br><span class="line">│   │   │   ├── Makefile</span><br><span class="line">│   │   │   └── math_emulate.c</span><br><span class="line">│   │   ├── mktime.c</span><br><span class="line">│   │   ├── panic.c</span><br><span class="line">│   │   ├── printk.c</span><br><span class="line">│   │   ├── sched.c</span><br><span class="line">│   │   ├── signal.c</span><br><span class="line">│   │   ├── sys.c</span><br><span class="line">│   │   ├── system_call.s</span><br><span class="line">│   │   ├── traps.c</span><br><span class="line">│   │   └── <span class="built_in">vsprintf</span>.c</span><br><span class="line">│   ├── lib <span class="comment">/* 系统调用的实现 */</span></span><br><span class="line">│   │   ├── close.c</span><br><span class="line">│   │   ├── ctype.c</span><br><span class="line">│   │   ├── dup.c</span><br><span class="line">│   │   ├── errno.c</span><br><span class="line">│   │   ├── execve.c</span><br><span class="line">│   │   ├── _exit.c</span><br><span class="line">│   │   ├── Makefile</span><br><span class="line">│   │   ├── <span class="built_in">malloc</span>.c</span><br><span class="line">│   │   ├── open.c</span><br><span class="line">│   │   ├── setsid.c</span><br><span class="line">│   │   ├── <span class="built_in">string</span>.c</span><br><span class="line">│   │   ├── wait.c</span><br><span class="line">│   │   └── write.c</span><br><span class="line">│   ├── Makefile </span><br><span class="line">│   ├── mm <span class="comment">/* 内核进程管理 */</span></span><br><span class="line">│   │   ├── Makefile</span><br><span class="line">│   │   ├── memory.c</span><br><span class="line">│   │   └── page.s</span><br><span class="line">│   ├── tags</span><br><span class="line">│   └── tools</span><br><span class="line">│       └── build.c</span><br><span class="line">├── linux<span class="number">-0.11</span>.tar.gz</span><br><span class="line">├── mount-hdc</span><br><span class="line">└── run</span><br></pre></td></tr></table></figure>
-<p><strong>常见报错处理</strong></p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">bochs-x 已经是最新版 (2.6.11+dfsg-1build1)</span><br></pre></td></tr></table></figure>
-<ul>
-<li>实验默认的 bochs 版本为 2.6.10，将其替换为系统兼容版本会免去很多报错</li>
-<li>下载地址如下：<a target="_blank" rel="noopener" href="https://sourceforge.net/projects/bochs/files/bochs/">Bochs x86 PC emulator - Browse /bochs at SourceForge.net</a> </li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">sudo ./configure --with-x11 --with-x --enable-all-optimizations --enable-readline  --enable-debugger-gui --enable-x86-debugger --enable-a20-pin --enable-fast-function-calls --enable-debugger --prefix=/home/yhellow/hit-oslab-all/oslab/bochs-2.6.11/test</span><br><span class="line">make -j8</span><br><span class="line">make install</span><br></pre></td></tr></table></figure>
-<ul>
-<li>然后将编译好的二进制文件放入 bochs 目录</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Bochs is exiting with the following message:</span><br><span class="line">[      ] dlopen failed <span class="keyword">for</span> <span class="keyword">module</span> <span class="string">&#x27;vga_update_interval&#x27;</span> (libbx_vga_update_interval.so): file <span class="keyword">not</span> found</span><br></pre></td></tr></table></figure>
-<ul>
-<li>在 <code>/bochs/bochsrc.bxrc</code> 中注释 <code>vga_update_interval: 300000</code></li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Bochs is exiting with the following message:</span><br><span class="line">[      ] ./bochs/bochsrc.bxrc:<span class="number">10</span>: <span class="string">&#x27;keyboard_serial_delay&#x27;</span> is deprecated - use <span class="string">&#x27;keyboard&#x27;</span> option instead.</span><br></pre></td></tr></table></figure>
-<ul>
-<li>在 <code>/bochs/bochsrc.bxrc</code> 中注释 <code>keyboard_serial_delay: 200</code></li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Bochs is exiting with the following message:</span><br><span class="line">[      ] ./bochs/bochsrc.bxrc:<span class="number">11</span>: <span class="string">&#x27;keyboard_paste_delay&#x27;</span> is deprecated - use <span class="string">&#x27;keyboard&#x27;</span> option instead.</span><br></pre></td></tr></table></figure>
-<ul>
-<li>在 <code>/bochs/bochsrc.bxrc</code> 中注释 <code>keyboard_paste_delay: 100000</code></li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Bochs is exiting with the following message:</span><br><span class="line">[      ] dlopen failed <span class="keyword">for</span> <span class="keyword">module</span> <span class="string">&#x27;i440fxsupport&#x27;</span> (libbx_i440fxsupport.so): file <span class="keyword">not</span> found</span><br></pre></td></tr></table></figure>
-<ul>
-<li>在 <code>/bochs/bochsrc.bxrc</code> 中注释 <code>i440fxsupport: enabled=0</code></li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Bochs is exiting with the following message:</span><br><span class="line">[      ] ./bochs/bochsrc.bxrc:<span class="number">19</span>: display library <span class="string">&#x27;sdl&#x27;</span> <span class="keyword">not</span> available</span><br></pre></td></tr></table></figure>
-<ul>
-<li>在 <code>/bochs/bochsrc.bxrc</code> 中注释 <code>display_library: sdl</code></li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Bochs is exiting with the following message:</span><br><span class="line">[HD    ] ata0<span class="number">-0</span>: could <span class="keyword">not</span> open hard drive image file <span class="string">&#x27;./hdc-0.11.img&#x27;</span></span><br></pre></td></tr></table></figure>
-<ul>
-<li>删除 <code>hdc-0.11.img.lock</code> 文件</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Bochs is exiting with the following message:</span><br><span class="line">[BIOS  ] No bootable device.</span><br></pre></td></tr></table></figure>
-<ul>
-<li>没有编译 Linux 0.11 内核，需要先切换 gcc-3.4 然后在 <code>linux-0.11</code> 中执行 <code>make all</code></li>
-</ul>
-<p><strong>搭建效果展示</strong></p>
-<img src="/2023/10/20/HIT-OSLab0/1697696231197.png" class width="1697696231197"> 
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2113,7 +2225,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">329</span>
+          <span class="site-state-item-count">330</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2167,7 +2279,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">74:32</span>
+    <span title="Reading time total">74:38</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
