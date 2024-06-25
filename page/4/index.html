@@ -156,6 +156,127 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/11/13/HIT-OSLab7/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2023/11/13/HIT-OSLab7/" class="post-title-link" itemprop="url">HIT-OSLab7</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-11-13 13:50:05 / Modified: 13:51:18" itemprop="dateCreated datePublished" datetime="2023-11-13T13:50:05+08:00">2023-11-13</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>3.7k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>3 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>HIT-OSLab7</strong></p>
+<p>实验目的：</p>
+<ul>
+<li>加深对操作系统设备管理基本原理的认识，了解键盘中断、扫描码等概念</li>
+<li>通过实践掌握 Linux-0.11 对键盘终端和显示器终端的处理过程</li>
+</ul>
+<p>实验内容：</p>
+<ul>
+<li>本实验的基本内容是修改 Linux-0.11 的终端设备处理代码，对键盘输入和字符显示进行非常规的控制</li>
+<li>在初始状态，一切如常，用户按一次 F12 后，把应用程序向终端输出所有字母都替换为 <code>*</code></li>
+<li>再按一次 F12，又恢复正常</li>
+<li>第三次按 F12，再进行输出替换，依此类推</li>
+</ul>
+<p><strong>实验过程</strong></p>
+<p>终端设备是计算机系统中与用户交互的硬件设备，通常使用键盘和显示器来接收用户的输入和输出操作</p>
+<p>在 Linux 系统中，每个终端设备都对应一个 <code>tty_struct</code> 结构体实例，用于存储该终端设备的状态、配置信息以及与终端相关的数据结构</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">tty_struct</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">termios</span> <span class="title">termios</span>;</span>		<span class="comment">/* 存储终端设备的属性 */</span></span><br><span class="line">	<span class="keyword">int</span> pgrp;				   <span class="comment">/* 存储该终端设备所属的进程组 */</span></span><br><span class="line">	<span class="keyword">int</span> stopped;			   <span class="comment">/* 表示该终端设备是否处于停止状态 */</span></span><br><span class="line">	<span class="keyword">void</span> (*write)(struct tty_struct *tty);	<span class="comment">/* 处理终端设备的写操作 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">tty_queue</span> <span class="title">read_q</span>;</span>	<span class="comment">/* 存储终端设备的输入缓冲区(来自键盘输入的数据) */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">tty_queue</span> <span class="title">write_q</span>;</span>	<span class="comment">/* 存储终端设备的输出缓冲区(屏幕将会输出的数据) */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">tty_queue</span> <span class="title">secondary</span>;</span>	<span class="comment">/* 存储终端设备的次要缓冲区(来自网络或其他设备的输入数据) */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">tty_queue</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> data;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> head;			<span class="comment">/* 存储队列中的头指针 */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> tail;			<span class="comment">/* 存储队列中的尾指针 */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> *<span class="title">proc_list</span>;</span>	<span class="comment">/* 指向一个任务结构体列表 */</span></span><br><span class="line">	<span class="keyword">char</span> buf[TTY_BUF_SIZE];		<span class="comment">/* 存储队列中的数据缓冲区 */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>扫描码是指计算机在接收用户的输入时，将用户的输入转换为计算机能够理解的形式，在键盘上，每个键都对应一个唯一的扫描码，这个扫描码可以用来识别用户按下的是哪个键</p>
+<p>在操作系统中，键盘中断通常是通过中断处理程序（Interrupt Handler）来实现的</p>
+<ul>
+<li>当用户按下键盘上的键时，计算机系统会向操作系统发送一个中断信号，操作系统接收到这个信号后，会调用相应的中断处理程序来处理这个中断事件</li>
+</ul>
+<p>下面是键盘中断的处理程序代码：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br></pre></td><td class="code"><pre><span class="line">keyboard_interrupt:</span><br><span class="line">	pushl %eax</span><br><span class="line">	pushl %ebx</span><br><span class="line">	pushl %ecx</span><br><span class="line">	pushl %edx</span><br><span class="line">	push %ds</span><br><span class="line">	push %es</span><br><span class="line">	movl $0x10,%eax /* eax中是扫描码 */</span><br><span class="line">	mov %ax,%ds</span><br><span class="line">	mov %ax,%es</span><br><span class="line">	xor %al,%al		</span><br><span class="line">	inb $0x60,%al</span><br><span class="line">	cmpb $0xe0,%al</span><br><span class="line">	je set_e0</span><br><span class="line">	cmpb $0xe1,%al</span><br><span class="line">	je set_e1</span><br><span class="line">	call key_table(,%eax,4) /* 调用键处理程序&quot;ker_table+eax*4&quot; */</span><br><span class="line">	movb $0,e0</span><br><span class="line">e0_e1:	inb $0x61,%al</span><br><span class="line">	jmp 1f</span><br><span class="line">1:	jmp 1f</span><br><span class="line">1:	orb $0x80,%al</span><br><span class="line">	jmp 1f</span><br><span class="line">1:	jmp 1f</span><br><span class="line">1:	outb %al,$0x61</span><br><span class="line">	jmp 1f</span><br><span class="line">1:	jmp 1f</span><br><span class="line">1:	andb $0x7F,%al</span><br><span class="line">	outb %al,$0x61</span><br><span class="line">	movb $0x20,%al</span><br><span class="line">	outb %al,$0x20</span><br><span class="line">	pushl $0</span><br><span class="line">	call do_tty_interrupt /* 将收到的数据复制成规范模式数据并存放在规范字符缓冲队列中 */</span><br><span class="line">	addl $4,%esp</span><br><span class="line">	pop %es</span><br><span class="line">	pop %ds</span><br><span class="line">	popl %edx</span><br><span class="line">	popl %ecx</span><br><span class="line">	popl %ebx</span><br><span class="line">	popl %eax</span><br><span class="line">	iret</span><br><span class="line">set_e0:	movb $1,e0</span><br><span class="line">	jmp e0_e1</span><br><span class="line">set_e1:	movb $2,e0</span><br><span class="line">	jmp e0_e1</span><br></pre></td></tr></table></figure>
+<p>其中 <code>key_table</code> 存储有各个扫描码的处理程序：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">key_table:</span><br><span class="line">	.<span class="keyword">long</span> none,do_self,do_self,do_self	<span class="comment">/* 00-03 s0 esc 1 2 */</span></span><br><span class="line">	.<span class="keyword">long</span> do_self,do_self,do_self,do_self	<span class="comment">/* 04-07 3 4 5 6 */</span></span><br><span class="line">	.<span class="keyword">long</span> do_self,do_self,do_self,do_self	<span class="comment">/* 08-0B 7 8 9 0 */</span></span><br><span class="line">	.<span class="keyword">long</span> do_self,do_self,do_self,do_self	<span class="comment">/* 0C-0F + &#x27; bs tab */</span></span><br><span class="line">        ......</span><br><span class="line">	.<span class="keyword">long</span> func,func,func,func		<span class="comment">/* 3C-3F f2 f3 f4 f5 */</span></span><br><span class="line">	.<span class="keyword">long</span> func,func,func,func		<span class="comment">/* 40-43 f6 f7 f8 f9 */</span></span><br><span class="line">	.<span class="keyword">long</span> func,num,scroll,cursor		<span class="comment">/* 44-47 f10 num scr home */</span></span><br><span class="line">	.<span class="keyword">long</span> cursor,cursor,do_self,cursor	<span class="comment">/* 48-4B up pgup - left */</span></span><br><span class="line">	.<span class="keyword">long</span> cursor,cursor,do_self,cursor	<span class="comment">/* 4C-4F n5 right + end */</span></span><br><span class="line">	.<span class="keyword">long</span> cursor,cursor,cursor,cursor	<span class="comment">/* 50-53 dn pgdn ins del */</span></span><br><span class="line">	.<span class="keyword">long</span> none,none,do_self,func		<span class="comment">/* 54-57 sysreq ? &lt; f11 */</span></span><br><span class="line">	.<span class="keyword">long</span> func,none,none,none		<span class="comment">/* 58-5B f12 ? ? ? */</span></span><br><span class="line">        ......</span><br></pre></td></tr></table></figure>
+<ul>
+<li>我们可以发现 F12 会调用 <code>func</code> 函数</li>
+</ul>
+<p>核心思路就是添加一个 F12 标记位，我们可以选择将 <code>func</code> 替换为我们需要的函数，其目的是修改该标记位以记录用户是否输入了 F12</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> f12_key = <span class="number">0</span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">change_f12_key</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	f12_key ^= <span class="number">1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">.<span class="keyword">long</span> change_f12_key,none,none,none		<span class="comment">/* 58-5B f12 ? ? ? */</span></span><br></pre></td></tr></table></figure>
+<p>函数 <code>con_write</code> 用于将字符串写入终端设备：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">con_write</span><span class="params">(struct tty_struct * tty)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> nr;</span><br><span class="line">	<span class="keyword">char</span> c;</span><br><span class="line"></span><br><span class="line">	nr = CHARS(tty-&gt;write_q);</span><br><span class="line">	<span class="keyword">while</span> (nr--) &#123;</span><br><span class="line">		GETCH(tty-&gt;write_q,c);</span><br><span class="line">		<span class="keyword">switch</span>(state) &#123;</span><br><span class="line">			<span class="keyword">case</span> <span class="number">0</span>:</span><br><span class="line">				<span class="keyword">if</span> (c&gt;<span class="number">31</span> &amp;&amp; c&lt;<span class="number">127</span>) &#123;</span><br><span class="line">					<span class="keyword">if</span> (x&gt;=video_num_columns) &#123;</span><br><span class="line">						x -= video_num_columns;</span><br><span class="line">						pos -= video_size_row;</span><br><span class="line">						lf();</span><br><span class="line">					&#125;</span><br><span class="line">                    <span class="comment">/* 将write_q的字符放入显存的汇编代码 */</span></span><br><span class="line">					__asm__(<span class="string">&quot;movb attr,%%ah\n\t&quot;</span></span><br><span class="line">						<span class="string">&quot;movw %%ax,%1\n\t&quot;</span></span><br><span class="line">						::<span class="string">&quot;a&quot;</span> (c),<span class="string">&quot;m&quot;</span> (*(<span class="keyword">short</span> *)pos)</span><br><span class="line">						);</span><br><span class="line">					pos += <span class="number">2</span>;</span><br><span class="line">					x++;</span><br><span class="line">				&#125; <span class="keyword">else</span> <span class="keyword">if</span> (c==<span class="number">27</span>)</span><br></pre></td></tr></table></figure>
+<ul>
+<li>其 <code>case 0</code> 用于处理 asicc 在 <code>(31,127)</code> 范围的字符</li>
+<li>我们需要在这段代码前检查 <code>f12_key</code> 并将字符设置为 <code>*</code></li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">con_write</span><span class="params">(struct tty_struct * tty)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">int</span> nr;</span><br><span class="line">	<span class="keyword">char</span> c;</span><br><span class="line"></span><br><span class="line">	nr = CHARS(tty-&gt;write_q);</span><br><span class="line">	<span class="keyword">while</span> (nr--) &#123;</span><br><span class="line">		GETCH(tty-&gt;write_q,c);</span><br><span class="line">		<span class="keyword">switch</span>(state) &#123;</span><br><span class="line">			<span class="keyword">case</span> <span class="number">0</span>:</span><br><span class="line">				<span class="keyword">if</span> (c&gt;<span class="number">31</span> &amp;&amp; c&lt;<span class="number">127</span>) &#123;</span><br><span class="line">					<span class="keyword">if</span> (x&gt;=video_num_columns) &#123;</span><br><span class="line">						x -= video_num_columns;</span><br><span class="line">						pos -= video_size_row;</span><br><span class="line">						lf();</span><br><span class="line">					&#125;</span><br><span class="line">					<span class="keyword">if</span>(f12_key == <span class="number">1</span> &amp;&amp; ( (c &gt;= <span class="number">48</span> &amp;&amp; c&lt;= <span class="number">57</span>) || (c&gt;=<span class="number">65</span> &amp;&amp; c&lt;=<span class="number">90</span>) || (c&gt;=<span class="number">97</span> &amp;&amp; c&lt;=<span class="number">122</span>) ) )</span><br><span class="line">						c = <span class="string">&#x27;*&#x27;</span>;</span><br><span class="line"></span><br><span class="line">					__asm__(<span class="string">&quot;movb attr,%%ah\n\t&quot;</span></span><br><span class="line">						<span class="string">&quot;movw %%ax,%1\n\t&quot;</span></span><br><span class="line">						::<span class="string">&quot;a&quot;</span> (c),<span class="string">&quot;m&quot;</span> (*(<span class="keyword">short</span> *)pos)</span><br><span class="line">						);</span><br><span class="line">					pos += <span class="number">2</span>;</span><br><span class="line">					x++;</span><br><span class="line">				&#125; <span class="keyword">else</span> <span class="keyword">if</span> (c==<span class="number">27</span>)</span><br></pre></td></tr></table></figure>
+<p>最终效果如下：</p>
+<img src="/2023/11/13/HIT-OSLab7/1699854454074.png" class width="1699854454074">   
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2023/11/08/HIT-OSLab6/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -2001,163 +2122,10 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2023/10/20/HIT-OSLab1/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2023/10/20/HIT-OSLab1/" class="post-title-link" itemprop="url">HIT-OSLab1</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2023-10-20 00:41:59 / Modified: 00:42:48" itemprop="dateCreated datePublished" datetime="2023-10-20T00:41:59+08:00">2023-10-20</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>7.1k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>6 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p><strong>HIT-OSLab1</strong></p>
-<p>实验目标：</p>
-<ul>
-<li>改写 bootsect.s 的代码，使得屏幕上可以输出 <code>YHellowOS is loading...</code></li>
-<li>使 bootsect.s 能够完成 setup.s 的载入，并跳转到 setup.s 开始执行处，并输出 <code>Now we are in SETUP</code></li>
-<li>将 setup.s 获取到的硬件参数输出到屏幕上</li>
-<li>完成了输出硬件参数的步骤后，不再继续加载 linux 内核，保持上述信息</li>
-</ul>
-<p><strong>实验过程</strong></p>
-<p>先简单解释分析一下 bootsect.s 的作用：</p>
-<ul>
-<li>bootsect.s 是一个汇编程序，是引导扇区的源代码（该扇区被称为引导扇区，是一个计算机启动时第一个读取的扇区，通常是硬盘或软盘的第一个扇区）</li>
-<li>引导扇区通常包含一个引导扇区表（Boot Sector Table，BST），该表指向计算机的引导Loader（通常是BIOS）和操作系统 </li>
-</ul>
-<p>其核心代码如下：</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">SETUPLEN = 4				! nr of setup-sectors # setup程序代码占用扇区数</span><br><span class="line">BOOTSEG  = 0x07c0			! original address of boot-sector # bootsect起始地址</span><br><span class="line">INITSEG  = 0x9000			! we move boot here - out of the way </span><br><span class="line">SETUPSEG = 0x9020			! setup starts here # setup起始地址</span><br><span class="line">SYSSEG   = 0x1000			! system loaded at 0x10000 (65536). # system起始地址</span><br><span class="line">ENDSEG   = SYSSEG + SYSSIZE		! where to stop loading</span><br><span class="line"></span><br><span class="line">entry _start</span><br><span class="line">_start:</span><br><span class="line">	mov	ax,#BOOTSEG</span><br><span class="line">	mov	ds,ax			# ds:数据段基地址</span><br><span class="line">	mov	ax,#INITSEG</span><br><span class="line">	mov	es,ax			# es:附加段基地址</span><br><span class="line">	mov	cx,#256			# cx:计数器(用于指示rep循环的次数)</span><br><span class="line">	sub	si,si			# si:数据段偏移</span><br><span class="line">	sub	di,di			# di:附加段偏移</span><br><span class="line">	rep					# 用于重复执行一段汇编代码(默认计数器为cx)</span><br><span class="line">	movw				# movw默认的源寄存器是ds:si,目标寄存器是es:di</span><br><span class="line">	jmpi	go,INITSEG</span><br></pre></td></tr></table></figure>
-<ul>
-<li>这一段指令使位于 0x07c00 的 bootsect 代码，被全部拷贝到了 0x90000</li>
-<li>最后跳转到 0x90000 从 go 标号处开始执行</li>
-</ul>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">go:	mov	ax,cs			# cs:代码段基地址</span><br><span class="line">	mov	ds,ax</span><br><span class="line">	mov	es,ax</span><br><span class="line">! put stack at 0x9ff00.</span><br><span class="line">	mov	ss,ax			# ss:栈段基地址</span><br><span class="line">	mov	sp,#0xFF00		! arbitrary value &gt;&gt;512</span><br><span class="line"></span><br><span class="line">! load the setup-sectors directly after the bootblock.</span><br><span class="line">! Note that &#x27;es&#x27; is already set up.</span><br><span class="line"></span><br><span class="line">load_setup:</span><br><span class="line">	mov	dx,#0x0000		! drive 0, head 0 		# 驱动器编号&#x27;0&#x27;和磁头编号&#x27;0&#x27;</span><br><span class="line">	mov	cx,#0x0002		! sector 2, track 0		# 扇区号&#x27;2&#x27;和磁道号&#x27;0&#x27;</span><br><span class="line">	mov	bx,#0x0200		! address = 512, in INITSEG	   # 读取数据的起始地址为512</span><br><span class="line">	mov	ax,#0x0200+SETUPLEN	! service 2, nr of sectors	# 读取的数据长度为0x200+4</span><br><span class="line">	int	0x13			! read it</span><br><span class="line">	jnc	ok_load_setup		! ok - continue</span><br><span class="line">	mov	dx,#0x0000</span><br><span class="line">	mov	ax,#0x0000		! reset the diskette</span><br><span class="line">	int	0x13</span><br><span class="line">	j	load_setup</span><br></pre></td></tr></table></figure>
-<ul>
-<li>指令 <code>int 0x13</code> 的中断服务程序实质上就是磁盘服务程序，用于读取 setup 的代码并将其加载到程序的内存 0x90200 中 </li>
-<li>如果 ax 寄存器的值大于0，则 jnc 会使程序跳转至 ok_load_setup，否则会尝试再次加载 setup</li>
-</ul>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br></pre></td><td class="code"><pre><span class="line">ok_load_setup:</span><br><span class="line"></span><br><span class="line">! Get disk drive parameters, specifically nr of sectors/track</span><br><span class="line"></span><br><span class="line">	mov	dl,#0x00</span><br><span class="line">	mov	ax,#0x0800		! AH=8 is get drive parameters</span><br><span class="line">	int	0x13</span><br><span class="line">	mov	ch,#0x00</span><br><span class="line">	seg cs				# 将cs的值加载到数据段(seg [ds:] address)</span><br><span class="line">	mov	sectors,cx</span><br><span class="line">	mov	ax,#INITSEG</span><br><span class="line">	mov	es,ax</span><br><span class="line"></span><br><span class="line">! Print some inane message</span><br><span class="line"></span><br><span class="line">	mov	ah,#0x03		! read cursor pos</span><br><span class="line">	xor	bh,bh</span><br><span class="line">	int	0x10</span><br><span class="line">	</span><br><span class="line">	mov	cx,#24</span><br><span class="line">	mov	bx,#0x0007		! page 0, attribute 7 (normal)</span><br><span class="line">	mov	bp,#msg1</span><br><span class="line">	mov	ax,#0x1301		! write string, move cursor</span><br><span class="line">	int	0x10</span><br><span class="line"></span><br><span class="line">! ok, we&#x27;ve written the message, now</span><br><span class="line">! we want to load the system (at 0x10000)</span><br><span class="line"></span><br><span class="line">	mov	ax,#SYSSEG</span><br><span class="line">	mov	es,ax		! segment of 0x010000</span><br><span class="line">	call	read_it				# 读取磁盘上的system</span><br><span class="line">	call	kill_motor			# 关闭驱动器马达,这样就可以知道驱动器的状态了</span><br><span class="line"></span><br><span class="line">! After that we check which root-device to use. If the device is</span><br><span class="line">! defined (!= 0), nothing is done and the given device is used.</span><br><span class="line">! Otherwise, either /dev/PS0 (2,28) or /dev/at0 (2,8), depending</span><br><span class="line">! on the number of sectors that the BIOS reports currently.</span><br><span class="line"># 检查要使用哪个根文件系统设备</span><br><span class="line"></span><br><span class="line">	seg cs				</span><br><span class="line">	mov	ax,root_dev</span><br><span class="line">	cmp	ax,#0</span><br><span class="line">	jne	root_defined</span><br><span class="line">	seg cs</span><br><span class="line">	mov	bx,sectors</span><br><span class="line">	mov	ax,#0x0208		! /dev/ps0 - 1.2Mb</span><br><span class="line">	cmp	bx,#15</span><br><span class="line">	je	root_defined</span><br><span class="line">	mov	ax,#0x021c		! /dev/PS0 - 1.44Mb</span><br><span class="line">	cmp	bx,#18</span><br><span class="line">	je	root_defined</span><br><span class="line">undef_root:</span><br><span class="line">	jmp undef_root</span><br><span class="line">root_defined:</span><br><span class="line">	seg cs</span><br><span class="line">	mov	root_dev,ax</span><br><span class="line"></span><br><span class="line">! after that (everyting loaded), we jump to</span><br><span class="line">! the setup-routine loaded directly after</span><br><span class="line">! the bootblock:</span><br><span class="line"></span><br><span class="line">	jmpi	0,SETUPSEG</span><br></pre></td></tr></table></figure>
-<ul>
-<li>指令 <code>int 0x10</code> 的中断服务程序可以将字符串输出到屏幕上</li>
-<li>输出信息并进行初始化后，程序会调用 read_it 来读取磁盘上的 system 模块，并将其加载到 0x10000 </li>
-<li>最后跳转到 0x90200 执行 setup 的代码</li>
-</ul>
-<p>计算机上电后，ROM BIOS 会在物理内存 0 处初始化中断向量表，其中有256个中断向量，每个中断向量占用4字节，共1KB，在物理内存地址 0x000-0x3ff 处，这些中断向量供 BIOS 中断使用</p>
-<p>BIOS 初始化中断向量表后，启动设备的第一个扇区（即引导扇区）读入内存地址 0x7c00 处，并跳转到此处开始执行：</p>
-<ul>
-<li>此时操作系统处于实模式，寻址方式为：16位段寄存器 * 0x10 + 16位目标寄存器</li>
-<li>为了方便加载主模块，引导程序首先会将自己拷贝到内存相对靠后的位置（如 linux0.11 的 bootsect 程序先将自己移动到 0x90000 处），然后跳转过去执行</li>
-<li>在接下来的步骤中，程序会依次加载 setup 和 system 的代码，并跳转执行 setup 的代码</li>
-</ul>
-<p>setup.s 是一个汇编语言源代码文件，通常位于操作系统内核的源代码目录中，它的作用是设置操作系统的初始状态，为操作系统其他模块的运行做准备：</p>
-<ul>
-<li>操作系统的主模块为了让其中代码地址等于实际的物理地址，需要将其加载到内存 0x0000 处，但此时会覆盖在 0x000-0x3ff 处的 BIOS 中断向量表</li>
-<li>所以操作系统在加载时需要先将主模块加载到内存中不与 BIOS 中断向量表冲突的地址处，之后在可以覆盖中断向量表时才将其移动到 0x0000</li>
-<li>例如在 Linux0.11 的 system 模块就是先在 bootsect 程序中被加载到了 0x10000，之后在 setup 程序中移到 0x0000 处</li>
-</ul>
-<p>接下来的工作就是利用 <code>int 0x10</code> 来将我们需要的字符串打印到屏幕上，为此我们需要先把字符串构造好：</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">msgmy:</span><br><span class="line">	.ascii &quot;YHellowOS is loading...&quot;</span><br><span class="line">	.byte 13,10,13,10</span><br></pre></td></tr></table></figure>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">msgmy:</span><br><span class="line">	.ascii &quot;Now we are in setup...&quot;</span><br><span class="line">	.byte 13,10,13,10</span><br></pre></td></tr></table></figure>
-<ul>
-<li><code>13,10</code> 代表换行符</li>
-</ul>
-<p>接下来就可以编写打印函数了：</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">read_cur:</span><br><span class="line">	mov	ah,#0x03	</span><br><span class="line">	xor	bh,bh </span><br><span class="line">	int	0x10</span><br><span class="line">	ret</span><br><span class="line"></span><br><span class="line">print_string:</span><br><span class="line">	mov cx,bx</span><br><span class="line">	mov	bx,#0x0007</span><br><span class="line">	mov	bp,ax</span><br><span class="line">	mov	ax,#0x1301		</span><br><span class="line">	int	0x10</span><br><span class="line">	ret</span><br></pre></td></tr></table></figure>
-<ul>
-<li>read_cur 用于获取光标位置（如果没有这一步，打印数据很可能会被后续数据覆盖），寄存器 cx 中的值就是该字符串的长度，寄存器 bx 中的值代表了输出字符的颜色</li>
-<li>print_string 用于打印字符串，需要传入两个参数（ax：字符串地址，bx：字符串长度）</li>
-</ul>
-<p>这里有一点需要注意：</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">mov ax,#INITSEG</span><br><span class="line">mov ds,ax</span><br><span class="line">mov ax,#SETUPSEG</span><br><span class="line">mov	es,ax  </span><br><span class="line"></span><br><span class="line">call read_cur</span><br><span class="line">mov ax,#msgmy</span><br><span class="line">mov	bx,#26</span><br><span class="line">call print_string</span><br></pre></td></tr></table></figure>
-<ul>
-<li>在 setup.s 中使用 read_cur 获取光标位置前，需要先重置 ds/es（主要是重置 es 格外数据段）</li>
-</ul>
-<p>在输出硬件参数前我们需要知道 setup.s 读取了哪些硬件参数，找到其核心代码：</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br></pre></td><td class="code"><pre><span class="line">entry start</span><br><span class="line">start:</span><br><span class="line"></span><br><span class="line">! ok, the read went well so we get current cursor position and save it for</span><br><span class="line">! posterity.</span><br><span class="line"># 获取光标位置(0x9000:0x0)</span><br><span class="line">	mov	ax,#INITSEG	! this is done in bootsect already, but...</span><br><span class="line">	mov	ds,ax</span><br><span class="line">	mov	ah,#0x03	! read cursor pos</span><br><span class="line">	xor	bh,bh</span><br><span class="line">	int	0x10		! save it in known place, con_init fetches</span><br><span class="line">	mov	[0],dx		! it from 0x90000.</span><br><span class="line">! Get memory size (extended mem, kB)</span><br><span class="line"># 获取拓展内存大小(0x9000:0x2)</span><br><span class="line">	mov	ah,#0x88</span><br><span class="line">	int	0x15</span><br><span class="line">	mov	[2],ax</span><br><span class="line"></span><br><span class="line">! Get video-card data:</span><br><span class="line"># 获取显卡video-card参数(0x9000:0x6)</span><br><span class="line">	mov	ah,#0x0f</span><br><span class="line">	int	0x10</span><br><span class="line">	mov	[4],bx		! bh = display page</span><br><span class="line">	mov	[6],ax		! al = video mode, ah = window width</span><br><span class="line"></span><br><span class="line">! check for EGA/VGA and some config parameters</span><br><span class="line">	mov	ah,#0x12</span><br><span class="line">	mov	bl,#0x10</span><br><span class="line">	int	0x10</span><br><span class="line">	mov	[8],ax</span><br><span class="line">	mov	[10],bx</span><br><span class="line">	mov	[12],cx</span><br><span class="line"></span><br><span class="line">! Get hd0 data</span><br><span class="line"># 获取硬盘hd0参数(0x9000:0x80)</span><br><span class="line">	mov	ax,#0x0000</span><br><span class="line">	mov	ds,ax</span><br><span class="line">	lds	si,[4*0x41]</span><br><span class="line">	mov	ax,#INITSEG</span><br><span class="line">	mov	es,ax</span><br><span class="line">	mov	di,#0x0080</span><br><span class="line">	mov	cx,#0x10</span><br><span class="line">	rep</span><br><span class="line">	movsb				# ds:si(4*0x41)-&gt;es:di(0x90000+0x80)</span><br><span class="line"></span><br><span class="line">! Get hd1 data</span><br><span class="line"># 获取硬盘hd1参数(0x9000:0x90)</span><br><span class="line">	mov	ax,#0x0000</span><br><span class="line">	mov	ds,ax</span><br><span class="line">	lds	si,[4*0x46]</span><br><span class="line">	mov	ax,#INITSEG</span><br><span class="line">	mov	es,ax</span><br><span class="line">	mov	di,#0x0090</span><br><span class="line">	mov	cx,#0x10</span><br><span class="line">	rep</span><br><span class="line">	movsb				# ds:si(4*0x41)-&gt;es:di(0x90000+0x90)</span><br><span class="line">	</span><br><span class="line">	......</span><br></pre></td></tr></table></figure>
-<ul>
-<li>我们需要打印的设备有 HD0，HD1，VC（地址偏移记录在注释中）</li>
-</ul>
-<p>为了方便读取地址中的数据，我们需要写一个打印函数：</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">print_hex_4:</span><br><span class="line">	mov cx,#4   </span><br><span class="line">	j print_hex</span><br><span class="line">print_hex_2:</span><br><span class="line">	mov cx,#2</span><br><span class="line">	j print_hex</span><br><span class="line">print_hex:</span><br><span class="line">	mov dx,ax   </span><br><span class="line">print_digit:</span><br><span class="line">	rol dx,#4		# 向左循环移动4位</span><br><span class="line">	mov ax,#0xe0f </span><br><span class="line">	and al,dl </span><br><span class="line">	add al,#0x30	# 将数据转化为ascii字符</span><br><span class="line">	cmp al,#0x3a</span><br><span class="line">	jl outp  </span><br><span class="line">	add al,#0x07  </span><br><span class="line">outp:</span><br><span class="line">	int 0x10</span><br><span class="line">	loop print_digit</span><br><span class="line">	ret</span><br></pre></td></tr></table></figure>
-<p>最后我们可以按照数据的格式写出代码：</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br></pre></td><td class="code"><pre><span class="line">! Show HD Information:</span><br><span class="line">	mov ax,#INITSEG		# 由于之前修改了ds/es,这里要先将它们改回</span><br><span class="line">	mov ds,ax</span><br><span class="line">	mov ax,#SETUPSEG</span><br><span class="line">	mov	es,ax  </span><br><span class="line"></span><br><span class="line">	call read_cur		# 打印Cursor POS</span><br><span class="line">	mov ax,#cur</span><br><span class="line">	mov bx,#13</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[0]</span><br><span class="line">	call print_hex_4</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur		# 打印Memory SIZE</span><br><span class="line">	mov ax,#mem</span><br><span class="line">	mov bx,#12</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[2]</span><br><span class="line">	call print_hex_4</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#kb</span><br><span class="line">	mov bx,#4</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	call read_cur		# 打印video-card设备的数据</span><br><span class="line">	mov ax,#vc</span><br><span class="line">	mov bx,#11</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#display</span><br><span class="line">	mov bx,#13</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[4]</span><br><span class="line">	call print_hex_4</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#mode</span><br><span class="line">	mov bx,#11</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[6]</span><br><span class="line">	call print_hex_2</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#width</span><br><span class="line">	mov bx,#13</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[8]</span><br><span class="line">	call print_hex_2</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur		# 打印hd0设备的数据</span><br><span class="line">	mov ax,#hd1</span><br><span class="line">	mov bx,#12</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#cyl</span><br><span class="line">	mov bx,#10</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[0x80]</span><br><span class="line">	call print_hex_4</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#head</span><br><span class="line">	mov bx,#8</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[0x80+0x2]</span><br><span class="line">	call print_hex_4</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#sect</span><br><span class="line">	mov bx,#8</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[0x80+0xe]</span><br><span class="line">	call print_hex_4</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur		# 打印hd1设备的数据</span><br><span class="line">	mov ax,#hd2</span><br><span class="line">	mov bx,#12</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#cyl</span><br><span class="line">	mov bx,#10</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[0x90]</span><br><span class="line">	call print_hex_4</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#head</span><br><span class="line">	mov bx,#8</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[0x90+0x2]</span><br><span class="line">	call print_hex_4</span><br><span class="line">	call print_nl</span><br><span class="line"></span><br><span class="line">	call read_cur</span><br><span class="line">	mov ax,#sect</span><br><span class="line">	mov bx,#8</span><br><span class="line">	call print_string</span><br><span class="line"></span><br><span class="line">	mov ax,[0x90+0xe]</span><br><span class="line">	call print_hex_4</span><br><span class="line">	call print_nl</span><br></pre></td></tr></table></figure>
-<p>至于最后一个要求，我们只需要写一个死循环即可：</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">l:  jmp l</span><br></pre></td></tr></table></figure>
-<p>最终效果如下：</p>
-<img src="/2023/10/20/HIT-OSLab1/1697733495967.png" class width="1697733495967"> 
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
-    <a class="extend prev" rel="prev" href="/page/3/"><i class="fa fa-angle-left" aria-label="Previous page"></i></a><a class="page-number" href="/">1</a><span class="space">&hellip;</span><a class="page-number" href="/page/3/">3</a><span class="page-number current">4</span><a class="page-number" href="/page/5/">5</a><span class="space">&hellip;</span><a class="page-number" href="/page/33/">33</a><a class="extend next" rel="next" href="/page/5/"><i class="fa fa-angle-right" aria-label="Next page"></i></a>
+    <a class="extend prev" rel="prev" href="/page/3/"><i class="fa fa-angle-left" aria-label="Previous page"></i></a><a class="page-number" href="/">1</a><span class="space">&hellip;</span><a class="page-number" href="/page/3/">3</a><span class="page-number current">4</span><a class="page-number" href="/page/5/">5</a><span class="space">&hellip;</span><a class="page-number" href="/page/34/">34</a><a class="extend next" rel="next" href="/page/5/"><i class="fa fa-angle-right" aria-label="Next page"></i></a>
   </nav>
 
 
@@ -2225,7 +2193,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">330</span>
+          <span class="site-state-item-count">331</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2279,7 +2247,7 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">74:38</span>
+    <span title="Reading time total">74:46</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
