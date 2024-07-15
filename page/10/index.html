@@ -156,6 +156,206 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2023/04/24/Principles%EF%BC%9Adocker%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="yhellow">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Pwn进你的心">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2023/04/24/Principles%EF%BC%9Adocker%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/" class="post-title-link" itemprop="url">Principles：docker底层原理</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2023-04-24 22:07:52 / Modified: 22:09:04" itemprop="dateCreated datePublished" datetime="2023-04-24T22:07:52+08:00">2023-04-24</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Principles/" itemprop="url" rel="index"><span itemprop="name">Principles</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="Symbols count in article">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>8.3k</span>
+            </span>
+            <span class="post-meta-item" title="Reading time">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>8 mins.</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><strong>Docker vs Hypersior</strong></p>
+<p>之前提到过 hypersior 技术：允许多个操作系统共享一个 CPU（多核 CPU 的情况可以是多个 CPU），用以协调多个虚拟机</p>
+<p>hypervisor 的每个虚拟机都是一个完整的操作系统，而 docker 采用了“容器”技术，不同容器之间共用一个底层的操作系统：</p>
+<ul>
+<li>hypervisor 采用的是 <strong>硬件资源虚拟化</strong> 的方法将硬件资源分配给不同的操作系统使用</li>
+<li>docker 采用的则是 <strong>操作系统虚拟化</strong> 的方式实现了对程序运行环境和访问资源在操作系统内部的隔离</li>
+</ul>
+<p>docker 底层依赖于 Linux 中的 Namespace，CGroups 和 Union File System（在 window docker 其实是跑了一个 Linux 虚拟机，然后在虚拟机中使用 docker）</p>
+<p><strong>Namespace</strong></p>
+<p>Namespace 名为命名空间，限制了 Linux 进程的可访问资源</p>
+<p>改变一个 Namespace 中的系统资源只会影响当前 Namespace 里的进程，对其他 Namespace 中的进程没有影响，这就为容器技术提供了条件</p>
+<p>Linux 一共实现了6种不同类型的 Namespace：</p>
+<p>UTS Namespace：主要用来隔离 hostname(主机名) 和 domainname(域名) 两个系统标识</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">➜  桌面 hostname           </span><br><span class="line">yhellow-<span class="keyword">virtual</span>-machine</span><br><span class="line">➜  桌面 sudo unshare -u /bin/zsh <span class="comment">/* 创建UTS Namespace */</span> </span><br><span class="line">[sudo] yhellow 的密码： </span><br><span class="line">yhellow-<span class="keyword">virtual</span>-machine<span class="meta"># hostname <span class="comment">/* 其hostname拷贝它的父类 */</span></span></span><br><span class="line">yhellow-<span class="keyword">virtual</span>-machine</span><br><span class="line">yhellow-<span class="keyword">virtual</span>-machine<span class="meta"># hostname chunk <span class="comment">/* 修改UTS Namespace的hostname */</span></span></span><br><span class="line">yhellow-<span class="keyword">virtual</span>-machine<span class="meta"># hostname</span></span><br><span class="line">chunk</span><br><span class="line">yhellow-<span class="keyword">virtual</span>-machine<span class="meta"># exec $SHELL <span class="comment">/* 重新加载Shell环境 */</span></span></span><br><span class="line">chunk<span class="meta"># </span></span><br><span class="line"><span class="meta">chunk# cat /etc/hostname <span class="comment">/* 不会直接修改主机名配置文件 */</span></span></span><br><span class="line">yhellow-<span class="keyword">virtual</span>-machine</span><br><span class="line">chunk<span class="meta"># cat /proc/sys/kernel/hostname <span class="comment">/* 而是修改内核属性 */</span></span></span><br><span class="line">chunk</span><br></pre></td></tr></table></figure>
+<p>IPC Namespace：用于隔离 System V IPC 和 POSIX message queues</p>
+<p>Mount Namespace：用来隔离各个进程看到的挂载点视图</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">➜  桌面 ipcs -q <span class="comment">/* 消息队列里有一个msg */</span></span><br><span class="line"></span><br><span class="line">--------- 消息队列 -----------</span><br><span class="line">键        msqid      拥有者  权限     已用字节数 消息      </span><br><span class="line"><span class="number">0xafce192c</span> <span class="number">0</span>          yhellow    <span class="number">644</span>        <span class="number">0</span>            <span class="number">0</span>           </span><br><span class="line"></span><br><span class="line">➜  桌面 sudo unshare -iu /bin/bash <span class="comment">/* 创建IPC Namespace */</span> </span><br><span class="line">[sudo] yhellow 的密码： </span><br><span class="line">root@yhellow-<span class="keyword">virtual</span>-machine:/home/yhellow/桌面<span class="meta"># ipcs -q <span class="comment">/* 消息队列为Null */</span></span></span><br><span class="line"></span><br><span class="line">--------- 消息队列 -----------</span><br><span class="line">键        msqid      拥有者  权限     已用字节数 消息      </span><br></pre></td></tr></table></figure>
+<p>PID Namespace：用来隔离进程 ID，同样一个进程在不同的 PID Namespace 里可以拥有不同的 PID </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">➜  桌面 ps -ef <span class="comment">/* 查看所有进程的PID */</span>                     </span><br><span class="line">UID          PID    PPID  C STIME TTY          TIME CMD</span><br><span class="line">root           <span class="number">1</span>       <span class="number">0</span>  <span class="number">1</span> <span class="number">14</span>:<span class="number">52</span> ?        <span class="number">00</span>:<span class="number">00</span>:<span class="number">01</span> /sbin/init splash</span><br><span class="line">    ......</span><br><span class="line">yhellow     <span class="number">4318</span>    <span class="number">4300</span>  <span class="number">1</span> <span class="number">14</span>:<span class="number">53</span> pts/<span class="number">0</span>    <span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span> zsh</span><br><span class="line">yhellow     <span class="number">4415</span>    <span class="number">4318</span>  <span class="number">0</span> <span class="number">14</span>:<span class="number">53</span> pts/<span class="number">0</span>    <span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span> ps -ef</span><br><span class="line">➜  桌面 sudo unshare --pid --mount-proc --fork /bin/bash <span class="comment">/* 同时创建PID Namespace和Mount Namespace */</span></span><br><span class="line">[sudo] yhellow 的密码：      </span><br><span class="line">root@yhellow-<span class="keyword">virtual</span>-machine:/home/yhellow/桌面<span class="meta"># ps -ef <span class="comment">/* /bin/bash的PID为&#x27;1&#x27; */</span></span></span><br><span class="line">UID          PID    PPID  C STIME TTY          TIME CMD</span><br><span class="line">root           <span class="number">1</span>       <span class="number">0</span>  <span class="number">0</span> <span class="number">14</span>:<span class="number">53</span> pts/<span class="number">0</span>    <span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span> /bin/bash</span><br><span class="line">root           <span class="number">8</span>       <span class="number">1</span>  <span class="number">0</span> <span class="number">14</span>:<span class="number">54</span> pts/<span class="number">0</span>    <span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span> ps -ef</span><br></pre></td></tr></table></figure>
+<ul>
+<li>如果只是创建 PID Namespace，不能保证只看到 Namespace 中的进程</li>
+<li>因为类似 <code>ps</code> 这类系统工具读取的是 <code>proc</code> 文件系统，<code>proc</code> 文件系统没有切换的话，虽然有了 PID Namespace，但是不能达到我们在这个 Namespace 中只看到属于自己 Namespace 进程的目的</li>
+<li>在创建 PID Namespace 的同时，使用 <code>--mount-proc</code> 选项，会创建新的 Mount Namespace，并自动 <code>mount</code> 新的 <code>proc</code> 文件系统</li>
+<li>这样 <code>ps</code> 就可以看到当前 PID Namespace 里面所有的进程了</li>
+</ul>
+<p>User Namespace：主要是隔离用户的用户组 ID</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">➜  桌面 unshare -r --user /bin/bash <span class="comment">/* 创建User Namespace */</span></span><br><span class="line">root@yhellow-<span class="keyword">virtual</span>-machine:~/桌面<span class="meta"># id <span class="comment">/* root权限 */</span></span></span><br><span class="line">用户id=<span class="number">0</span>(root) 组id=<span class="number">0</span>(root) 组=<span class="number">0</span>(root),<span class="number">65534</span>(nogroup)</span><br><span class="line">root@yhellow-<span class="keyword">virtual</span>-machine:~/桌面<span class="meta"># echo $$</span></span><br><span class="line"><span class="number">5366</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">➜  桌面 ps -ef | grep <span class="number">5366</span> | grep -v grep <span class="comment">/* 普通权限 */</span></span><br><span class="line">yhellow     <span class="number">5366</span>    <span class="number">5330</span>  <span class="number">0</span> <span class="number">15</span>:<span class="number">22</span> pts/<span class="number">0</span>    <span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span> /bin/bash</span><br><span class="line">➜  桌面 cat /proc/<span class="number">5330</span>/uid_map </span><br><span class="line">         <span class="number">0</span>          <span class="number">0</span> <span class="number">4294967295</span></span><br><span class="line">➜  桌面 cat /proc/<span class="number">5330</span>/gid_map</span><br><span class="line">         <span class="number">0</span>          <span class="number">0</span> <span class="number">4294967295</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>进程 5366 在容器（user namespace）外属于一个普通用户，但是在 user namespace 里却属于 root 用户 </li>
+</ul>
+<p>Net Namespace：用来隔离网络设备，IP地址，端口等 </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line">➜  桌面 sudo ip link add veth0_11 type veth peer name veth1_11 <span class="comment">/* 创建一对网卡,分别命名为veth0_11/veth1_11 */</span></span><br><span class="line">➜  桌面 ip a                                             </span><br><span class="line"><span class="number">1</span>: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu <span class="number">65536</span> qdisc noqueue state UNKNOWN group <span class="keyword">default</span> qlen <span class="number">1000</span></span><br><span class="line">    link/loopback <span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span> brd <span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span></span><br><span class="line">    inet <span class="number">127.0</span><span class="number">.0</span><span class="number">.1</span>/<span class="number">8</span> scope host lo</span><br><span class="line">       valid_lft forever preferred_lft forever</span><br><span class="line">    inet6 ::<span class="number">1</span>/<span class="number">128</span> scope host </span><br><span class="line">       valid_lft forever preferred_lft forever</span><br><span class="line">        ......</span><br><span class="line"><span class="number">13</span>: veth1_11@veth0_11: &lt;BROADCAST,MULTICAST,M-DOWN&gt; mtu <span class="number">1500</span> qdisc noop state DOWN group <span class="keyword">default</span> qlen <span class="number">1000</span></span><br><span class="line">    link/ether <span class="number">56</span>:<span class="number">8</span>e:<span class="number">30</span>:b2:d0:<span class="number">4</span>e brd ff:ff:ff:ff:ff:ff</span><br><span class="line"><span class="number">14</span>: veth0_11@veth1_11: &lt;BROADCAST,MULTICAST,M-DOWN&gt; mtu <span class="number">1500</span> qdisc noop state DOWN group <span class="keyword">default</span> qlen <span class="number">1000</span></span><br><span class="line">    link/ether <span class="number">56</span>:f8:e9:f4:<span class="number">5</span>c:f4 brd ff:ff:ff:ff:ff:ff</span><br><span class="line">➜  桌面 sudo ip netns add r1 <span class="comment">/* 创建两个Net Namespace */</span></span><br><span class="line">[sudo] yhellow 的密码： </span><br><span class="line">➜  桌面 sudo ip netns add r2</span><br><span class="line">➜  桌面 sudo ip link <span class="built_in">set</span> veth0_11 netns r1 <span class="comment">/* 将两个网卡分别加入到对应的netns中 */</span></span><br><span class="line">➜  桌面 sudo ip link <span class="built_in">set</span> veth1_11 netns r2</span><br><span class="line">➜  桌面 ip a <span class="comment">/* 再次查看网卡,在bash当前的namespace中已经看不到veth0_11和veth1_11了 */</span></span><br><span class="line"><span class="number">1</span>: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu <span class="number">65536</span> qdisc noqueue state UNKNOWN group <span class="keyword">default</span> qlen <span class="number">1000</span></span><br><span class="line">    link/loopback <span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span> brd <span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span></span><br><span class="line">    inet <span class="number">127.0</span><span class="number">.0</span><span class="number">.1</span>/<span class="number">8</span> scope host lo</span><br><span class="line">       valid_lft forever preferred_lft forever</span><br><span class="line">    inet6 ::<span class="number">1</span>/<span class="number">128</span> scope host </span><br><span class="line">       valid_lft forever preferred_lft forever</span><br><span class="line">        ......</span><br><span class="line">➜  桌面 sudo nsenter --net=/var/run/netns/r1 /bin/bash <span class="comment">/* 切换到对应的netns中 */</span></span><br><span class="line">root@yhellow-<span class="keyword">virtual</span>-machine:/home/yhellow/桌面<span class="meta"># ip a <span class="comment">/* 展示了我们上面加入到r1中的网卡 */</span></span></span><br><span class="line"><span class="number">1</span>: lo: &lt;LOOPBACK&gt; mtu <span class="number">65536</span> qdisc noop state DOWN group <span class="keyword">default</span> qlen <span class="number">1000</span></span><br><span class="line">    link/loopback <span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span> brd <span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span>:<span class="number">00</span></span><br><span class="line"><span class="number">14</span>: veth0_11@if13: &lt;BROADCAST,MULTICAST&gt; mtu <span class="number">1500</span> qdisc noop state DOWN group <span class="keyword">default</span> qlen <span class="number">1000</span></span><br><span class="line">    link/ether <span class="number">56</span>:f8:e9:f4:<span class="number">5</span>c:f4 brd ff:ff:ff:ff:ff:ff link-netns r2</span><br></pre></td></tr></table></figure>
+<p><strong>CGroups</strong> </p>
+<p>CGroups 全称 Control Groups，是 Linux 下用来控制进程对 CPU、内存、块设备 I/O、网络等资源使用限制的机制</p>
+<p>通过使用 CGroups，可以实现为进程组设置内存上限、配置文件系统缓存、调节 CPU 使用率和磁盘 IO 吞吐率等功能，以及对进程组进行快照或者重启等功能（具体的资源控制器由不同的子系统 <code>subsystem</code> 完成）</p>
+<p>相关的概念如下：</p>
+<ul>
+<li>一个 <code>subsystem</code> 就是一个内核模块，他被关联到一颗 cgroup 树之后，就会在树的每个节点（进程组）上做具体的操作</li>
+<li>一个 <code>hierarchy</code> 可以理解为一棵 cgroup 树，树的每个节点就是一个进程组，每棵树都会与零到多个 <code>subsystem</code> 关联</li>
+<li>一个进程可以属于多颗树，即一个进程可以属于多个进程组，只是这些进程组和不同的 <code>subsystem</code> 关联</li>
+</ul>
+<p>查看当前系统支持的 subsystem（子模块）：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">➜  桌面 cat /proc/cgroups</span><br><span class="line">#subsys_name	hierarchy	num_cgroups	enabled</span><br><span class="line">cpuset	<span class="number">12</span>	<span class="number">3</span>	<span class="number">1</span>	<span class="comment">/* 分配单独的CPU和内存 */</span></span><br><span class="line">cpu	<span class="number">8</span>	<span class="number">79</span>	<span class="number">1</span>		<span class="comment">/* CPU调度控制 */</span></span><br><span class="line">cpuacct	<span class="number">8</span>	<span class="number">79</span>	<span class="number">1</span>	<span class="comment">/* CPU调度控制 */</span></span><br><span class="line">blkio	<span class="number">2</span>	<span class="number">81</span>	<span class="number">1</span>	<span class="comment">/* 设置块设备的输入/输出 */</span></span><br><span class="line">memory	<span class="number">6</span>	<span class="number">123</span>	<span class="number">1</span>	<span class="comment">/* 设置内存限制 */</span></span><br><span class="line">devices	<span class="number">10</span>	<span class="number">80</span>	<span class="number">1</span>	<span class="comment">/* 对访问设备的管控 */</span></span><br><span class="line">freezer	<span class="number">13</span>	<span class="number">4</span>	<span class="number">1</span>	<span class="comment">/* 实现进程组的暂停和恢复 */</span></span><br><span class="line">net_cls	<span class="number">5</span>	<span class="number">3</span>	<span class="number">1</span>	<span class="comment">/* 标记网络数据包并设置网络接口的优先级 */</span></span><br><span class="line">perf_event	<span class="number">4</span>	<span class="number">3</span>	<span class="number">1</span></span><br><span class="line">net_prio	<span class="number">5</span>	<span class="number">3</span>	<span class="number">1</span>	<span class="comment">/* 标记网络数据包并设置网络接口的优先级 */</span></span><br><span class="line">hugetlb	<span class="number">11</span>	<span class="number">3</span>	<span class="number">1</span></span><br><span class="line">pids	<span class="number">9</span>	<span class="number">82</span>	<span class="number">1</span></span><br><span class="line">rdma	<span class="number">7</span>	<span class="number">3</span>	<span class="number">1</span></span><br><span class="line">misc	<span class="number">3</span>	<span class="number">1</span>	<span class="number">1</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>subsys_name：subsystem 的名称</li>
+<li>hierarchy：subsystem 所关联到的 cgroup 树的 ID<ul>
+<li>如果多个 subsystem 关联到同一颗 cgroup 树，那么他们的这个字段将一样</li>
+<li>这个字段将为 “0”，将会是下面3种情况：       <ul>
+<li>当前 subsystem 没有和任何 cgroup 树绑定        </li>
+<li>当前 subsystem 已经和 cgroup v2 的树绑定        </li>
+<li>当前 subsystem 没有被内核开启</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>num_cgroups：subsystem 所关联的 cgroup 树中进程组的个数，也即树上节点的个数</li>
+<li>enabled：“1” 表示开启，“0” 表示没有被开启（可以通过设置内核的启动参数 cgroup_disable 来控制 subsystem 的开启）</li>
+</ul>
+<p><strong>Union File System</strong></p>
+<p>Union File System，简称 UnionFS，他是一种为 Linux，FreeBSD 和 NetBSD 操作系统设计的，把其他文件系统联合到一个联合挂载点的文件系统服务（它用到了一个重要的资源管理技术，叫写时复制 COW）</p>
+<p>Linux 启动会先用只读模式挂载 rootfs，运行完完整性检查之后，再切换成读写模式</p>
+<p>Docker deamon 为 container 挂载 rootfs 时，也会先挂载为只读模式，但是与 Linux 做法不同的是：</p>
+<ul>
+<li>在挂载完只读的 rootfs 之后，Docker deamon 会利用联合挂载技术（Union Mount）</li>
+<li>在已有的 rootfs 上再挂一个读写层</li>
+<li>container 在运行过程中文件系统发生的变化只会写到读写层，并通过 whiteout 技术隐藏只读层中的旧版本文件</li>
+</ul>
+<p>Docker 镜像的设计中，引入了层（layer）的概念：</p>
+<ul>
+<li>用户制作镜像的每一步操作，都会生成一个层，也就是一个增量 rootfs（一个目录）</li>
+<li>这样应用 A 和应用 B 所在的容器共同引用相同的 Debian 操作系统层，只读层（存放程序的环境），而各自有各自应用程序层，和读写层 </li>
+</ul>
+<p>Docker 的镜像就采用了 UnionFS 技术，从而实现了分层的镜像</p>
+<p>使用 <code>docker inspect</code> 这个命令来查看 ubuntu 这个镜像文件，输出了以下内容： </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="string">&quot;GraphDriver&quot;</span>: &#123;</span><br><span class="line">    <span class="string">&quot;Data&quot;</span>: &#123;</span><br><span class="line">        <span class="string">&quot;LowerDir&quot;</span>: <span class="string">&quot;/var/lib/docker/overlay2/a11758995ecf6105ad01ed03f9e8f4304d4685f58eae032dff5e29ec4b55cf8e-init/diff:/var/lib/docker/overlay2/7531a29df933101bd420e45e8a815a17050dec2c140b5d8a32537bc259a4fb96/diff&quot;</span>,</span><br><span class="line">        <span class="string">&quot;MergedDir&quot;</span>: <span class="string">&quot;/var/lib/docker/overlay2/a11758995ecf6105ad01ed03f9e8f4304d4685f58eae032dff5e29ec4b55cf8e/merged&quot;</span>,</span><br><span class="line">        <span class="string">&quot;UpperDir&quot;</span>: <span class="string">&quot;/var/lib/docker/overlay2/a11758995ecf6105ad01ed03f9e8f4304d4685f58eae032dff5e29ec4b55cf8e/diff&quot;</span>,</span><br><span class="line">        <span class="string">&quot;WorkDir&quot;</span>: <span class="string">&quot;/var/lib/docker/overlay2/a11758995ecf6105ad01ed03f9e8f4304d4685f58eae032dff5e29ec4b55cf8e/work&quot;</span></span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="string">&quot;Name&quot;</span>: <span class="string">&quot;overlay2&quot;</span></span><br><span class="line">&#125;,</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这些镜像层都位于 <code>/var/lib/docker/overlay2</code> 目录中（OverlayFS 是 Docker 目前的联合文件系统解决方案）</li>
+</ul>
+<p>Docker 默认安装的情况下，会使用 <code>/var/lib/docker/</code> 目录作为存储目录，用以存放拉取的镜像和创建的容器等</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">➜  桌面 sudo ls /var/lib/docker/        </span><br><span class="line">buildkit    engine-id  network	 plugins   swarm  trust</span><br><span class="line">containers  image      overlay2  runtimes  tmp	  volumes</span><br></pre></td></tr></table></figure>
+<ul>
+<li>而 <code>/var/lib/docker/overlay2</code> 通常用于存放容器虚拟文件系统的相关信息</li>
+</ul>
+<p>先看一个案例：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">➜  桌面 docker start 96e1f1382d93                        </span><br><span class="line">96e1f1382d93</span><br><span class="line">➜  桌面 docker exec -it 96e1f1382d93 /bin/sh</span><br><span class="line"><span class="meta">#</span><span class="bash"> ls</span>      		</span><br><span class="line">bin   dev  home  lib32	libx32	mnt  proc  run	 srv  tmp  var</span><br><span class="line">boot  etc  lib	 lib64	media	opt  root  sbin  sys  usr</span><br><span class="line"><span class="meta">#</span><span class="bash"> touch /home/1234</span></span><br><span class="line"><span class="meta">#</span><span class="bash"> <span class="built_in">echo</span> <span class="string">&#x27;hello word&#x27;</span> &gt; /home/1234</span></span><br><span class="line"><span class="meta">#</span><span class="bash"> cat /home/1234</span></span><br><span class="line">hello word</span><br></pre></td></tr></table></figure>
+<ul>
+<li>开启一个容器，往 <code>/home/1234</code> 写入 “hello word”</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">➜  桌面 sudo ls /var/lib/docker/overlay2/a11758995ecf6105ad01ed03f9e8f4304d4685f58eae032dff5e29ec4b55cf8e</span><br><span class="line">diff  link  lower  merged  work</span><br><span class="line">➜  桌面 sudo ls /var/lib/docker/overlay2/a11758995ecf6105ad01ed03f9e8f4304d4685f58eae032dff5e29ec4b55cf8e/diff</span><br><span class="line">home</span><br><span class="line">➜  桌面 sudo cat /var/lib/docker/overlay2/a11758995ecf6105ad01ed03f9e8f4304d4685f58eae032dff5e29ec4b55cf8e/diff/home/1234</span><br><span class="line">hello word</span><br></pre></td></tr></table></figure>
+<ul>
+<li>查看 <code>/var/lib/docker/overlay2</code> 中的数据，发现 <code>/home/1234</code> 被写入其中</li>
+<li>由此可以发现，docker 容器的读写层其实是挂载到 <code>/var/lib/docker/overlay2</code> 中的</li>
+<li>对一个容器的修改只会影响其读写层，而这些变化也直接体现在 <code>/var/lib/docker/overlay2</code> 中</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">➜  桌面 sudo rm /var/lib/docker/overlay2/a11758995ecf6105ad01ed03f9e8f4304d4685f58eae032dff5e29ec4b55cf8e/diff/home/1234</span><br><span class="line">➜  桌面 docker exec -it 96e1f1382d93 /bin/sh</span><br><span class="line"><span class="meta">#</span><span class="bash"> cat /home/1234</span></span><br><span class="line">hello word</span><br></pre></td></tr></table></figure>
+<ul>
+<li>若删除 <code>/home/1234</code> 后重新进入容器，会发现 <code>/home/1234</code> 依然存在</li>
+<li>这时因为文件 <code>/home/1234</code> 仍被加载在内存中</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">➜  桌面 docker stop $(docker ps -q)         </span><br><span class="line">96e1f1382d93</span><br><span class="line">➜  桌面 docker start 96e1f1382d93</span><br><span class="line">96e1f1382d93</span><br><span class="line">➜  桌面 docker exec -it 96e1f1382d93 /bin/sh</span><br><span class="line"><span class="meta">#</span><span class="bash"> cat /home/1234</span></span><br><span class="line">cat: /home/1234: No such file or directory</span><br></pre></td></tr></table></figure>
+<ul>
+<li>若此时关闭容器，重新打开并进入后会发现 <code>/home/1234</code> 消失</li>
+</ul>
+<p><strong>docker 处理异构操作系统</strong></p>
+<p>对于虚拟化程序来说，处理异构二进制代码的能力是必不可少的，Qemu 就内置了一个翻译器，专门用于把异构的二进制代码给翻译为本架构能够理解的形式</p>
+<p>而 docker 也是借用了 Qemu 的翻译器（qumu-user-static）来处理异构程序，使用方法如下：</p>
+<ul>
+<li>下载翻译器：<a target="_blank" rel="noopener" href="https://github.com/multiarch/qemu-user-static/releases/">Releases · multiarch/qemu-user-static (github.com)</a> </li>
+<li>注册平台的解释器：</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">docker pull multiarch/qemu-user-static:register</span><br></pre></td></tr></table></figure>
+<ul>
+<li>PS：每次重启机器，需重新注册</li>
+<li>注册成功后，可以使用如下命令查询 aarch64 对应的解释器：（其他架构同理）</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">cat /proc/sys/fs/binfmt_misc/qemu-aarch64</span><br></pre></td></tr></table></figure>
+<ul>
+<li>撤销平台的解释器：</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">docker run --rm --privileged multiarch/qemu-user-static:register</span><br></pre></td></tr></table></figure>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
     <link itemprop="mainEntityOfPage" href="http://example.com/2023/04/20/Principles%EF%BC%9AKVM%E5%BA%95%E5%B1%82%E5%8E%9F%E7%90%86/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1905,167 +2105,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="en">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2023/03/31/Haskell%20%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="yhellow">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Pwn进你的心">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2023/03/31/Haskell%20%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86/" class="post-title-link" itemprop="url">Haskell 基础知识</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-              
-
-              <time title="Created: 2023-03-31 21:31:31 / Modified: 21:33:50" itemprop="dateCreated datePublished" datetime="2023-03-31T21:31:31+08:00">2023-03-31</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">In</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/Knowledge/" itemprop="url" rel="index"><span itemprop="name">Knowledge</span></a>
-                </span>
-            </span>
-
-          
-            <span class="post-meta-item" title="Symbols count in article">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>4.5k</span>
-            </span>
-            <span class="post-meta-item" title="Reading time">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>4 mins.</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="LISP-基础知识"><a href="#LISP-基础知识" class="headerlink" title="LISP 基础知识"></a>LISP 基础知识</h2><p>LISP 是一种通用高级计算机程序语言，长期以来垄断人工智能领域的应用</p>
-<p>LISP 作为应用人工智能而设计的语言，是第一个声明式系内函数式程序设计语言，有别于命令式系内过程式的 C，Fortran 和面向对象的 Java，Python 等结构化程序设计语言</p>
-<p><strong>数据类型</strong></p>
-<p>LISP 只有两种数据结构：</p>
-<p>原子 atom：原子为标识符形式的符号或数字的字面值</p>
-<p>表 list：表则是由零个或多个表达式组成的序列（不需要使用一般表处理所必需的任意插入及删除操作）</p>
-<p><strong>语句结构</strong></p>
-<p>LISP 的语法是简洁的典型，程序代码与数据的形式完全相同</p>
-<p>以圆括号为边界的表：（A B C D）</p>
-<ul>
-<li>数据：有 A，B，C，D 这4个元素的表</li>
-<li>函数：将名为 A 的函数作用于 B，C 和 D 这3个参数</li>
-</ul>
-<p>嵌套表结构亦是以圆括号来表示：（A（B C）D（E（F G）））</p>
-<p><strong>关键字</strong></p>
-<p>LISP 是一个函数式程序语言，并无关键字或保留字设，使用者可自行定义</p>
-<h2 id="Haskell-基础知识"><a href="#Haskell-基础知识" class="headerlink" title="Haskell 基础知识"></a>Haskell 基础知识</h2><p>Haskell 是一种函数式编程语言，专门设计用于处理符号计算和列表处理应用程序，有非限定性语义和强静态类型</p>
-<p><strong>数据类型</strong></p>
-<p>Haskell 支持的类型如下：</p>
-<ul>
-<li>数字：Haskell 可以将某些数字解码为数字（无需像在其他编程语言中通常那样在外部指定它的数据类型）</li>
-<li>字符：双引号或单引号中的单个字符</li>
-<li>字符串：双引号中的多个字符</li>
-<li>布尔型：True / False</li>
-<li>列表：用逗号分隔的相同数据类型的集合</li>
-<li>元组：在单个数据类型中声明多个值的方法（元组可以视为列表，但是元组和列表之间存在一些技术差异）</li>
-</ul>
-<h2 id="函数式编程"><a href="#函数式编程" class="headerlink" title="函数式编程"></a>函数式编程</h2><p>函数式编程是一种编程范式，除了函数式编程之外还有：命令式编程，声明式编程</p>
-<p><strong>命令式编程</strong></p>
-<p>命令式编程是面向计算机硬件抽象（变量、赋值语句、表达式、控制语句等）的编程</p>
-<p>可以理解为命令式编程就是冯诺伊曼的指令序列，它的主要思想是关注计算机执行的步骤，即一步一步告诉计算机先做什么再做什么</p>
-<p>例如：C语言中，要查找数组 numList 中大于5的所有数字</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">let results = [];</span><br><span class="line"><span class="keyword">for</span>(let i = <span class="number">0</span>; i &lt; numList.length; i++)&#123;</span><br><span class="line">    <span class="keyword">if</span>(numList[i] &gt; <span class="number">5</span>)&#123;</span><br><span class="line">        results.push(numList[i])</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p><strong>声明式编程</strong></p>
-<p>声明式编程是以数据结构的形式来表达程序执行的逻辑</p>
-<p>它的主要思想是告诉计算机应该做什么，但不指定具体要怎么做</p>
-<p>例如：SQL语句</p>
-<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span> <span class="operator">*</span> <span class="keyword">FROM</span> collection <span class="keyword">WHERE</span> num <span class="operator">&gt;</span> <span class="number">5</span></span><br></pre></td></tr></table></figure>
-<p><strong>函数式编程</strong> </p>
-<p>函数式编程和声明式编程的思想是一致的：只关注做什么而不是怎么做</p>
-<p>但函数式编程不仅仅局限于声明式编程</p>
-<p>函数式编程是面向数学的抽象，将计算描述为一种表达式求值，其实，函数式程序就是一个表达式</p>
-<ul>
-<li>函数式编程中的函数并不指计算机中的函数，而是指数学中的函数（即自变量的映射）</li>
-<li>函数的值取决于函数的参数的值，不依赖于其他状态（例如：<code>abs(x)</code> 函数计算 <code>x</code> 的绝对值，只要 <code>x</code> 不变，最终的值都是一样）</li>
-</ul>
-<p>函数是第一等公民：是指函数跟其它的数据类型一样处于平等地位，可以赋值给其他变量，可以作为参数传入另一个函数，也可以作为别的函数的返回值</p>
-<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> func1 = <span class="function"><span class="keyword">function</span> <span class="title">func1</span>(<span class="params"></span>) </span>&#123;  &#125; <span class="comment">/* 赋值 */</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">func2</span>(<span class="params">fn</span>) </span>&#123; <span class="comment">/* 函数作为参数 */</span></span><br><span class="line">    fn()</span><br><span class="line">&#125;   </span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">func3</span>(<span class="params"></span>) </span>&#123; <span class="comment">/* 函数作为返回值 */</span></span><br><span class="line">    <span class="keyword">return</span> <span class="function"><span class="keyword">function</span>(<span class="params"></span>) </span>&#123;&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>函数是纯函数：纯函数是指相同的输入总会得到相同的输出，并且不会产生副作用的函数（函数内部的操作不会对外部产生影响）</p>
-<p><strong>函数式编程的基本运算</strong></p>
-<p>函数合成（compose）：</p>
-<ul>
-<li>将代表各个动作的多个函数合并成一个函数</li>
-</ul>
-<p>案例一：</p>
-<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">add</span>(<span class="params">x</span>) </span>&#123; <span class="comment">/* 分散的多个函数 */</span></span><br><span class="line">    <span class="keyword">return</span> x + <span class="number">10</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">multiply</span>(<span class="params">x</span>) </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> x * <span class="number">10</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">compose</span>(<span class="params">f,g</span>) </span>&#123; <span class="comment">/* 合成函数 */</span></span><br><span class="line">    <span class="keyword">return</span> <span class="function"><span class="keyword">function</span>(<span class="params">x</span>) </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> f(g(x));</span><br><span class="line">    &#125;;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="built_in">console</span>.log(multiply(add(<span class="number">2</span>))) <span class="comment">// 120</span></span><br><span class="line"><span class="keyword">let</span> calculate=compose(multiply,add); <span class="comment">/* 执行顺序:从右往左 */</span></span><br><span class="line"><span class="built_in">console</span>.log(calculate(<span class="number">2</span>)) <span class="comment">// 120</span></span><br></pre></td></tr></table></figure>
-<p>案例二：</p>
-<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">compose</span>(<span class="params"></span>) </span>&#123;</span><br><span class="line">    <span class="keyword">let</span> args = <span class="built_in">arguments</span>;</span><br><span class="line">    <span class="keyword">let</span> start = args.length - <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">return</span> <span class="function"><span class="keyword">function</span> (<span class="params"></span>) </span>&#123;</span><br><span class="line">        <span class="keyword">let</span> i = start - <span class="number">1</span>;</span><br><span class="line">        <span class="keyword">let</span> result = args[start].apply(<span class="built_in">this</span>, <span class="built_in">arguments</span>);</span><br><span class="line">        <span class="keyword">while</span> (i &gt;= <span class="number">0</span>)&#123;</span><br><span class="line">            result = args[i].call(<span class="built_in">this</span>, result);</span><br><span class="line">            i--;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> result;</span><br><span class="line">    &#125;;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">add</span>(<span class="params">str</span>)</span>&#123;</span><br><span class="line">    <span class="keyword">return</span> x + <span class="number">10</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">multiply</span>(<span class="params">str</span>) </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> x * <span class="number">10</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">minus</span>(<span class="params">str</span>) </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> x - <span class="number">10</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">let</span> composeFun = compose(minus, multiply, add); <span class="comment">/* 执行顺序:从右往左 */</span></span><br><span class="line">composeFun(<span class="number">2</span>) <span class="comment">// 110</span></span><br></pre></td></tr></table></figure>
-<p>函数柯里化（Currying）：</p>
-<ul>
-<li>一个柯里化的函数首先会接受一些参数，接受了这些参数之后，该函数并不会立即求值，而是继续返回另外一个函数</li>
-<li>刚才传入的参数在函数形成的闭包中被保存起来，待到函数被真正需要求值的时候，之前传入的所有参数都会被一次性用于求值</li>
-</ul>
-<p>案例一：</p>
-<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">sum</span>(<span class="params">a, b</span>) </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br><span class="line"><span class="built_in">console</span>.log(sum(<span class="number">2</span>, <span class="number">2</span>)) <span class="comment">// 4</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">sumCurry</span>(<span class="params">a</span>) </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="function"><span class="keyword">function</span>(<span class="params">b</span>) </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> a + b;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="built_in">console</span>.log(sumCurry(<span class="number">2</span>)(<span class="number">2</span>)); <span class="comment">// 4</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">var</span> sumCurry=createCurry(sum); <span class="comment">/* 函数柯里化 */</span></span><br><span class="line"><span class="built_in">console</span>.log(sumCurry(<span class="number">2</span>)(<span class="number">2</span>)); <span class="comment">// 4</span></span><br></pre></td></tr></table></figure>
-<p>案例二：</p>
-<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">function</span> <span class="title">createCurry</span>(<span class="params">func, arrArgs</span>) </span>&#123; <span class="comment">/* 参数只能从左到右传递 */</span></span><br><span class="line">    <span class="keyword">var</span> args = <span class="built_in">arguments</span>;</span><br><span class="line">    <span class="keyword">var</span> funcLength = func.length;</span><br><span class="line">    <span class="keyword">var</span> arrArgs = arrArgs || [];</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="function"><span class="keyword">function</span>(<span class="params"></span>) </span>&#123;</span><br><span class="line">        <span class="keyword">var</span> _arrArgs = <span class="built_in">Array</span>.prototype.slice.call(<span class="built_in">arguments</span>);</span><br><span class="line">        <span class="keyword">var</span> allArrArgs = arrArgs.concat(_arrArgs)</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (allArrArgs.length &lt; funcLength) &#123; <span class="comment">/* 如果参数个数小于最初的func.length,则递归调用,继续收集参数 */</span></span><br><span class="line">            <span class="keyword">return</span> args.callee.call(<span class="built_in">this</span>, func, allArrArgs);</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> func.apply(<span class="built_in">this</span>, allArrArgs); <span class="comment">/* 参数收集完毕,则执行func */</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">var</span> sumCurry=createCurry(<span class="function"><span class="keyword">function</span>(<span class="params">a, b, c</span>) </span>&#123; <span class="comment">/* 返回一个柯里化函数 */</span></span><br><span class="line">    <span class="keyword">return</span> a + b + c;</span><br><span class="line">&#125;);</span><br><span class="line">sumCurry(<span class="number">1</span>)(<span class="number">2</span>)(<span class="number">3</span>) <span class="comment">// 6</span></span><br><span class="line">sumCurry(<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>) <span class="comment">// 6</span></span><br><span class="line">sumCurry(<span class="number">1</span>)(<span class="number">2</span>,<span class="number">3</span>) <span class="comment">// 6</span></span><br><span class="line">sumCurry(<span class="number">1</span>,<span class="number">2</span>)(<span class="number">3</span>) <span class="comment">// 6</span></span><br></pre></td></tr></table></figure>
-<p>高阶函数：满足下列条件之一的函数就可以称为高阶函数</p>
-<ul>
-<li>函数作为参数被传递</li>
-<li>函数作为返回值输出</li>
-</ul>
-<p>案例一：</p>
-<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> fn = (<span class="function">() =&gt;</span> &#123;</span><br><span class="line">    <span class="keyword">let</span> students = [];</span><br><span class="line">    <span class="keyword">return</span> &#123; <span class="comment">/* 作为返回值输出 */</span></span><br><span class="line">        <span class="function"><span class="title">addStudent</span>(<span class="params">name</span>)</span> &#123;</span><br><span class="line">            <span class="keyword">if</span> (students.includes(name)) &#123;</span><br><span class="line">                <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">            &#125;</span><br><span class="line">            students.push(name);</span><br><span class="line">        &#125;,</span><br><span class="line">        <span class="function"><span class="title">showStudent</span>(<span class="params">name</span>)</span> &#123;</span><br><span class="line">            <span class="keyword">if</span> (<span class="built_in">Object</span>.is(students.length, <span class="number">0</span>)) &#123;</span><br><span class="line">                <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">return</span> students.join(<span class="string">&quot;,&quot;</span>);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;)();</span><br><span class="line">fn.addStudent(<span class="string">&quot;liming&quot;</span>); </span><br><span class="line">fn.addStudent(<span class="string">&quot;zhangsan&quot;</span>);</span><br><span class="line">fn.showStudent(); <span class="comment">// 输出:liming,zhangsan</span></span><br></pre></td></tr></table></figure>
-<p>案例二：</p>
-<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> plus = <span class="function">(<span class="params">...args</span>) =&gt;</span> &#123;</span><br><span class="line">    <span class="keyword">let</span> n = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">let</span> i = <span class="number">0</span>; i &lt; args.length; i++) &#123;</span><br><span class="line">        n += args[i];</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> n;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">const</span> mult = <span class="function">(<span class="params">...args</span>) =&gt;</span> &#123;</span><br><span class="line">    <span class="keyword">let</span> n = <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">let</span> i = <span class="number">0</span>; i &lt; args.length; i++) &#123;</span><br><span class="line">        n *= args[i];</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> n;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">const</span> createFn = <span class="function">(<span class="params">fn</span>) =&gt;</span> &#123; <span class="comment">/* 作为参数被传递 */</span></span><br><span class="line">    <span class="keyword">let</span> obj = &#123;&#125;;</span><br><span class="line">    <span class="keyword">return</span> <span class="function">(<span class="params">...args</span>) =&gt;</span> &#123; <span class="comment">/* 作为返回值输出 */</span></span><br><span class="line">        <span class="keyword">let</span> keyName = args.join(<span class="string">&quot;&quot;</span>);</span><br><span class="line">        <span class="keyword">if</span> (keyName <span class="keyword">in</span> obj) &#123;</span><br><span class="line">            <span class="keyword">return</span> obj[keyName];</span><br><span class="line">        &#125;</span><br><span class="line">        obj[keyName] = fn.apply(<span class="literal">null</span>, args);</span><br><span class="line">        <span class="keyword">return</span> obj[keyName];</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">let</span> fun1 = createFn(plus);</span><br><span class="line"><span class="built_in">console</span>.log(fun1(<span class="number">2</span>, <span class="number">2</span>, <span class="number">2</span>)); <span class="comment">// 输出:6</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">let</span> fun2 = createFn(mult);</span><br><span class="line"><span class="built_in">console</span>.log(fun2(<span class="number">2</span>, <span class="number">2</span>, <span class="number">2</span>)); <span class="comment">// 输出:8</span></span><br></pre></td></tr></table></figure>
-<h2 id="GHC-Haskell-编译器"><a href="#GHC-Haskell-编译器" class="headerlink" title="GHC - Haskell 编译器"></a>GHC - Haskell 编译器</h2><p>GHC 就是 Haskell 的编译器，可以从如下网站中下载：</p>
-<ul>
-<li><a target="_blank" rel="noopener" href="https://www.haskell.org/ghc/download_ghc_9_0_2.html">GHC 9.0.2 download — The Glasgow Haskell Compiler</a> </li>
-</ul>
-<p>执行以下代码就可以完成安装：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">sudo ./configure</span><br><span class="line">sudo make install</span><br></pre></td></tr></table></figure>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2137,7 +2176,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">332</span>
+          <span class="site-state-item-count">333</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -2150,7 +2189,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">170</span>
+        <span class="site-state-item-count">171</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -2186,12 +2225,12 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-area"></i>
     </span>
-    <span title="Symbols count total">4.9m</span>
+    <span title="Symbols count total">5m</span>
     <span class="post-meta-divider">|</span>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="Reading time total">74:53</span>
+    <span title="Reading time total">75:28</span>
 </div>
   <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
   </div>
